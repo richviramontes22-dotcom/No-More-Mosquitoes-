@@ -1,0 +1,84 @@
+No More Mosquitoes Session Status Report
+========================================
+
+1. Executive Summary
+--------------------
+- The home experience now ships with branded layout chrome, structured data, pricing logic, testimonials, FAQs, schedule/contact CTAs, and reusable section primitives tailored to the NMM identity.
+- React Query, toast stacks, and tooltip providers wrap the SPA so future pages can reuse data-fetching and feedback systems without reconfiguration.
+- Secondary sitemap routes (pricing, services, story, etc.) still surface the shared "Coming Soon" placeholder, keeping navigation intact while signaling incomplete work.
+- Key follow-ups include restoring the missing `HeroSection` import in `client/pages/Index.tsx`, swapping placeholder logic for finished pages, and integrating real address, scheduling, and analytics services.
+
+2. Implemented Experience
+-------------------------
+### 2.1 Global Application Structure
+- **Routing & Providers:** `client/App.tsx` wires QueryClient, tooltip/toast systems, SPA routing, and enumerates every planned route, delegating unfinished ones to `PlaceholderPage`.
+- **Layout Shell:** `client/components/layout/MainLayout.tsx` centralizes the header, footer, and `main` skip target for accessibility.
+- **Navigation & Branding:** `SiteHeader` and `SiteFooter` expose navigation groups, contact CTAs, and the reusable `LogoCutout` component to keep the brand consistent.
+
+### 2.2 Home Route Composition
+- `client/pages/Index.tsx` assembles the hero, address checker, quote widget, plan cards, benefits, services, pest grid, video proof, reviews, story, FAQ, schedule, and contact sections. (Hero import currently missing.)
+- Section components under `client/components/sections/` provide focused, reusable UI blocks powered by data objects from `client/data/site.ts` and imagery from `client/data/media.ts`.
+- `client/components/common/SectionHeading.tsx` keeps typography, eyebrow treatments, and alignment consistent across sections.
+
+### 2.3 Data, Utilities, and Testing
+- `client/lib/pricing.ts` converts acreage, cadence, and program selections into per-visit, monthly, and annual totals; `client/lib/pricing.spec.ts` covers representative tier boundaries.
+- SEO metadata is managed by `client/components/seo/Seo.tsx` with structured data definitions under `client/seo/structuredData.ts`.
+- Brand theming relies on Tailwind tokens in `tailwind.config.ts` and CSS variables in `client/global.css`.
+- Launch-readiness tasks sit in `client/data/handoff.ts` as a checklist for infrastructure, analytics, content, QA, and support.
+
+### 2.4 Placeholder & Error Handling
+- `client/pages/Placeholder.tsx` powers every unfinished route with Coming Soon messaging, dual CTAs, and external link support.
+- `client/pages/NotFound.tsx` offers the branded 404 experience plus console logging for missing routes.
+
+3. Route Coverage & Coming Soon Surfaces
+----------------------------------------
+| Route(s) | Purpose | Current State |
+| --- | --- | --- |
+| `/` | Primary marketing funnel with pricing, benefits, testimonials, FAQs, schedule/contact CTAs. | Built (bring back `HeroSection` import; connect live data providers). |
+| `/pricing`, `/services`, `/our-story`, `/reviews`, `/service-area`, `/faq`, `/blog`, `/schedule`, `/login`, `/contact`, `/privacy`, `/terms`, `/guarantee`, `/licenses` | Planned secondary experiences covering marketing, legal, and customer flows. | Coming Soon — all render `PlaceholderPage`. |
+| `*` | Fallback 404 route. | Built. |
+
+4. Outstanding Tasks & Risks
+----------------------------
+1. **Restore Hero Import:** Reintroduce `HeroSection` import in `client/pages/Index.tsx` (and audit other section imports) to keep the home route compiling cleanly.
+2. **Replace Placeholders:** Build the full content/UI for each Coming Soon route, leveraging existing layout/data patterns.
+3. **Integrate Services:** Connect address autocomplete + parcel sizing, scheduling/portal flows, analytics/consent scripts, and production video assets.
+4. **Extend QA Coverage:** Broaden tests beyond pricing, run Lighthouse + axe audits, and validate responsive behavior across target devices.
+5. **Finalize Content & Compliance:** Populate CMS (if adopted), confirm licensing statements, and finish call-tracking/email workflow setups.
+
+5. Reference Section (Full Source)
+----------------------------------
+All referenced source files are copied into `reports/site-status-source/` using their original relative paths so you can download the folder as part of this report. The collection includes:
+- `client/App.tsx`
+- `client/components/layout/MainLayout.tsx`
+- `client/components/layout/SiteHeader.tsx`
+- `client/components/layout/SiteFooter.tsx`
+- `client/components/branding/LogoCutout.tsx`
+- `client/pages/Index.tsx`
+- `client/pages/Placeholder.tsx`
+- `client/pages/NotFound.tsx`
+- `client/components/common/SectionHeading.tsx`
+- `client/components/sections/HeroSection.tsx`
+- `client/components/sections/AddressCheckerSection.tsx`
+- `client/components/sections/QuoteWidgetSection.tsx`
+- `client/components/sections/PlanCardsSection.tsx`
+- `client/components/sections/BenefitsSection.tsx`
+- `client/components/sections/ServicesSection.tsx`
+- `client/components/sections/PestGridSection.tsx`
+- `client/components/sections/VideoProofSection.tsx`
+- `client/components/sections/ReviewsSection.tsx`
+- `client/components/sections/StorySection.tsx`
+- `client/components/sections/FAQSection.tsx`
+- `client/components/sections/ScheduleSection.tsx`
+- `client/components/sections/ContactSection.tsx`
+- `client/data/site.ts`
+- `client/data/media.ts`
+- `client/data/handoff.ts`
+- `client/lib/pricing.ts`
+- `client/lib/pricing.spec.ts`
+- `client/components/seo/Seo.tsx`
+- `client/seo/structuredData.ts`
+- `client/global.css`
+- `tailwind.config.ts`
+
+These files mirror the live source; no redactions or placeholders have been applied.

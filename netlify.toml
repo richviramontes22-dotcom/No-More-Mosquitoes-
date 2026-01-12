@@ -1,0 +1,22 @@
+[build]
+  command = "npm run build:client"
+  functions = "netlify/functions"
+  publish = "dist/spa"
+
+
+[functions]
+  external_node_modules = ["express"]
+  node_bundler = "esbuild"
+
+# Force HTTPS redirect
+[[redirects]]
+  from = "http://*"
+  to = "https://:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  force = true
+  from = "/api/*"
+  status = 200
+  to = "/.netlify/functions/api/:splat"
