@@ -10,8 +10,10 @@ import PestGridSection from "@/components/sections/PestGridSection";
 import CtaBand from "@/components/page/CtaBand";
 import Seo from "@/components/seo/Seo";
 import { localBusinessSchema, productSchema, serviceSchema } from "@/seo/structuredData";
+import { useTranslation } from "@/hooks/use-translation";
 
 const Index = () => {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-0">
       <Seo
@@ -25,7 +27,7 @@ const Index = () => {
       <PlanCardsSection />
       <PestGridSection />
       <VideoProofSection />
-      <CtaBand title="Check Pricing by Address" href="/pricing" />
+      <CtaBand title={t("hero.checkPricing")} href="/pricing" />
       <StorySection />
       <FAQSection />
       <ScheduleSection />

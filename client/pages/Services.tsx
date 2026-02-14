@@ -5,6 +5,7 @@ import VideoProofSection from "@/components/sections/VideoProofSection";
 import Seo from "@/components/seo/Seo";
 import { services as serviceCatalog } from "@/data/site";
 import { serviceSchema } from "@/seo/structuredData";
+import { useTranslation } from "@/hooks/use-translation";
 
 const heroAside = (
   <div className="space-y-4">
@@ -36,6 +37,7 @@ const addOnServices = [
 ];
 
 const Services = () => {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-0">
       <Seo
@@ -46,10 +48,10 @@ const Services = () => {
       />
       <PageHero
         variant="split"
-        eyebrow="What We Treat"
-        title="Mosquito control first—plus defense against ants, spiders, and ticks."
-        description="Employee-based technicians, calibrated formulations, and HD completion videos every visit."
-        primaryCta={{ label: "Schedule Service", href: "/schedule" }}
+        eyebrow={t("services.whatWeTreat")}
+        title={t("services.servicePageTitle")}
+        description={t("services.servicePageDesc")}
+        primaryCta={{ label: t("hero.scheduleService"), href: "/schedule" }}
         aside={heroAside}
       />
       <section className="bg-background py-24">
@@ -103,7 +105,7 @@ const Services = () => {
       </section>
       <VideoProofSection />
       <PestGridSection />
-      <CtaBand title="Check Pricing by Address" href="/pricing" />
+      <CtaBand title={t("hero.checkPricing")} href="/pricing" />
     </div>
   );
 };

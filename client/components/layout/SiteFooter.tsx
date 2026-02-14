@@ -139,7 +139,7 @@ export const SiteFooter = () => {
               <img
                 src={img_dpr_logo_state_of_ca_dpr.src}
                 alt={img_dpr_logo_state_of_ca_dpr.alt}
-                className="h-12 w-auto grayscale opacity-80"
+                className="h-20 w-auto"
               />
               <p className="text-[10px] leading-tight font-bold text-foreground/70 uppercase tracking-wider">
                 {t("footer.complianceBlock.title")}
@@ -161,7 +161,7 @@ export const SiteFooter = () => {
               <img
                 src={img_anaheim_seal.src}
                 alt={img_anaheim_seal.alt}
-                className="h-12 w-auto grayscale opacity-80"
+                className="h-20 w-auto"
               />
               <p className="text-[10px] leading-tight font-bold text-foreground/70 uppercase tracking-wider">
                 {t("footer.anaheimBlock.title")}

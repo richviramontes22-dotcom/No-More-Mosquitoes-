@@ -24,10 +24,4 @@ dist-ssr
 *.sw?
 
 .config/
-<<<<<<< HEAD
-.env
-.env.*
-
-=======
-
->>>>>>> ad3f9dc2516f1bfaa9b957c1e94765973078ee33
+!.env

@@ -5,6 +5,8 @@ export const translations = {
     header: {
       fontPreview: "Font preview:",
       securityNotice: "Protected & monitored for security.",
+      openMenu: "Open menu",
+      selectLanguage: "Select language",
     },
     nav: {
       home: "Home",
@@ -21,6 +23,19 @@ export const translations = {
       dashboard: "Dashboard",
       login: "Log in / Sign up",
       signOut: "Sign out",
+      signedInAs: "Signed in as {name}",
+      more: "More",
+      brandName: "No More Mosquitoes",
+    },
+    chat: {
+      title: "Customer Support",
+      welcome: "How can we help you today?",
+      liveChat: "Live Chat",
+      talkToAgent: "Talk to an Agent",
+      callOrText: "Call or Text",
+      emailUs: "Email Us",
+      goToContact: "Go to Contact Page",
+      toggleChat: "Toggle chat widget",
     },
     hero: {
       eyebrow: "Premium Mosquito & Pest Control",
@@ -41,6 +56,7 @@ export const translations = {
       reService: "Re-service promise",
       reServiceDesc:
         "If mosquitoes return between visits, we treat again at no charge.",
+      planVisit: "Plan your next visit",
       footer: "Licensed • Insured • Employee-based technicians • Serving California since 2016",
     },
     highlights: {
@@ -586,6 +602,8 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
     header: {
       fontPreview: "Vista previa de fuente:",
       securityNotice: "Protegido y monitoreado para seguridad.",
+      openMenu: "Abrir menú",
+      selectLanguage: "Seleccionar idioma",
     },
     nav: {
       home: "Inicio",
@@ -602,6 +620,19 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
       dashboard: "Panel de Control",
       login: "Iniciar sesión / Registrarse",
       signOut: "Cerrar sesión",
+      signedInAs: "Conectado como {name}",
+      more: "Más",
+      brandName: "No More Mosquitoes",
+    },
+    chat: {
+      title: "Soporte al Cliente",
+      welcome: "¿Cómo podemos ayudarte hoy?",
+      liveChat: "Chat en Vivo",
+      talkToAgent: "Habla con un Agente",
+      callOrText: "Llamar o Mensaje",
+      emailUs: "Envíanos un Correo",
+      goToContact: "Ir a la Página de Contacto",
+      toggleChat: "Alternar widget de chat",
     },
     hero: {
       eyebrow: "Control Premium de Mosquitos y Plagas",
@@ -622,6 +653,7 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
       reService: "Promesa de re-servicio",
       reServiceDesc:
         "Si los mosquitos regresan entre visitas, tratamos nuevamente sin costo.",
+      planVisit: "Planifica tu próxima visita",
       footer: "Licenciado • Asegurado • Técnicos empleados • Sirviendo California desde 2016",
     },
     highlights: {
@@ -1159,6 +1191,8 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
     header: {
       fontPreview: "フォントプレビュー:",
       securityNotice: "セキュリティのために保護および監視されています。",
+      openMenu: "メニューを開く",
+      selectLanguage: "言語を選択",
     },
     nav: {
       home: "ホーム",
@@ -1175,6 +1209,19 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       dashboard: "ダッシュボード",
       login: "ログイン / サインアップ",
       signOut: "サインアウト",
+      signedInAs: "{name} としてサインイン中",
+      more: "その他",
+      brandName: "ノーモアモスキート",
+    },
+    chat: {
+      title: "カスタマーサポート",
+      welcome: "今日はどのようなご用件でしょうか？",
+      liveChat: "ライブチャット",
+      talkToAgent: "エージェントと話す",
+      callOrText: "電話またはテキスト",
+      emailUs: "メールを送る",
+      goToContact: "お問い合わせページへ",
+      toggleChat: "チャットウィジェットを切り替える",
     },
     hero: {
       eyebrow: "プレミアムな蚊・害虫駆除",
@@ -1195,6 +1242,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       reService: "再サービス保証",
       reServiceDesc:
         "訪問の間に蚊が戻ってきた場合、無料で再度トリートメントを行います。",
+      planVisit: "次の訪問を計画する",
       footer: "ライセンス取得済み • 保険加入済み • 自社雇用技術者 • 2016年からカリフォルニアでサービス提供",
     },
     highlights: {
@@ -1718,6 +1766,8 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
     header: {
       fontPreview: "字体预览:",
       securityNotice: "受安全保护和监控。",
+      openMenu: "打开菜单",
+      selectLanguage: "选择语言",
     },
     nav: {
       home: "首页",
@@ -1734,6 +1784,19 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       dashboard: "仪表板",
       login: "登录 / 注册",
       signOut: "登出",
+      signedInAs: "已登录为 {name}",
+      more: "更多",
+      brandName: "No More Mosquitoes",
+    },
+    chat: {
+      title: "客户支持",
+      welcome: "今天有什么可以帮您的？",
+      liveChat: "在线聊天",
+      talkToAgent: "联系客服",
+      callOrText: "致电或短信",
+      emailUs: "给我们发邮件",
+      goToContact: "前往联系页面",
+      toggleChat: "切换聊天组件",
     },
     hero: {
       eyebrow: "高端蚊虫与害虫防治",
@@ -1754,6 +1817,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       reService: "再次服务承诺",
       reServiceDesc:
         "如果在两次访问之间蚊虫再次出现，我们将免费再次进行处理。",
+      planVisit: "规划您的下一次访问",
       footer: "持证 • 已投保 • 内部员工技术员 • 自2016年起服务加州",
     },
     highlights: {

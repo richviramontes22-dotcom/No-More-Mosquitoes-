@@ -50,19 +50,23 @@ export const technicianImages = [
 
 export const lifestyleImages = [
   {
-    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2Ff1426466a2644aed82beb80adadd1014?format=webp&width=1600",
-    alt: "Resort-style backyard pool with lush landscaping in Orange County",
+    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F1c1a4293b5e24e85bd04d2ee8a9804bd?format=webp&width=1600",
+    alt: "Family enjoying a mosquito-free backyard in Orange County",
   },
   {
-    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F70c6d705986a45d6afeabb57133929ba?format=webp&width=1600",
-    alt: "Technician spraying mosquito treatment near a tree line",
+    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F9d16a12b24264a0f8d135d9adc66dd25?format=webp&width=1600",
+    alt: "Technician applying mosquito treatment in an orchard",
   },
   {
-    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2Fc2283d60051d490baa3a78f04cea8e50?format=webp&width=1600",
-    alt: "Family running across a freshly treated backyard",
+    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2Ff0409139ff874a50af4ab804d8a3e285?format=webp&width=1600",
+    alt: "Modern outdoor lounge and dining area",
   },
   {
-    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2Fc08c7a3cf9c245249aa76bc1ebd9fd6f?format=webp&width=1600",
-    alt: "Backyard lounge space with outdoor kitchen and greenery",
+    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2Fb05ba135f68942e3815919373e8a74d5?format=webp&width=1600",
+    alt: "Technician spraying for mosquitoes along a fence line",
+  },
+  {
+    src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F8190073379e14e4c864eb2f3f3fa471f?format=webp&width=1600",
+    alt: "Close up of technician treating garden for pests",
   },
 ];

@@ -3,11 +3,13 @@ import ReviewsSection from "@/components/sections/ReviewsSection";
 import Seo from "@/components/seo/Seo";
 import { testimonials } from "@/data/site";
 import { createAggregateRatingSchema, productSchema } from "@/seo/structuredData";
+import { useTranslation } from "@/hooks/use-translation";
 
 const ratingValue = 4.9;
 const reviewCount = 128;
 
 const Reviews = () => {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-0">
       <Seo
@@ -20,7 +22,7 @@ const Reviews = () => {
         variant="centered"
         title="Loved by OC neighbors."
         description="Friendly techs, HD visit videos, and mosquito-free yards."
-        primaryCta={{ label: "Schedule Service", href: "/schedule" }}
+        primaryCta={{ label: t("hero.scheduleService") || "Schedule Service", href: "/schedule" }}
       >
         <p className="max-w-2xl text-sm text-muted-foreground">
           Our re-service guarantee, completion videos, and weather-adjusted scheduling earn five-star ratings across Orange County.
@@ -34,7 +36,7 @@ const Reviews = () => {
           <p className="mt-2 text-sm text-muted-foreground">Based on {reviewCount}+ homeowner surveys and platform reviews.</p>
         </div>
       </section>
-      <CtaBand title="Schedule Service" href="/schedule" />
+      <CtaBand title={t("hero.scheduleService")} href="/schedule" />
     </div>
   );
 };

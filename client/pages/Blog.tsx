@@ -4,6 +4,7 @@ import { CtaBand, PageHero } from "@/components/page";
 import SectionHeading from "@/components/common/SectionHeading";
 import Seo from "@/components/seo/Seo";
 import { blogPosts } from "@/data/blog";
+import { useTranslation } from "@/hooks/use-translation";
 
 const blogSchema = {
   "@context": "https://schema.org",
@@ -14,6 +15,7 @@ const blogSchema = {
 };
 
 const Blog = () => {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-0">
       <Seo
@@ -26,7 +28,7 @@ const Blog = () => {
         variant="centered"
         title="Mosquito & Pest Insights"
         description="Seasonal tips and trends from licensed OC technicians."
-        primaryCta={{ label: "Schedule Service", href: "/schedule" }}
+        primaryCta={{ label: t("hero.scheduleService") || "Schedule Service", href: "/schedule" }}
         secondaryCta={{ label: "Get updates", href: "/contact" }}
       />
       <section className="bg-background py-24">
@@ -67,7 +69,7 @@ const Blog = () => {
           </div>
         </div>
       </section>
-      <CtaBand title="Plan your next visit" href="/schedule" />
+      <CtaBand title={t("hero.planVisit")} href="/schedule" />
     </div>
   );
 };

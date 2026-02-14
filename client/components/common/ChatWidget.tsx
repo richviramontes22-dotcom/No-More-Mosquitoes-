@@ -28,7 +28,7 @@ export const ChatWidget = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end">
       {/* Chat Panel */}
       <div
         className={cn(
@@ -38,12 +38,12 @@ export const ChatWidget = () => {
       >
         <div className="bg-primary p-4 text-primary-foreground">
           <div className="flex items-center justify-between">
-            <h3 className="font-display font-semibold">Customer Support</h3>
+            <h3 className="font-display font-semibold">{t("chat.title") || "Customer Support"}</h3>
             <button onClick={() => setIsOpen(false)} className="rounded-full p-1 hover:bg-white/20 transition">
               <X className="h-4 w-4" />
             </button>
           </div>
-          <p className="mt-1 text-xs opacity-90">How can we help you today?</p>
+          <p className="mt-1 text-xs opacity-90">{t("chat.welcome") || "How can we help you today?"}</p>
         </div>
 
         <div className="p-4 space-y-3">
@@ -55,8 +55,8 @@ export const ChatWidget = () => {
               <MessageSquare className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Live Chat</p>
-              <p className="text-sm font-bold text-foreground">Talk to an Agent</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("chat.liveChat") || "Live Chat"}</p>
+              <p className="text-sm font-bold text-foreground">{t("chat.talkToAgent") || "Talk to an Agent"}</p>
             </div>
           </button>
 
@@ -68,7 +68,7 @@ export const ChatWidget = () => {
               <Phone className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Call or Text</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("chat.callOrText") || "Call or Text"}</p>
               <p className="text-sm font-bold text-foreground">{CONTACT_PHONE_DISPLAY}</p>
             </div>
           </a>
@@ -81,7 +81,7 @@ export const ChatWidget = () => {
               <Mail className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email Us</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("chat.emailUs") || "Email Us"}</p>
               <p className="text-sm font-bold text-foreground truncate w-40">{CONTACT_EMAIL}</p>
             </div>
           </a>
@@ -94,7 +94,7 @@ export const ChatWidget = () => {
             }}
           >
             <Send className="h-4 w-4" />
-            Go to Contact Page
+            {t("chat.goToContact") || "Go to Contact Page"}
           </Button>
         </div>
         
@@ -112,7 +112,7 @@ export const ChatWidget = () => {
           "flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all duration-300 hover:scale-110 active:scale-95",
           isOpen ? "bg-muted text-foreground" : "bg-primary text-primary-foreground"
         )}
-        aria-label="Toggle chat widget"
+        aria-label={t("chat.toggleChat") || "Toggle chat widget"}
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
       </button>

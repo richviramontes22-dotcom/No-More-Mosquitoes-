@@ -151,7 +151,12 @@
   [class*="font-scheme-"] h6 { font-family: var(--font-display) !important; }
 }
 
-/* Hide default Crisp chat bubble to use custom trigger */
-.crisp-client {
+/* Hide default Crisp chat bubble and widgets to use custom trigger */
+.crisp-client,
+#crisp-chat-box,
+.crisp-1 {
   display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }

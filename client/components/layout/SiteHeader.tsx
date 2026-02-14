@@ -15,17 +15,17 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 const NAV_LINKS = [
-  { label: "Home", path: "/" },
-  { label: "Pricing & Plans", path: "/pricing" },
-  { label: "Services", path: "/services" },
-  { label: "Our Story", path: "/our-story" },
-  { label: "Reviews", path: "/reviews" },
-  { label: "Service Area", path: "/service-area" },
-  { label: "FAQ", path: "/faq" },
-  { label: "Blog", path: "/blog" },
-  { label: "Schedule", path: "/schedule" },
-  { label: "Customer Login", path: "/login" },
-  { label: "Contact", path: "/contact" },
+  { label: "Home", path: "/", key: "home" },
+  { label: "Pricing & Plans", path: "/pricing", key: "pricing" },
+  { label: "Services", path: "/services", key: "services" },
+  { label: "Our Story", path: "/our-story", key: "ourStory" },
+  { label: "Reviews", path: "/reviews", key: "reviews" },
+  { label: "Service Area", path: "/service-area", key: "serviceArea" },
+  { label: "FAQ", path: "/faq", key: "faq" },
+  { label: "Blog", path: "/blog", key: "blog" },
+  { label: "Schedule", path: "/schedule", key: "schedule" },
+  { label: "Customer Login", path: "/login", key: "customerLogin" },
+  { label: "Contact", path: "/contact", key: "contact" },
 ];
 
 const CONTACT_PHONE_DISPLAY = "(949) 297-6225";
@@ -49,9 +49,18 @@ export const SiteHeader = () => {
   }, [user?.email, user?.name]);
 
   const navLinks = useMemo(() => {
-    if (!user) return NAV_LINKS.filter((l) => l.path !== "/login");
-    return NAV_LINKS.map((link) => (link.path === "/login" ? { label: "Dashboard", path: "/dashboard" } : link));
-  }, [user]);
+    const translatedLinks = NAV_LINKS.map(link => ({
+      ...link,
+      label: t(`nav.${link.key as keyof typeof translations.en.nav}`) || link.label
+    }));
+
+    if (!user) return translatedLinks.filter((l) => l.path !== "/login");
+    return translatedLinks.map((link) =>
+      link.path === "/login"
+        ? { ...link, label: t("nav.dashboard") || "Dashboard", path: "/dashboard" }
+        : link
+    );
+  }, [user, t]);
 
   const primaryPaths = new Set(["/pricing", "/services", "/reviews", "/contact", "/schedule"]);
   const primaryLinks = useMemo(() => navLinks.filter((l) => primaryPaths.has(l.path) || l.path === "/"), [navLinks]);
@@ -181,7 +190,7 @@ export const SiteHeader = () => {
               {moreLinks.length > 0 ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger className="rounded-full px-3 py-2 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                    More <ChevronDown className="ml-1 inline h-4 w-4 align-middle" />
+                    {t("nav.more") || "More"} <ChevronDown className="ml-1 inline h-4 w-4 align-middle" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="min-w-[12rem]">
                     {moreLinks.map((link) => (
@@ -236,7 +245,7 @@ export const SiteHeader = () => {
                 {language === "es" && <FlagMX />}
                 {language === "jp" && <FlagJP />}
                 {language === "cn" && <FlagCN />}
-                <span className="sr-only">Select language</span>
+                <span className="sr-only">{t("header.selectLanguage") || "Select language"}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[160px]">
                 <DropdownMenuItem onClick={() => setLanguage("en")} className={language === "en" ? "bg-primary/10" : ""}>
@@ -271,7 +280,7 @@ export const SiteHeader = () => {
                   className="inline-flex items-center justify-center rounded-full border border-border/60 p-2 text-foreground hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   aria-expanded={mobileOpen}
                 >
-                  <span className="sr-only">Open menu</span>
+                  <span className="sr-only">{t("header.openMenu") || "Open menu"}</span>
                   <Menu className="h-5 w-5" aria-hidden />
                 </button>
               </SheetTrigger>
@@ -279,7 +288,7 @@ export const SiteHeader = () => {
                 <SheetHeader>
                 <SheetTitle className="flex items-center gap-3">
                   <LogoCutout size={64} alt="No More Mosquitoes logo icon" />
-                  <span>No More Mosquitoes</span>
+                  <span>{t("nav.brandName") || "No More Mosquitoes"}</span>
                 </SheetTitle>
                 <a
                   href={CONTACT_PHONE_LINK}
@@ -288,7 +297,7 @@ export const SiteHeader = () => {
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Phone className="h-4 w-4" aria-hidden />
                   </span>
-                  <span>Call or Text {CONTACT_PHONE_DISPLAY}</span>
+                  <span>{t("footer.callOrText") || "Call or Text"} {CONTACT_PHONE_DISPLAY}</span>
                 </a>
               </SheetHeader>
                 <div className="mt-6 grid gap-2">
@@ -367,13 +376,15 @@ export const SiteHeader = () => {
                           handleAuthOpen("site-header-mobile", "login");
                         }}
                       >
-                        Log in / Sign up
+                        {t("nav.login") || "Log in / Sign up"}
                       </Button>
                     ) : (
                       <div className="rounded-xl bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-                        <p className="font-semibold text-foreground">Signed in as {firstName}</p>
+                        <p className="font-semibold text-foreground">
+                          {t("nav.signedInAs", { name: firstName }) || `Signed in as ${firstName}`}
+                        </p>
                         <Button variant="ghost" size="sm" className="mt-2 px-3" onClick={handleSignOut}>
-                          Sign out
+                          {t("nav.signOut") || "Sign out"}
                         </Button>
                       </div>
                     )}
@@ -384,7 +395,7 @@ export const SiteHeader = () => {
                         handleScheduleOpen("site-header-mobile");
                       }}
                     >
-                      Schedule Service
+                      {t("hero.scheduleService") || "Schedule Service"}
                     </Button>
                   </div>
                 </div>
