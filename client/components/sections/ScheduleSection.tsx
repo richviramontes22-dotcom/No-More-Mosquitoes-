@@ -9,10 +9,10 @@ const ScheduleSection = () => {
   const { t } = useTranslation();
   
   return (
-    <section className="relative overflow-hidden bg-primary/8 py-24">
+    <section className="relative overflow-hidden bg-primary/8 py-16 sm:py-24">
       <div className="absolute inset-0 -z-10 bg-mesh-overlay opacity-40" aria-hidden />
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="rounded-[36px] border border-primary/30 bg-white/90 p-10 shadow-[0_30px_80px_-50px_rgba(10,70,92,0.7)] backdrop-blur">
+        <div className="rounded-[28px] sm:rounded-[36px] border border-primary/30 bg-white/90 p-6 sm:p-10 shadow-[0_30px_80px_-50px_rgba(10,70,92,0.7)] backdrop-blur">
           <div className="flex flex-col-reverse gap-8 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-12">
             <div className="max-w-2xl space-y-4">
               <SectionHeading
@@ -28,12 +28,13 @@ const ScheduleSection = () => {
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>
-            <div className="overflow-hidden rounded-[32px] border border-primary/20 shadow-soft">
+            <div className="overflow-hidden rounded-[24px] sm:rounded-[32px] border border-primary/20 shadow-soft">
               <img
                 src={lifestyleImages[0].src}
                 alt={lifestyleImages[0].alt}
                 loading="lazy"
-                className="h-full w-full object-cover"
+                className="aspect-video sm:aspect-auto h-full w-full object-cover"
+                style={{ objectPosition: lifestyleImages[0].objectPosition || "center" }}
               />
             </div>
           </div>

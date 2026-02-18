@@ -9,7 +9,7 @@ const FAQ = () => {
     <div className="flex flex-col gap-0">
       <Seo
         title="FAQ"
-        description="Answers to common mosquito & pest control questions."
+        description="Answers to common insect control questions."
         canonicalUrl="https://nomoremosquitoes.us/faq"
         jsonLd={[createFaqSchema(faqs)]}
       />

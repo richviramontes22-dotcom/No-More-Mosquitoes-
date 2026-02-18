@@ -38,7 +38,7 @@ export const translations = {
       toggleChat: "Toggle chat widget",
     },
     hero: {
-      eyebrow: "Premium Mosquito & Pest Control",
+      eyebrow: "Premium Insect Control Services",
       title: "Enjoy the comfort of your yard all season",
       description:
         "Safe, fast, reliable mosquito and pest control in California—backed by our 100% satisfaction guarantee. We combine precise formulations with HD completion videos so you see exactly what we treat on every visit.",
@@ -458,8 +458,8 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
       complianceDesc: "GA4 (Consent Mode), GSC, and call tracking placeholders are configured for deployment. Confirm DNS + SSL before launch.",
       copyright: "© {year} No More Mosquitoes. All rights reserved.",
       licenses: "California Structural Pest Control License pending publication.",
-      attributes: "Insured • Employee-based technicians • 100% satisfaction guarantee.",
-      tagline: "Premium Mosquito & Pest Control",
+      attributes: "Insured • 100% satisfaction guarantee.",
+      tagline: "Premium Insect Control Services",
       description: "We treat mosquitoes, ticks, ants, spiders, and the pests that keep your family indoors. Every visit comes with a completion video, proactive prevention notes, and weather-adjusted scheduling.",
       callOrText: "Call or Text",
       links: {
@@ -635,7 +635,7 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
       toggleChat: "Alternar widget de chat",
     },
     hero: {
-      eyebrow: "Control Premium de Mosquitos y Plagas",
+      eyebrow: "Servicios de Control de Insectos de Primera",
       title: "Disfruta de la comodidad de tu jardín toda la temporada",
       description:
         "Control seguro, rápido y confiable de mosquitos y plagas en California, respaldado por nuestra garantía de satisfacción del 100%. Combinamos formulaciones precisas con videos de finalización en HD para que veas exactamente qué tratamos en cada visita.",
@@ -984,8 +984,8 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       complianceDesc: "Los marcadores de posición para GA4 (Modo de consentimiento), GSC y el seguimiento de llamadas están configurados para la implementación. Confirme DNS + SSL antes del lanzamiento.",
       copyright: "© {year} No More Mosquitoes. Todos los derechos reservados.",
       licenses: "Licencia de Control de Plagas Estructurales de California pendiente de publicación.",
-      attributes: "Asegurado • Técnicos con base en empleados • Garantía de satisfacción del 100%.",
-      tagline: "Control de Mosquitos y Plagas de Primera",
+      attributes: "Asegurado • Garantía de satisfacción del 100%.",
+      tagline: "Servicios de Control de Insectos de Primera",
       description: "Tratamos mosquitos, garrapatas, hormigas, arañas y las plagas que mantienen a su familia en el interior. Cada visita viene con un video de finalización, notas de prevención proactivas y programación ajustada al clima.",
       callOrText: "Llamar o enviar mensaje",
       links: {
@@ -1224,7 +1224,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       toggleChat: "チャットウィジェットを切り替える",
     },
     hero: {
-      eyebrow: "プレミアムな蚊・害虫駆除",
+      eyebrow: "プレミアム害虫駆除サービス",
       title: "一年中、お庭で快適に過ごしましょう",
       description:
         "カリフォルニア州で安全、迅速、信頼性の高い蚊および害虫駆除サービスを100%満足保証で提供しています。精密な処方とHD完了ビデオを組み合わせ、毎回の訪問で何を処理したか正確に確認できます。",
@@ -1633,8 +1633,8 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       complianceDesc: "GA4、GSC、コールトラッキングのプレースホルダーが設定されています。",
       copyright: "© {year} No More Mosquitoes. All rights reserved.",
       licenses: "カリフォルニア州構造害虫駆除ライセンス発行待ち。",
-      attributes: "保険加入済み • 自社雇用技術者 • 100%満足保証。",
-      tagline: "プレミアム蚊・害虫駆除",
+      attributes: "保険加入済み • 100%満足保証。",
+      tagline: "プレミアム害虫駆除サービス",
       description: "蚊、ダニ、アリ、クモなど、ご家族の室内生活を妨げる害虫を駆除します。すべての訪問に完了ビデオ、予防メモ、天候に合わせたスケジュール調整が含まれます。",
       callOrText: "お電話またはテキスト",
       links: {
@@ -1799,7 +1799,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       toggleChat: "切换聊天组件",
     },
     hero: {
-      eyebrow: "高端蚊虫与害虫防治",
+      eyebrow: "高端昆虫防治服务",
       title: "让您的庭院全年舒适无忧",
       description:
         "在加利福尼亚州提供安全、快速、可靠的蚊虫和害虫防治服务——由我们的100%满意保证提供支持。我们将精确的配方与高清完工视频相结合，让您在每次访问中都能清楚地看到我们处理了什么。",
@@ -2208,8 +2208,8 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       complianceDesc: "已配置 GA4、GSC 和通话追踪占位符。",
       copyright: "© {year} No More Mosquitoes. 保留所有权利。",
       licenses: "加州结构害虫控制执照待发布。",
-      attributes: "已投保 • 内部员工技术员 • 100% 满意保证。",
-      tagline: "高端蚊虫与害虫防治",
+      attributes: "已投保 • 100% 满意保证。",
+      tagline: "高端昆虫防治服务",
       description: "我们处理蚊子、蜱虫、蚂蚁、蜘蛛以及让您的家人困在室内的害虫。每次访问都包含完工视频、主动预防笔记和随天气调整的调度。",
       callOrText: "致电或短信",
       links: {

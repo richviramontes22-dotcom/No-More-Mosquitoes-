@@ -28,11 +28,11 @@ export const ChatWidget = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end">
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999] flex flex-col items-end">
       {/* Chat Panel */}
       <div
         className={cn(
-          "mb-4 w-72 transform overflow-hidden rounded-2xl border border-border bg-background shadow-2xl transition-all duration-300 ease-in-out",
+          "mb-4 w-[calc(100vw-32px)] sm:w-72 transform overflow-hidden rounded-2xl border border-border bg-background shadow-2xl transition-all duration-300 ease-in-out",
           isOpen ? "scale-100 opacity-100 translate-y-0" : "scale-95 opacity-0 translate-y-10 pointer-events-none"
         )}
       >

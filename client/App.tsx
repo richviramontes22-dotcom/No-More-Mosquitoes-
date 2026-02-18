@@ -12,6 +12,7 @@ import RequireAuth from "@/components/auth/RequireAuth";
 import RequireAdmin from "@/components/auth/RequireAdmin";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { LogoProvider } from "@/contexts/LogoContext";
 import { AuthDialogProvider } from "@/components/auth/AuthDialogProvider";
 import { ScheduleDialogProvider } from "@/components/schedule/ScheduleDialogProvider";
 import Index from "./pages/Index";
@@ -104,103 +105,105 @@ const App = () => (
     <BrowserRouter>
       <AuthProvider>
         <LanguageProvider>
-          <TooltipProvider>
-            <AuthDialogProvider>
-              <ScheduleDialogProvider>
-              <Toaster />
-              <Sonner />
-              <Routes>
-                <Route element={<MainLayout />}>
-                  <Route index element={<Index />} />
-                  <Route path="/pricing" element={<Pricing />} />
-                  <Route path="/services" element={<Services />} />
-                  <Route path="/our-story" element={<OurStory />} />
-                  <Route path="/reviews" element={<Reviews />} />
-                  <Route path="/service-area" element={<ServiceArea />} />
-                  <Route path="/faq" element={<FAQ />} />
-                  <Route path="/blog" element={<Blog />} />
-                  <Route path="/schedule" element={<Schedule />} />
-                  <Route path="/login" element={<Login />} />
-                  <Route
-                    path="/dashboard"
-                    element={
-                      <RequireAuth>
-                        <DashboardLayout />
-                      </RequireAuth>
-                    }
-                  >
-                    <Route index element={<Dashboard />} />
-                    <Route path="appointments" element={<DashboardAppointments />} />
-                    <Route path="billing" element={<DashboardBilling />} />
-                    <Route path="properties" element={<DashboardProperties />} />
-                    <Route path="messages" element={<DashboardMessages />} />
-                    <Route path="support" element={<DashboardSupport />} />
-                    <Route path="videos" element={<DashboardVideos />} />
-                    <Route path="profile" element={<DashboardProfile />} />
-                  </Route>
-
-                  <Route
-                    path="/admin"
-                    element={
-                      <RequireAdmin>
-                        <AdminLayout />
-                      </RequireAdmin>
-                    }
-                  >
-                    <Route index element={<AdminOverview />} />
-                    <Route path="customers" element={<AdminCustomers />} />
-                    <Route path="properties" element={<AdminProperties />} />
-                    <Route path="appointments" element={<AdminAppointments />} />
-                    <Route path="visits" element={<AdminVisits />} />
-                    <Route path="messages" element={<AdminMessages />} />
-                    <Route path="tickets" element={<AdminTickets />} />
-                    <Route path="billing" element={<AdminBilling />} />
-                    <Route path="revenue" element={<AdminRevenue />} />
-                    <Route path="employee-tracking" element={<AdminEmployeeTracking />} />
-                    <Route path="content" element={<AdminContent />} />
-                    <Route path="pricing" element={<AdminPricing />} />
-                    <Route path="service-areas" element={<AdminServiceAreas />} />
-                    <Route path="reports" element={<AdminReports />} />
-                    <Route path="settings" element={<AdminSettings />} />
-                  </Route>
-
-                  <Route path="/employee/login" element={<EmployeeLogin />} />
-
-                  <Route
-                    path="/employee"
-                    element={
-                      <RequireEmployee>
-                        <EmployeeLayout />
-                      </RequireEmployee>
-                    }
-                  >
-                    <Route index element={<EmployeeDashboard />} />
-                    <Route path="assignments" element={<EmployeeAssignments />} />
-                    <Route path="assignments/:id" element={<EmployeeAssignmentDetail />} />
-                    <Route path="messages" element={<EmployeeMessages />} />
-                    <Route path="timesheets" element={<EmployeeTimesheets />} />
-                    <Route path="profile" element={<EmployeeProfile />} />
-                  </Route>
-                  {PLACEHOLDER_ROUTES.map((route) => (
+          <LogoProvider>
+            <TooltipProvider>
+              <AuthDialogProvider>
+                <ScheduleDialogProvider>
+                <Toaster />
+                <Sonner />
+                <Routes>
+                  <Route element={<MainLayout />}>
+                    <Route index element={<Index />} />
+                    <Route path="/pricing" element={<Pricing />} />
+                    <Route path="/services" element={<Services />} />
+                    <Route path="/our-story" element={<OurStory />} />
+                    <Route path="/reviews" element={<Reviews />} />
+                    <Route path="/service-area" element={<ServiceArea />} />
+                    <Route path="/faq" element={<FAQ />} />
+                    <Route path="/blog" element={<Blog />} />
+                    <Route path="/schedule" element={<Schedule />} />
+                    <Route path="/login" element={<Login />} />
                     <Route
-                      key={route.path}
-                      path={route.path}
+                      path="/dashboard"
                       element={
-                        <PlaceholderPage
-                          title={route.title}
-                          description={route.description}
-                          callToActionLabel={route.callToActionLabel}
-                          callToActionPath={route.callToActionPath}
-                        />
+                        <RequireAuth>
+                          <DashboardLayout />
+                        </RequireAuth>
                       }
-                    />
-                  ))}
-                  <Route path="*" element={<NotFound />} />
-                </Route>
-              </Routes>
-              </ScheduleDialogProvider>
-            </AuthDialogProvider>
-          </TooltipProvider>
+                    >
+                      <Route index element={<Dashboard />} />
+                      <Route path="appointments" element={<DashboardAppointments />} />
+                      <Route path="billing" element={<DashboardBilling />} />
+                      <Route path="properties" element={<DashboardProperties />} />
+                      <Route path="messages" element={<DashboardMessages />} />
+                      <Route path="support" element={<DashboardSupport />} />
+                      <Route path="videos" element={<DashboardVideos />} />
+                      <Route path="profile" element={<DashboardProfile />} />
+                    </Route>
+
+                    <Route
+                      path="/admin"
+                      element={
+                        <RequireAdmin>
+                          <AdminLayout />
+                        </RequireAdmin>
+                      }
+                    >
+                      <Route index element={<AdminOverview />} />
+                      <Route path="customers" element={<AdminCustomers />} />
+                      <Route path="properties" element={<AdminProperties />} />
+                      <Route path="appointments" element={<AdminAppointments />} />
+                      <Route path="visits" element={<AdminVisits />} />
+                      <Route path="messages" element={<AdminMessages />} />
+                      <Route path="tickets" element={<AdminTickets />} />
+                      <Route path="billing" element={<AdminBilling />} />
+                      <Route path="revenue" element={<AdminRevenue />} />
+                      <Route path="employee-tracking" element={<AdminEmployeeTracking />} />
+                      <Route path="content" element={<AdminContent />} />
+                      <Route path="pricing" element={<AdminPricing />} />
+                      <Route path="service-areas" element={<AdminServiceAreas />} />
+                      <Route path="reports" element={<AdminReports />} />
+                      <Route path="settings" element={<AdminSettings />} />
+                    </Route>
+
+                    <Route path="/employee/login" element={<EmployeeLogin />} />
+
+                    <Route
+                      path="/employee"
+                      element={
+                        <RequireEmployee>
+                          <EmployeeLayout />
+                        </RequireEmployee>
+                      }
+                    >
+                      <Route index element={<EmployeeDashboard />} />
+                      <Route path="assignments" element={<EmployeeAssignments />} />
+                      <Route path="assignments/:id" element={<EmployeeAssignmentDetail />} />
+                      <Route path="messages" element={<EmployeeMessages />} />
+                      <Route path="timesheets" element={<EmployeeTimesheets />} />
+                      <Route path="profile" element={<EmployeeProfile />} />
+                    </Route>
+                    {PLACEHOLDER_ROUTES.map((route) => (
+                      <Route
+                        key={route.path}
+                        path={route.path}
+                        element={
+                          <PlaceholderPage
+                            title={route.title}
+                            description={route.description}
+                            callToActionLabel={route.callToActionLabel}
+                            callToActionPath={route.callToActionPath}
+                          />
+                        }
+                      />
+                    ))}
+                    <Route path="*" element={<NotFound />} />
+                  </Route>
+                </Routes>
+                </ScheduleDialogProvider>
+              </AuthDialogProvider>
+            </TooltipProvider>
+          </LogoProvider>
         </LanguageProvider>
       </AuthProvider>
     </BrowserRouter>

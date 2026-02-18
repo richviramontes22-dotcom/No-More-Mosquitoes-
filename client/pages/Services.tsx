@@ -41,7 +41,7 @@ const Services = () => {
   return (
     <div className="flex flex-col gap-0">
       <Seo
-        title="Mosquito & Pest Control Services"
+        title="Insect Control Services"
         description="Safe, fast, reliable mosquito treatment plus ants, spiders, and ticks—professionally serviced in Orange County."
         canonicalUrl="https://nomoremosquitoes.us/services"
         jsonLd={[serviceSchema]}

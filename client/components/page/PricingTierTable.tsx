@@ -74,7 +74,7 @@ const PricingTierTable = ({ frequencies, className }: PricingTierTableProps) => 
       <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="overflow-hidden rounded-[28px] border border-border/60 bg-card/90 shadow-soft">
           <table className="w-full border-collapse text-left">
-            <caption className="sr-only">Mosquito & pest control subscription pricing by acreage tier and visit frequency</caption>
+            <caption className="sr-only">Insect control subscription pricing by acreage tier and visit frequency</caption>
             <thead className="bg-muted/60 text-xs uppercase tracking-[0.3em] text-muted-foreground">
               <tr>
                 <th scope="col" className="px-6 py-4 font-semibold text-foreground">

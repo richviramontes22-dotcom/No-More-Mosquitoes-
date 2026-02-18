@@ -6,9 +6,9 @@ const QualityAssuranceSection = () => {
   const { t } = useTranslation();
   
   return (
-    <section className="bg-background py-24">
+    <section className="bg-background py-16 sm:py-24">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-12 lg:grid-cols-2">
+        <div className="grid items-center gap-8 sm:gap-12 lg:grid-cols-2">
           {/* Content Side */}
           <div className="space-y-8">
             <div className="space-y-4">
@@ -24,7 +24,7 @@ const QualityAssuranceSection = () => {
             </div>
             
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-4 rounded-[32px] border border-border/80 bg-card/80 p-6 shadow-soft backdrop-blur">
+              <div className="flex flex-col gap-4 rounded-[28px] border border-border/80 bg-card/80 p-5 sm:p-6 shadow-soft backdrop-blur">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
                   <CheckCircle2 className="h-5 w-5" aria-hidden />
                 </span>
@@ -33,8 +33,8 @@ const QualityAssuranceSection = () => {
                   <p className="text-sm text-muted-foreground leading-relaxed">{t("quality.safetyDesc")}</p>
                 </div>
               </div>
-              
-              <div className="flex flex-col gap-4 rounded-[32px] border border-border/80 bg-card/80 p-6 shadow-soft backdrop-blur">
+
+              <div className="flex flex-col gap-4 rounded-[28px] border border-border/80 bg-card/80 p-5 sm:p-6 shadow-soft backdrop-blur">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
                   <CheckCircle2 className="h-5 w-5" aria-hidden />
                 </span>
@@ -43,8 +43,8 @@ const QualityAssuranceSection = () => {
                   <p className="text-sm text-muted-foreground leading-relaxed">{t("quality.qualityDesc")}</p>
                 </div>
               </div>
-              
-              <div className="flex flex-col gap-4 rounded-[32px] border border-border/80 bg-card/80 p-6 shadow-soft backdrop-blur">
+
+              <div className="flex flex-col gap-4 rounded-[28px] border border-border/80 bg-card/80 p-5 sm:p-6 shadow-soft backdrop-blur">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
                   <CheckCircle2 className="h-5 w-5" aria-hidden />
                 </span>
@@ -53,8 +53,8 @@ const QualityAssuranceSection = () => {
                   <p className="text-sm text-muted-foreground leading-relaxed">{t("quality.accountabilityDesc")}</p>
                 </div>
               </div>
-              
-              <div className="flex flex-col gap-4 rounded-[32px] border border-border/80 bg-card/80 p-6 shadow-soft backdrop-blur">
+
+              <div className="flex flex-col gap-4 rounded-[28px] border border-border/80 bg-card/80 p-5 sm:p-6 shadow-soft backdrop-blur">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
                   <CheckCircle2 className="h-5 w-5" aria-hidden />
                 </span>
@@ -70,12 +70,12 @@ const QualityAssuranceSection = () => {
 
           {/* Image Side */}
           <div className="relative group">
-            <div className="relative overflow-hidden rounded-[40px] border border-border/60 bg-muted p-2 shadow-2xl transition-transform duration-500 group-hover:scale-[1.01]">
+            <div className="relative overflow-hidden rounded-[32px] sm:rounded-[40px] border border-border/60 bg-muted p-2 shadow-2xl transition-transform duration-500 group-hover:scale-[1.01]">
               <img
                 src={img_bg_technician_spraying.src}
                 alt={img_bg_technician_spraying.alt}
                 loading="lazy"
-                className="aspect-[4/5] w-full rounded-[32px] object-cover transition-transform duration-700 group-hover:scale-105"
+                className="aspect-video sm:aspect-[4/5] w-full rounded-[24px] sm:rounded-[32px] object-cover transition-transform duration-700 group-hover:scale-105"
               />
               {/* Decorative elements */}
               <div className="absolute inset-0 rounded-[32px] ring-1 ring-inset ring-white/10" aria-hidden />

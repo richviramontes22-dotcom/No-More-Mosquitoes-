@@ -17,12 +17,13 @@ const Index = () => {
   return (
     <div className="flex flex-col gap-0">
       <Seo
-        title="Mosquito & Pest Control for Orange County"
-        description="Premium-friendly mosquito and pest control in California with acreage-based pricing, 14/21/30/42-day cadences, and HD completion videos."
+        title="Insect Control Services for Orange County"
+        description="Premium-friendly insect control in California with acreage-based pricing, 14/21/30/42-day cadences, and HD completion videos."
         canonicalUrl="https://nomoremosquitoes.us/"
         jsonLd={[localBusinessSchema, serviceSchema, productSchema]}
       />
       <HeroSection />
+      <ScheduleSection />
       <QualityAssuranceSection />
       <PlanCardsSection />
       <PestGridSection />
@@ -30,7 +31,6 @@ const Index = () => {
       <CtaBand title={t("hero.checkPricing")} href="/pricing" />
       <StorySection />
       <FAQSection />
-      <ScheduleSection />
       <ContactSection />
     </div>
   );

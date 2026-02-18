@@ -3,9 +3,12 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, Menu, Phone } from "lucide-react";
 
 import LogoCutout from "@/components/branding/LogoCutout";
+import LogoBranding from "@/components/branding/LogoBranding";
+import { img_logo_full_text } from "@/data/media";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage, type Language } from "@/contexts/LanguageContext";
+import { useLogo } from "@/contexts/LogoContext";
 import { useTranslation } from "@/hooks/use-translation";
 import { FlagUS, FlagMX, FlagJP, FlagCN } from "@/components/common/FlagIcon";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -41,6 +44,7 @@ export const SiteHeader = () => {
   const { open: openAuthDialog } = useAuthDialog();
   const { open: openScheduleDialog } = useScheduleDialog();
   const { language, setLanguage } = useLanguage();
+  const { logoStyle } = useLogo();
   const { t } = useTranslation();
 
   const firstName = useMemo(() => {
@@ -145,7 +149,7 @@ export const SiteHeader = () => {
   );
 
   return (
-    <header className="relative z-40 border-b border-border/60 bg-hero-radial bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-hero-radial bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       {location.pathname !== "/" && (
         <div className="bg-primary/5 py-1.5 border-b border-primary/10">
           <div className="mx-auto max-w-6xl px-4 text-center">
@@ -166,7 +170,12 @@ export const SiteHeader = () => {
           {/* Left: Logo + Desktop Nav */}
           <div className="flex min-w-0 flex-1 items-center gap-6">
             <Link to="/" className="flex items-center gap-3" aria-label="No More Mosquitoes">
-              <LogoCutout size={72} className="shrink-0" alt="No More Mosquitoes logo icon" />
+              <LogoBranding
+                style={logoStyle}
+                iconClassName="h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14"
+                textClassName="text-base sm:text-lg"
+                taglineClassName="text-[9px] sm:text-[10px]"
+              />
               <div className="hidden">
                 <p className="font-display text-lg font-semibold text-foreground">No More Mosquitoes</p>
                 <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Orange County, CA</p>
@@ -284,70 +293,63 @@ export const SiteHeader = () => {
                   <Menu className="h-5 w-5" aria-hidden />
                 </button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-full sm:max-w-sm">
-                <SheetHeader>
-                <SheetTitle className="flex items-center gap-3">
-                  <LogoCutout size={64} alt="No More Mosquitoes logo icon" />
-                  <span>{t("nav.brandName") || "No More Mosquitoes"}</span>
-                </SheetTitle>
-                <a
-                  href={CONTACT_PHONE_LINK}
-                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/60 px-4 py-3 text-base font-semibold text-foreground hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Phone className="h-4 w-4" aria-hidden />
-                  </span>
-                  <span>{t("footer.callOrText") || "Call or Text"} {CONTACT_PHONE_DISPLAY}</span>
-                </a>
-              </SheetHeader>
-                <div className="mt-6 grid gap-2">
-                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/50 p-2">
-                    <button
-                      onClick={() => setLanguage("en")}
-                      className={`flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-bold transition ${
-                        language === "en"
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <FlagUS />
-                      <span>ENG</span>
-                    </button>
-                    <button
-                      onClick={() => setLanguage("es")}
-                      className={`flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-bold transition ${
-                        language === "es"
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <FlagMX />
-                      <span>ESP</span>
-                    </button>
-                    <button
-                      onClick={() => setLanguage("jp")}
-                      className={`flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-bold transition ${
-                        language === "jp"
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <FlagJP />
-                      <span>JPN</span>
-                    </button>
-                    <button
-                      onClick={() => setLanguage("cn")}
-                      className={`flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-bold transition ${
-                        language === "cn"
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <FlagCN />
-                      <span>CHN</span>
-                    </button>
-                  </div>
-                  <nav aria-label="Mobile primary" className="grid gap-1">
+              <SheetContent side="right" className="w-full px-6 pt-6 pb-6 sm:max-w-sm">
+                <div className="flex justify-start pb-6">
+                  <LogoBranding
+                    style={logoStyle}
+                    iconClassName={logoStyle === "circular" ? "h-32 w-32" : "h-16 w-16"}
+                    textClassName={logoStyle === "circular" ? "" : "text-xl"}
+                    taglineClassName={logoStyle === "circular" ? "" : "text-xs"}
+                  />
+                </div>
+                <SheetHeader className="sr-only">
+                  <SheetTitle>{t("nav.brandName") || "No More Mosquitoes"}</SheetTitle>
+                </SheetHeader>
+                <div className="grid gap-2">
+                  <a
+                    href={CONTACT_PHONE_LINK}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/60 px-4 py-3 text-base font-semibold text-foreground hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Phone className="h-4 w-4" aria-hidden />
+                    </span>
+                    <span>{t("footer.callOrText") || "Call or Text"} {CONTACT_PHONE_DISPLAY}</span>
+                  </a>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="flex w-full items-center justify-between rounded-xl border-border/60 px-4 py-6 text-base font-semibold">
+                        <div className="flex items-center gap-3">
+                          {language === "en" && <FlagUS />}
+                          {language === "es" && <FlagMX />}
+                          {language === "jp" && <FlagJP />}
+                          {language === "cn" && <FlagCN />}
+                          <span className="text-muted-foreground">{t("header.selectLanguage") || "Select language"}</span>
+                        </div>
+                        <ChevronDown className="h-4 w-4 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center" className="w-[calc(100vw-32px)] sm:w-[340px] rounded-xl">
+                      <DropdownMenuItem onClick={() => setLanguage("en")} className={language === "en" ? "bg-primary/10" : ""}>
+                        <span className="mr-3"><FlagUS /></span>
+                        <span className="font-semibold">English (ENG)</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setLanguage("es")} className={language === "es" ? "bg-primary/10" : ""}>
+                        <span className="mr-3"><FlagMX /></span>
+                        <span className="font-semibold">Spanish (ESP)</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setLanguage("jp")} className={language === "jp" ? "bg-primary/10" : ""}>
+                        <span className="mr-3"><FlagJP /></span>
+                        <span className="font-semibold">Japanese (JPN)</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setLanguage("cn")} className={language === "cn" ? "bg-primary/10" : ""}>
+                        <span className="mr-3"><FlagCN /></span>
+                        <span className="font-semibold">Chinese (CHN)</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <nav aria-label="Mobile primary" className="mt-2 grid gap-1">
                     {navLinks.map((link) => (
                       <NavLink
                         key={link.path}

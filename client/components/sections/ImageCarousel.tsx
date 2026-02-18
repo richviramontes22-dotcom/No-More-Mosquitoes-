@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 
 export type CarouselImage = {
   src: string;
+  mobileSrc?: string;
   alt: string;
+  objectPosition?: string;
+  animationKey?: string;
 };
 
 export type ImageCarouselProps = {
@@ -10,6 +13,7 @@ export type ImageCarouselProps = {
   autoRotateInterval?: number; // in milliseconds
   className?: string;
   fullscreen?: boolean;
+  objectFit?: "cover" | "contain" | "fill";
 };
 
 const ImageCarousel = ({
@@ -17,6 +21,7 @@ const ImageCarousel = ({
   autoRotateInterval = 5000,
   className = "",
   fullscreen = false,
+  objectFit = "cover",
 }: ImageCarouselProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoRotating, setIsAutoRotating] = useState(true);
@@ -42,8 +47,6 @@ const ImageCarousel = ({
 
   if (images.length === 0) return null;
 
-  const currentImage = images[currentIndex];
-
   return (
     <div
       className={`${fullscreen ? "absolute inset-0 overflow-hidden" : "relative flex-1 overflow-hidden rounded-[36px] border border-primary/20 shadow-[0_30px_80px_-40px_rgba(10,45,66,0.6)]"} transition-colors duration-700 ${className}`}
@@ -51,18 +54,87 @@ const ImageCarousel = ({
       onMouseLeave={() => setIsAutoRotating(true)}
       style={fullscreen ? { display: "block" } : { minHeight: "500px" }}
     >
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes panFamily {
+          0% { transform: scale(1.15) translateX(-6.5%); }
+          100% { transform: scale(1.15) translateX(-1.5%); }
+        }
+        @keyframes panFoggerWide {
+          0% { transform: scale(1.15) translateX(1.5%); }
+          100% { transform: scale(1.15) translateX(6.5%); }
+        }
+        @keyframes panFoggerClose {
+          0% { transform: scale(1.15) translateX(-6.5%); }
+          100% { transform: scale(1.15) translateX(-1.5%); }
+        }
+        @keyframes panPatio {
+          0% { transform: scale(1.15) translateX(-3%); }
+          100% { transform: scale(1.15) translateX(3%); }
+        }
+        @keyframes panPortraitVertical {
+          0% { transform: scale(1.15) translateY(-3%); }
+          100% { transform: scale(1.15) translateY(3%); }
+        }
+        @keyframes panRight {
+          0% { transform: scale(1.15) translateX(-5%); }
+          100% { transform: scale(1.15) translateX(5%); }
+        }
+        .animate-pan-family { animation: panFamily 12s linear infinite; }
+        .animate-pan-fogger-wide { animation: panFoggerWide 12s linear infinite; }
+        .animate-pan-fogger-close { animation: panFoggerClose 12s linear infinite; }
+        .animate-pan-patio { animation: panPatio 12s linear infinite; }
+        .animate-pan-portrait-vertical { animation: panPortraitVertical 12s linear infinite; }
+        .animate-pan-slow { animation: panRight 12s linear infinite; }
+      ` }} />
       {/* Image Stack */}
-      {images.map((image, index) => (
-        <img
-          key={index}
-          src={image.src}
-          alt={image.alt}
-          loading={fullscreen || index === currentIndex ? "eager" : "lazy"}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
-            index === currentIndex ? "opacity-100" : "opacity-0"
-          }`}
-        />
-      ))}
+      {images.map((image, index) => {
+        const getAnimationClass = (key?: string) => {
+          if (!key) return "animate-pan-slow";
+          switch (key) {
+            case "family": return "animate-pan-family";
+            case "fogger-wide": return "animate-pan-fogger-wide";
+            case "fogger-close": return "animate-pan-fogger-close";
+            case "patio": return "animate-pan-patio";
+            case "portrait-vertical": return "animate-pan-portrait-vertical";
+            default: return "animate-pan-slow";
+          }
+        };
+
+        return (
+          <picture key={index}>
+            {image.mobileSrc && (
+              <source
+                media="(max-width: 640px)"
+                srcSet={image.mobileSrc}
+              />
+            )}
+            {/* Blurred background layer for 'contain' mode to fill gaps professionally */}
+            {objectFit === "contain" && (
+              <img
+                src={image.mobileSrc || image.src}
+                alt=""
+                aria-hidden="true"
+                className={`absolute inset-0 h-full w-full object-cover blur-3xl opacity-30 transition-opacity duration-1000 scale-110 ${
+                  index === currentIndex ? "opacity-30" : "opacity-0"
+                }`}
+              />
+            )}
+            <img
+              src={image.src}
+              alt={image.alt}
+              loading={fullscreen || index === currentIndex ? "eager" : "lazy"}
+              className={`absolute inset-0 h-full w-full transition-opacity duration-1000 ${
+                index === currentIndex ? `opacity-100 ${getAnimationClass(image.animationKey)}` : "opacity-0"
+              }`}
+              style={{
+                objectPosition: image.objectPosition || "center",
+                objectFit: objectFit,
+                transform: "scale(1.15)", // Maintain scale during fade transitions to prevent "zoom out" jump
+              }}
+            />
+          </picture>
+        );
+      })}
 
       {/* Overlay Gradient - only for card mode */}
       {!fullscreen && <div className="absolute inset-0 bg-gradient-to-t from-primary/40 via-primary/10 to-transparent" aria-hidden />}

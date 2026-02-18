@@ -45,8 +45,8 @@ export const localBusinessSchema = {
 export const serviceSchema = {
   "@context": "https://schema.org",
   "@type": "Service",
-  name: "Mosquito & Pest Control",
-  serviceType: "Mosquito and Pest Control",
+  name: "Insect Control Services",
+  serviceType: "Insect Control",
   provider: {
     "@type": "LocalBusiness",
     name: "No More Mosquitoes",
@@ -130,7 +130,7 @@ export const createAggregateRatingSchema = (ratingValue: number, reviewCount: nu
   "@type": "AggregateRating",
   itemReviewed: {
     "@type": "Service",
-    name: "No More Mosquitoes Mosquito & Pest Control",
+    name: "No More Mosquitoes Insect Control Services",
   },
   ratingValue: ratingValue.toFixed(1),
   reviewCount,

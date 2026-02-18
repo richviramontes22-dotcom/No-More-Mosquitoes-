@@ -12,7 +12,7 @@ const Pricing = () => {
     <div className="flex flex-col gap-0">
       <Seo
         title="Pricing & Plans | No More Mosquitoes (Orange County)"
-        description="Acreage-based mosquito & pest control pricing with 14/21/30/42-day options. Annual prepay and one-time application available."
+        description="Acreage-based insect control pricing with 14/21/30/42-day options. Annual prepay and one-time application available."
         canonicalUrl="https://nomoremosquitoes.us/pricing"
         jsonLd={[productSchema]}
       />

@@ -9,17 +9,18 @@ type LogoCutoutProps = {
 };
 
 export const LogoCutout = forwardRef<HTMLDivElement, LogoCutoutProps>(
-  ({ className, size = 48, alt = "No More Mosquitoes icon" }, ref) => {
+  ({ className, size, alt = "No More Mosquitoes icon" }, ref) => {
     const dimension = typeof size === "number" ? `${size}px` : size;
 
     return (
       <div
         ref={ref}
         className={cn(
-          "relative overflow-hidden rounded-full bg-gradient-to-br from-primary/20 via-primary/10 to-secondary/20 shadow-soft",
+          "relative overflow-hidden rounded-full bg-gradient-to-br from-primary/20 via-primary/10 to-secondary/20 shadow-soft shrink-0",
+          !size && "h-12 w-12", // Default size if none provided
           className,
         )}
-        style={{ width: dimension, height: dimension }}
+        style={size ? { width: dimension, height: dimension } : undefined}
       >
         <img
           src={img_logo_nomoremoss_black.src}
