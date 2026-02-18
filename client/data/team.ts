@@ -7,10 +7,10 @@ export type TeamMember = {
 
 export const leadershipTeam: TeamMember[] = [
   {
-    name: "Richard Noble",
+    name: "Richard Viramontes",
     role: "Founder & Lead Technician",
     bio: "Licensed structural pest control operator who personally trains every employee-based technician on California DPR compliance.",
-    imageAlt: "Portrait of Richard Noble, founder of No More Mosquitoes",
+    imageAlt: "Portrait of Richard Viramontes, founder of No More Mosquitoes",
   },
   {
     name: "Elijah Noble",

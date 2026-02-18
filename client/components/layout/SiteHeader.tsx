@@ -23,7 +23,6 @@ const NAV_LINKS = [
   { label: "Services", path: "/services", key: "services" },
   { label: "Our Story", path: "/our-story", key: "ourStory" },
   { label: "Reviews", path: "/reviews", key: "reviews" },
-  { label: "Service Area", path: "/service-area", key: "serviceArea" },
   { label: "FAQ", path: "/faq", key: "faq" },
   { label: "Blog", path: "/blog", key: "blog" },
   { label: "Schedule", path: "/schedule", key: "schedule" },
@@ -263,7 +262,7 @@ export const SiteHeader = () => {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setLanguage("es")} className={language === "es" ? "bg-primary/10" : ""}>
                   <span className="mr-2"><FlagMX /></span>
-                  <span>Spanish (ESP)</span>
+                  <span>Spanish (MEX)</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setLanguage("jp")} className={language === "jp" ? "bg-primary/10" : ""}>
                   <span className="mr-2"><FlagJP /></span>
@@ -336,7 +335,7 @@ export const SiteHeader = () => {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setLanguage("es")} className={language === "es" ? "bg-primary/10" : ""}>
                         <span className="mr-3"><FlagMX /></span>
-                        <span className="font-semibold">Spanish (ESP)</span>
+                        <span className="font-semibold">Spanish (MEX)</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setLanguage("jp")} className={language === "jp" ? "bg-primary/10" : ""}>
                         <span className="mr-3"><FlagJP /></span>

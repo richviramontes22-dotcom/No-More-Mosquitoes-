@@ -3,33 +3,90 @@ export function FlagUS() {
     <svg
       width="20"
       height="15"
-      viewBox="0 0 7.5 5.625"
+      viewBox="0 0 741 390"
       xmlns="http://www.w3.org/2000/svg"
       className="inline-block"
     >
-      <rect width="7.5" height="5.625" fill="#B22234" />
-      <path d="M 0 0.468 H 7.5 M 0 0.936 H 7.5 M 0 1.404 H 7.5 M 0 1.872 H 7.5 M 0 2.34 H 7.5 M 0 2.808 H 7.5 M 0 3.276 H 7.5" stroke="#FFFFFF" strokeWidth="0.468" />
-      <rect width="3" height="2.812" fill="#3C3B6B" />
+      <rect width="741" height="390" fill="#3C3B6B" />
+      <path d="M0,30h741M0,90h741M0,150h741M0,210h741M0,270h741M0,330h741" stroke="#B22234" strokeWidth="30" />
+      <path d="M0,0h741M0,60h741M0,120h741M0,180h741M0,240h741M0,300h741M0,360h741" stroke="#FFFFFF" strokeWidth="30" />
+      <rect width="296.4" height="210" fill="#3C3B6B" />
+      <g fill="#FFFFFF">
+        {/* 50 stars simplified for small size rendering */}
+        <circle cx="30" cy="17.5" r="6" />
+        <circle cx="90" cy="17.5" r="6" />
+        <circle cx="150" cy="17.5" r="6" />
+        <circle cx="210" cy="17.5" r="6" />
+        <circle cx="270" cy="17.5" r="6" />
+
+        <circle cx="60" cy="35" r="6" />
+        <circle cx="120" cy="35" r="6" />
+        <circle cx="180" cy="35" r="6" />
+        <circle cx="240" cy="35" r="6" />
+
+        <circle cx="30" cy="52.5" r="6" />
+        <circle cx="90" cy="52.5" r="6" />
+        <circle cx="150" cy="52.5" r="6" />
+        <circle cx="210" cy="52.5" r="6" />
+        <circle cx="270" cy="52.5" r="6" />
+
+        <circle cx="60" cy="70" r="6" />
+        <circle cx="120" cy="70" r="6" />
+        <circle cx="180" cy="70" r="6" />
+        <circle cx="240" cy="70" r="6" />
+
+        <circle cx="30" cy="87.5" r="6" />
+        <circle cx="90" cy="87.5" r="6" />
+        <circle cx="150" cy="87.5" r="6" />
+        <circle cx="210" cy="87.5" r="6" />
+        <circle cx="270" cy="87.5" r="6" />
+
+        <circle cx="60" cy="105" r="6" />
+        <circle cx="120" cy="105" r="6" />
+        <circle cx="180" cy="105" r="6" />
+        <circle cx="240" cy="105" r="6" />
+
+        <circle cx="30" cy="122.5" r="6" />
+        <circle cx="90" cy="122.5" r="6" />
+        <circle cx="150" cy="122.5" r="6" />
+        <circle cx="210" cy="122.5" r="6" />
+        <circle cx="270" cy="122.5" r="6" />
+
+        <circle cx="60" cy="140" r="6" />
+        <circle cx="120" cy="140" r="6" />
+        <circle cx="180" cy="140" r="6" />
+        <circle cx="240" cy="140" r="6" />
+
+        <circle cx="30" cy="157.5" r="6" />
+        <circle cx="90" cy="157.5" r="6" />
+        <circle cx="150" cy="157.5" r="6" />
+        <circle cx="210" cy="157.5" r="6" />
+        <circle cx="270" cy="157.5" r="6" />
+
+        <circle cx="60" cy="175" r="6" />
+        <circle cx="120" cy="175" r="6" />
+        <circle cx="180" cy="175" r="6" />
+        <circle cx="240" cy="175" r="6" />
+
+        <circle cx="30" cy="192.5" r="6" />
+        <circle cx="90" cy="192.5" r="6" />
+        <circle cx="150" cy="192.5" r="6" />
+        <circle cx="210" cy="192.5" r="6" />
+        <circle cx="270" cy="192.5" r="6" />
+      </g>
     </svg>
   );
 }
 
 export function FlagMX() {
   return (
-    <svg
+    <img
+      src="https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F9863ca56f1304d1588ae3094db7237b3?format=webp&width=40"
+      alt="Mexican flag"
       width="20"
       height="15"
-      viewBox="0 0 900 600"
-      xmlns="http://www.w3.org/2000/svg"
-      className="inline-block"
-    >
-      <rect width="300" height="600" fill="#006B3F" />
-      <rect x="300" width="300" height="600" fill="#FFFFFF" />
-      <rect x="600" width="300" height="600" fill="#CE1126" />
-      <circle cx="450" cy="300" r="90" fill="#CE1126" />
-      <circle cx="450" cy="300" r="75" fill="#006B3F" />
-      <circle cx="450" cy="300" r="60" fill="#FFFFFF" />
-    </svg>
+      className="inline-block object-contain"
+    />
   );
 }
 

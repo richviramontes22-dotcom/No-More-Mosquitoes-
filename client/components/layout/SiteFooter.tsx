@@ -23,7 +23,6 @@ export const SiteFooter = () => {
       { label: footerLinks?.services || "Services", path: "/services" },
       { label: footerLinks?.ourStory || "Our Story", path: "/our-story" },
       { label: footerLinks?.reviews || "Reviews", path: "/reviews" },
-      { label: footerLinks?.serviceArea || "Service Area", path: "/service-area" },
       { label: footerLinks?.faq || "FAQ", path: "/faq" },
       { label: footerLinks?.blog || "Blog", path: "/blog" },
       { label: footerLinks?.schedule || "Schedule", path: "/schedule" },
