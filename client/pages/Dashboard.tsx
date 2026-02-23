@@ -74,27 +74,28 @@ const Dashboard = () => {
         variant="split"
         title={(t("dashboard.welcome") || "Welcome back, {name}.").replace("{name}", firstName || "there")}
         description={t("dashboard.trackDesc")}
-        primaryCta={{ label: t("dashboard.scheduleVisit"), href: "/schedule" }}
-        secondaryCta={{ label: t("dashboard.updateContact"), href: "/contact" }}
+        primaryCta={{ label: t("dashboard.scheduleVisit"), href: "/dashboard/appointments" }}
+        secondaryCta={{ label: t("dashboard.updateContact"), href: "/dashboard/profile" }}
         aside={
           <div className="space-y-4 text-sm text-muted-foreground">
             <p className="font-semibold text-foreground">{t("dashboard.accountDetails")}</p>
-            <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+            <div className="rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm">
               <dl className="space-y-3">
                 <div>
                   <dt className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">{t("dashboard.nameLabel")}</dt>
-                  <dd className="text-sm text-foreground">{user?.name ?? "—"}</dd>
+                  <dd className="text-sm font-medium text-foreground">{user?.name ?? "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">{t("dashboard.emailLabel")}</dt>
-                  <dd className="text-sm text-foreground">{user?.email ?? "—"}</dd>
+                  <dd className="text-sm font-medium text-foreground">{user?.email ?? "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs uppercase tracking-[0.3em] text-muted-foreground/80">{t("dashboard.subscriptionLabel")}</dt>
-                  <dd className="text-sm text-foreground">Mosquito + pest bundle (30-day cadence)</dd>
+                  <dd className="text-sm font-medium text-foreground">Mosquito + Pest Bundle</dd>
+                  <dd className="text-[10px] text-muted-foreground mt-0.5">30-day recurring cadence</dd>
                 </div>
               </dl>
-              <Button variant="outline" className="mt-4 w-full" onClick={handleLogout}>
+              <Button variant="outline" size="sm" className="mt-4 w-full rounded-xl" onClick={handleLogout}>
                 {t("dashboard.signOut")}
               </Button>
             </div>
@@ -136,10 +137,10 @@ const Dashboard = () => {
                     </div>
                     <div className="flex flex-wrap gap-3 text-sm">
                       <Button asChild variant="secondary" className="rounded-full">
-                        <Link to="/contact">{t("dashboard.requestAdjustment")}</Link>
+                        <Link to="/dashboard/support">{t("dashboard.requestAdjustment")}</Link>
                       </Button>
                       <Button asChild className="rounded-full">
-                        <Link to="/schedule">{t("dashboard.addAddOn")}</Link>
+                        <Link to="/dashboard/appointments">{t("dashboard.addAddOn")}</Link>
                       </Button>
                     </div>
                   </CardContent>
@@ -173,7 +174,7 @@ const Dashboard = () => {
                     </div>
                     <p className="text-sm text-muted-foreground">{video.summary}</p>
                     <Button asChild variant="outline" className="rounded-full">
-                      <a href={video.url} target="_blank" rel="noreferrer">
+                      <a href={video.url} target="_blank" rel="noopener noreferrer">
                         {t("dashboard.watchVideo")}
                       </a>
                     </Button>
@@ -194,10 +195,10 @@ const Dashboard = () => {
                 <p>• {t("dashboard.bulletInvoices")}</p>
                 <div className="flex flex-wrap gap-3">
                   <Button asChild className="rounded-full">
-                    <Link to="/contact">{t("dashboard.talkWithBilling")}</Link>
+                    <Link to="/dashboard/billing">{t("dashboard.talkWithBilling")}</Link>
                   </Button>
                   <Button asChild variant="secondary" className="rounded-full">
-                    <Link to="/pricing">{t("dashboard.reviewPlan")}</Link>
+                    <Link to="/dashboard/billing">{t("dashboard.reviewPlan")}</Link>
                   </Button>
                 </div>
               </CardContent>
@@ -205,7 +206,7 @@ const Dashboard = () => {
           </div>
         </div>
       </section>
-      <CtaBand title={t("dashboard.pauseVisit")} href="/contact" ctaLabel={t("dashboard.messageTeam")} />
+      <CtaBand title={t("dashboard.pauseVisit")} href="/dashboard/support" ctaLabel={t("dashboard.messageTeam")} />
     </div>
   );
 };

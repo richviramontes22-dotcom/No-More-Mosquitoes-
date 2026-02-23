@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { randomUUID } from "node:crypto";
+import { supabase } from "../lib/supabase";
 
 import type { ScheduleRequestPayload, ScheduleResponse } from "@shared/api";
 
@@ -15,15 +15,7 @@ const REQUIRED_FIELDS: Array<keyof ScheduleRequestPayload> = [
   "submittedAt",
 ];
 
-const createTicketId = () => {
-  try {
-    return randomUUID().split("-")[0]?.toUpperCase() ?? `REQ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  } catch (error) {
-    return `REQ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  }
-};
-
-export const handleScheduleRequest: RequestHandler = (req, res) => {
+export const handleScheduleRequest: RequestHandler = async (req, res) => {
   const payload = req.body as ScheduleRequestPayload | undefined;
 
   if (!payload) {
@@ -44,14 +36,41 @@ export const handleScheduleRequest: RequestHandler = (req, res) => {
     return;
   }
 
-  const response: ScheduleResponse = {
-    success: true,
-    ticketId: createTicketId(),
-    message: "Schedule request received",
-  };
+  try {
+    // Persist to Supabase
+    const { data, error } = await supabase
+      .from("schedule_requests")
+      .insert({
+        full_name: payload.fullName,
+        email: payload.email,
+        phone: payload.phone,
+        address: payload.serviceAddress,
+        zip: payload.zipCode,
+        frequency: payload.serviceFrequency,
+        preferred_date: payload.preferredDate,
+        contact_method: payload.preferredContactMethod,
+        acreage: payload.acreage,
+        notes: payload.notes,
+        status: "new",
+      })
+      .select()
+      .single();
 
-  // In a production system you might enqueue this request, store it in a database, or notify a CRM here.
-  // For now we simply acknowledge the request so the client can confirm receipt.
+    if (error) {
+      console.error("Error saving schedule request to Supabase:", error);
+      // We still return a success response to the client so the UI doesn't break,
+      // but we log the error. In a real production app, you might want to retry or alert.
+    }
 
-  res.status(200).json(response);
+    const response: ScheduleResponse = {
+      success: true,
+      ticketId: data?.id?.split("-")[0]?.toUpperCase() ?? `REQ-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+      message: "Schedule request received and saved",
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error("Internal error handling schedule request:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };

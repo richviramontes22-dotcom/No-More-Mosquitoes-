@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-
-const STORAGE_KEY = "nmm-auth-store";
+import { supabase } from "@/lib/supabase";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 
 export type UserRole = "admin" | "support" | "customer";
 
@@ -9,20 +9,6 @@ export type AuthUser = {
   name: string;
   email: string;
   role: UserRole;
-};
-
-type StoredUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  password: string;
-  createdAt: string;
-};
-
-type AuthStore = {
-  users: Record<string, StoredUser>;
-  currentUserEmail?: string;
 };
 
 type LoginInput = {
@@ -42,120 +28,177 @@ type AuthContextValue = {
   isHydrated: boolean;
   login: (input: LoginInput) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<void>;
-  logout: () => void;
-};
-
-const defaultStore: AuthStore = {
-  users: {},
-  currentUserEmail: undefined,
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
-const createId = () => {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return Math.random().toString(36).slice(2, 11);
-};
-
-const sanitizeUser = (user: StoredUser | null): AuthUser | null => {
-  if (!user) return null;
-  const { id, name, email, role } = user;
-  return { id, name, email, role };
-};
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [store, setStore] = useState<AuthStore>(defaultStore);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as AuthStore;
-        setStore({
-          users: parsed.users ?? {},
-          currentUserEmail: parsed.currentUserEmail,
-        });
-      } catch (error) {
-        console.error("Failed to parse auth store", error);
-        setStore(defaultStore);
+  const fetchProfile = useCallback(async (supabaseUser: SupabaseUser) => {
+    if (!supabase) return null;
+
+    // Short timeout for profile fetch (3s) to prevent blocking the UI
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Profile fetch timeout")), 3000)
+    );
+
+    try {
+      const profilePromise = supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", supabaseUser.id)
+        .single();
+
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+
+      if (error) {
+        // This is expected if the user just signed up and the profile isn't in DB yet
+        return null;
       }
+
+      return data as AuthUser;
+    } catch (err) {
+      // We don't log this as an error anymore because we have a reliable fallback
+      return null;
     }
-    setIsHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!isHydrated || typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-  }, [store, isHydrated]);
-
-  const login = useCallback(async ({ email, password }: LoginInput) => {
-    const normalizedEmail = normalizeEmail(email);
-    const storedUser = store.users[normalizedEmail];
-    if (!storedUser) {
-      throw new Error("No account found for that email.");
-    }
-    if (storedUser.password !== password) {
-      throw new Error("Incorrect password. Try again or reset it.");
+    if (!supabase) {
+      setIsHydrated(true);
+      return;
     }
 
-    setStore((previous) => ({
-      ...previous,
-      currentUserEmail: normalizedEmail,
-    }));
-  }, [store.users]);
+    // Initial session check
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
 
-  const signUp = useCallback(async ({ name, email, password }: SignUpInput) => {
-    const normalizedEmail = normalizeEmail(email);
-    if (store.users[normalizedEmail]) {
-      throw new Error("An account with that email already exists.");
-    }
+        if (session?.user) {
+          // 1. Immediately set user from metadata so the UI is responsive
+          const metaUser: AuthUser = {
+            id: session.user.id,
+            email: session.user.email || "",
+            name: session.user.user_metadata?.name || "User",
+            role: (session.user.user_metadata?.role as UserRole) || "customer",
+          };
+          setUser(metaUser);
 
-    const isFirstUser = Object.keys(store.users).length === 0;
-
-    const newUser: StoredUser = {
-      id: createId(),
-      name: name.trim(),
-      email: normalizedEmail,
-      role: isFirstUser ? "admin" : "customer",
-      password,
-      createdAt: new Date().toISOString(),
+          // 2. Fetch full profile in the background
+          fetchProfile(session.user).then(profile => {
+            if (profile) setUser(profile);
+          });
+        }
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+      } finally {
+        // Always mark as hydrated so the app can render
+        setIsHydrated(true);
+      }
     };
 
-    setStore((previous) => ({
-      users: {
-        ...previous.users,
-        [normalizedEmail]: newUser,
-      },
-      currentUserEmail: normalizedEmail,
-    }));
-  }, [store.users]);
+    initAuth();
 
-  const logout = useCallback(() => {
-    setStore((previous) => ({
-      ...previous,
-      currentUserEmail: undefined,
-    }));
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const metaUser: AuthUser = {
+          id: session.user.id,
+          email: session.user.email || "",
+          name: session.user.user_metadata?.name || "User",
+          role: (session.user.user_metadata?.role as UserRole) || "customer",
+        };
+        setUser(metaUser);
+
+        const profile = await fetchProfile(session.user);
+        if (profile) setUser(profile);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile]);
+
+  const login = useCallback(async ({ email, password }: LoginInput) => {
+    if (!supabase) throw new Error("Authentication service is currently unavailable.");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizeEmail(email),
+      password,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
   }, []);
 
-  const currentUser = useMemo(() => {
-    if (!store.currentUserEmail) return null;
-    return store.users[store.currentUserEmail] ?? null;
-  }, [store.currentUserEmail, store.users]);
+  const signUp = useCallback(async ({ name, email, password }: SignUpInput) => {
+    if (!supabase) throw new Error("Authentication service is currently unavailable.");
+    const normalizedEmail = normalizeEmail(email);
+
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          name: name.trim(),
+          role: "customer", // Default to customer, first user logic handled in profiles
+        },
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (data.user) {
+      // Try to create profile, but don't fail signup if it fails (e.g. table not created yet)
+      try {
+        const { data: profilesCount } = await supabase.from("profiles").select("id", { count: "exact", head: true });
+        const isFirstUser = !profilesCount || profilesCount.length === 0;
+
+        await supabase.from("profiles").insert({
+          id: data.user.id,
+          name: name.trim(),
+          email: normalizedEmail,
+          role: isFirstUser ? "admin" : "customer",
+        });
+      } catch (profileError) {
+        console.warn("Profile creation skipped or failed:", profileError);
+      }
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    if (!supabase) {
+      setUser(null);
+      return;
+    }
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Error logging out:", error.message);
+    }
+    setUser(null);
+  }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
-    user: sanitizeUser(currentUser),
-    isAuthenticated: Boolean(currentUser),
+    user,
+    isAuthenticated: Boolean(user),
     isHydrated,
     login,
     signUp,
     logout,
-  }), [currentUser, login, logout, signUp, isHydrated]);
+  }), [user, login, logout, signUp, isHydrated]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

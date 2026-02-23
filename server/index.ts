@@ -30,6 +30,20 @@ export function createServer() {
   app.get("/api/demo", handleDemo);
   app.post("/api/schedule", handleScheduleRequest);
 
+  app.get("/api/db-check", async (_req, res) => {
+    try {
+      const { supabase } = await import("./lib/supabase");
+      const { data, error } = await supabase.from("profiles").select("id").limit(1);
+      res.json({
+        connected: !error,
+        error: error?.message,
+        url: process.env.VITE_SUPABASE_URL ? "Set" : "Missing"
+      });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // Employee API (stubs)
   app.use("/api/employee", employeeAuth);
   app.use("/api/employee", employeeShifts);
