@@ -9,6 +9,10 @@ export type AuthUser = {
   name: string;
   email: string;
   role: UserRole;
+  phone?: string;
+  card_brand?: string;
+  card_last4?: string;
+  card_expiry?: string;
 };
 
 type LoginInput = {
@@ -42,28 +46,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const fetchProfile = useCallback(async (supabaseUser: SupabaseUser) => {
     if (!supabase) return null;
 
-    // Short timeout for profile fetch (3s) to prevent blocking the UI
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Profile fetch timeout")), 3000)
-    );
-
+    // Wait for Supabase to be ready
     try {
-      const profilePromise = supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", supabaseUser.id)
         .single();
 
-      const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
-
       if (error) {
-        // This is expected if the user just signed up and the profile isn't in DB yet
+        // If it's a "Failed to fetch" error, retry once after a short delay
+        if (error.message.includes("Failed to fetch")) {
+          await new Promise(res => setTimeout(res, 1000));
+          const retry = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", supabaseUser.id)
+            .single();
+          if (retry.error) return null;
+          return retry.data as AuthUser;
+        }
         return null;
       }
 
       return data as AuthUser;
     } catch (err) {
-      // We don't log this as an error anymore because we have a reliable fallback
+      console.warn("Profile fetch failed:", err);
       return null;
     }
   }, []);
@@ -86,12 +94,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             email: session.user.email || "",
             name: session.user.user_metadata?.name || "User",
             role: (session.user.user_metadata?.role as UserRole) || "customer",
+            phone: session.user.phone || "",
+            card_brand: session.user.user_metadata?.card_brand,
+            card_last4: session.user.user_metadata?.card_last4,
+            card_expiry: session.user.user_metadata?.card_expiry,
           };
-          setUser(metaUser);
+
+          setUser(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(metaUser)) return prev;
+            return metaUser;
+          });
 
           // 2. Fetch full profile in the background
           fetchProfile(session.user).then(profile => {
-            if (profile) setUser(profile);
+            if (profile) {
+              setUser(prev => {
+                if (JSON.stringify(prev) === JSON.stringify(profile)) return prev;
+                return profile;
+              });
+            }
           });
         }
       } catch (err) {
@@ -112,13 +133,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           email: session.user.email || "",
           name: session.user.user_metadata?.name || "User",
           role: (session.user.user_metadata?.role as UserRole) || "customer",
+          phone: session.user.phone || "",
+          card_brand: session.user.user_metadata?.card_brand,
+          card_last4: session.user.user_metadata?.card_last4,
+          card_expiry: session.user.user_metadata?.card_expiry,
         };
-        setUser(metaUser);
+
+        setUser(prev => {
+          if (JSON.stringify(prev) === JSON.stringify(metaUser)) return prev;
+          return metaUser;
+        });
 
         const profile = await fetchProfile(session.user);
-        if (profile) setUser(profile);
+        if (profile) {
+          setUser(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(profile)) return prev;
+            return profile;
+          });
+        }
       } else {
-        setUser(null);
+        setUser(prev => {
+          if (prev === null) return prev;
+          return null;
+        });
       }
     });
 

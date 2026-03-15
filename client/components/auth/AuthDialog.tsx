@@ -10,21 +10,23 @@ export type AuthDialogProps = {
   defaultMode?: "login" | "signup";
   redirectTo?: string | null;
   source?: string | null;
+  preset?: any;
 };
 
-const AuthDialog = ({ open, onOpenChange, defaultMode = "login", redirectTo, source }: AuthDialogProps) => {
+const AuthDialog = ({ open, onOpenChange, defaultMode = "login", redirectTo, source, preset }: AuthDialogProps) => {
   const navigate = useNavigate();
 
   const handleSuccess = useCallback(
     () => {
       onOpenChange(false);
-      if (redirectTo) {
-        navigate(redirectTo, { replace: true });
-        return;
+      const target = redirectTo || "/dashboard";
+      if (target === "/schedule" && preset) {
+        navigate(target, { state: { preset }, replace: true });
+      } else {
+        navigate(target, { replace: true });
       }
-      navigate("/dashboard", { replace: true });
     },
-    [navigate, onOpenChange, redirectTo],
+    [navigate, onOpenChange, redirectTo, preset],
   );
 
   return (
@@ -38,7 +40,12 @@ const AuthDialog = ({ open, onOpenChange, defaultMode = "login", redirectTo, sou
           </DialogDescription>
         </DialogHeader>
         <div className="px-8 py-6">
-          <AuthTabs defaultMode={defaultMode} onSuccess={handleSuccess} />
+          <AuthTabs
+            defaultMode={defaultMode}
+            defaultEmail={preset?.email}
+            defaultName={preset?.fullName}
+            onSuccess={handleSuccess}
+          />
         </div>
       </DialogContent>
     </Dialog>

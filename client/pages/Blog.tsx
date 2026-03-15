@@ -57,11 +57,9 @@ const Blog = () => {
                   <p className="mt-3 text-sm text-muted-foreground">{post.excerpt}</p>
                   <Link
                     to={`/blog/${post.slug}`}
-                    onClick={(event) => event.preventDefault()}
                     className="mt-auto inline-flex items-center gap-2 text-sm font-semibold text-primary transition hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                    aria-disabled="true"
                   >
-                    Full post coming soon
+                    Read full post
                   </Link>
                 </article>
               ))

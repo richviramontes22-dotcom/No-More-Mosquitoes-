@@ -37,6 +37,17 @@ export const handleScheduleRequest: RequestHandler = async (req, res) => {
   }
 
   try {
+    const authHeader = req.headers.authorization;
+    let userId = payload.userId;
+
+    if (authHeader) {
+      const token = authHeader.split(" ")[1];
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (user) {
+        userId = user.id;
+      }
+    }
+
     // Persist to Supabase
     const { data, error } = await supabase
       .from("schedule_requests")
@@ -45,6 +56,8 @@ export const handleScheduleRequest: RequestHandler = async (req, res) => {
         email: payload.email,
         phone: payload.phone,
         address: payload.serviceAddress,
+        city: payload.city,
+        state: payload.state,
         zip: payload.zipCode,
         frequency: payload.serviceFrequency,
         preferred_date: payload.preferredDate,
@@ -58,8 +71,25 @@ export const handleScheduleRequest: RequestHandler = async (req, res) => {
 
     if (error) {
       console.error("Error saving schedule request to Supabase:", error);
-      // We still return a success response to the client so the UI doesn't break,
-      // but we log the error. In a real production app, you might want to retry or alert.
+    }
+
+    // If userId and propertyId are present, also insert into appointments
+    if (userId && payload.propertyId && !payload.propertyId.startsWith("prop-system")) {
+      const { error: appointmentError } = await supabase
+        .from("appointments")
+        .insert({
+          user_id: userId,
+          property_id: payload.propertyId,
+          status: "requested",
+          scheduled_at: payload.preferredDate,
+          service_type: "Mosquito Service",
+          frequency: payload.serviceFrequency,
+          notes: payload.notes
+        });
+
+      if (appointmentError) {
+        console.error("Error saving appointment to Supabase:", appointmentError);
+      }
     }
 
     const response: ScheduleResponse = {

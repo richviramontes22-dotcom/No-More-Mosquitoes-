@@ -14,16 +14,18 @@ type Mode = "login" | "signup";
 
 type AuthTabsProps = {
   defaultMode?: Mode;
+  defaultEmail?: string;
+  defaultName?: string;
   onSuccess?: (mode: Mode) => void;
 };
 
-const AuthTabs = ({ defaultMode = "login", onSuccess }: AuthTabsProps) => {
+const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", onSuccess }: AuthTabsProps) => {
   const [mode, setMode] = useState<Mode>(defaultMode);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loginEmail, setLoginEmail] = useState("");
+  const [loginEmail, setLoginEmail] = useState(defaultEmail);
   const [loginPassword, setLoginPassword] = useState("");
-  const [signupName, setSignupName] = useState("");
-  const [signupEmail, setSignupEmail] = useState("");
+  const [signupName, setSignupName] = useState(defaultName);
+  const [signupEmail, setSignupEmail] = useState(defaultEmail);
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
 
@@ -33,6 +35,16 @@ const AuthTabs = ({ defaultMode = "login", onSuccess }: AuthTabsProps) => {
   useEffect(() => {
     setMode(defaultMode);
   }, [defaultMode]);
+
+  useEffect(() => {
+    if (defaultEmail) {
+      setLoginEmail(defaultEmail);
+      setSignupEmail(defaultEmail);
+    }
+    if (defaultName) {
+      setSignupName(defaultName);
+    }
+  }, [defaultEmail, defaultName]);
 
   const invalidSignupReason = useMemo(() => {
     if (!signupName.trim()) return "Add your name";

@@ -10,14 +10,20 @@ import employeeMessages from "./routes/employeeMessages";
 import smsWebhook from "./routes/webhooks.sms";
 import { seedIfEmpty } from "./lib/memory";
 import adminStripe from "./routes/adminStripe";
+import billingStripe from "./routes/billingStripe";
 import adminTracking from "./routes/adminTracking";
 import regridRoutes from "./routes/regrid";
+import stripeWebhooks from "./routes/webhooksStripe";
 
 export function createServer() {
   const app = express();
 
   // Middleware
   app.use(cors());
+
+  // Webhook needs raw body before express.json()
+  app.use("/api/webhooks", express.raw({ type: "application/json" }), stripeWebhooks);
+
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -33,10 +39,30 @@ export function createServer() {
   app.get("/api/db-check", async (_req, res) => {
     try {
       const { supabase } = await import("./lib/supabase");
-      const { data, error } = await supabase.from("profiles").select("id").limit(1);
+
+      const results: Record<string, any> = {};
+
+      // Check Profiles and stripe_customer_id column
+      const { data: profData, error: profError } = await supabase.from("profiles").select("id, stripe_customer_id").limit(1);
+      results.profiles = { success: !profError, error: profError?.message };
+
+      // Check Plans
+      const { data: plansData, error: plansError } = await supabase.from("plans").select("id").limit(1);
+      results.plans = { success: !plansError, error: plansError?.message };
+
+      // Check Subscriptions
+      const { data: subData, error: subError } = await supabase.from("subscriptions").select("id").limit(1);
+      results.subscriptions = { success: !subError, error: subError?.message };
+
+      // Check Payments
+      const { data: payData, error: payError } = await supabase.from("payments").select("id").limit(1);
+      results.payments = { success: !payError, error: payError?.message };
+
+      const allSuccess = Object.values(results).every((r: any) => r.success);
+
       res.json({
-        connected: !error,
-        error: error?.message,
+        connected: allSuccess,
+        results,
         url: process.env.VITE_SUPABASE_URL ? "Set" : "Missing"
       });
     } catch (err) {
@@ -55,6 +81,9 @@ export function createServer() {
 
   // Admin Stripe API
   app.use("/api/admin", adminStripe);
+
+  // Billing Stripe API
+  app.use("/api/billing", billingStripe);
 
   // Admin Tracking API
   app.use("/api/admin", adminTracking);

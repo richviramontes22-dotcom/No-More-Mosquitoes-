@@ -3,14 +3,16 @@ import { lifestyleImages } from "@/data/media";
 import { ArrowRight, Phone } from "lucide-react";
 import { useTranslation } from "@/hooks/use-translation";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/contexts/AuthContext";
+import { siteConfig } from "@/data/site";
 import ImageCarousel from "./ImageCarousel";
-
-const CONTACT_PHONE_DISPLAY = "(949) 297-6225";
-const CONTACT_PHONE_LINK = "tel:+19492976225";
 
 const HeroSection = () => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const { user } = useAuth();
+
+  const schedulePath = user ? "/dashboard/appointments" : "/login";
 
   // Show all lifestyle images in the carousel
   const displayImages = lifestyleImages;
@@ -24,7 +26,7 @@ const HeroSection = () => {
   const ctaButtons = (
     <>
       <Link
-        to="/schedule"
+        to={schedulePath}
         className="group inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {t("hero.scheduleService")}
@@ -38,7 +40,7 @@ const HeroSection = () => {
         <ArrowRight className="h-4 w-4" aria-hidden />
       </Link>
       <a
-        href={CONTACT_PHONE_LINK}
+        href={siteConfig.phone.link}
         className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/80 px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
       >
         <Phone className="h-4 w-4" aria-hidden />
@@ -104,7 +106,7 @@ const HeroSection = () => {
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
               <a
-                href={CONTACT_PHONE_LINK}
+                href={siteConfig.phone.link}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-primary/40 bg-primary/80 px-6 py-3.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto"
               >
                 <Phone className="h-4 w-4" aria-hidden />

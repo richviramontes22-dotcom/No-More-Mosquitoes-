@@ -1,9 +1,13 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, MapPin, Sparkles, Loader } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { pricingTiers, serviceAreaZipCodes } from "@/data/site";
 import { useTranslation } from "@/hooks/use-translation";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePropertyLookup } from "@/hooks/use-property-lookup";
+import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
+import { Button } from "@/components/ui/button";
 
 const convertSqftToAcres = (squareFeet: number) => {
   if (!Number.isFinite(squareFeet) || squareFeet <= 0) {
@@ -28,13 +32,18 @@ type ResultState =
 const AddressCheckerSection = () => {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { open } = useScheduleDialog();
+  const { lookup, isLoading, data: parcelData, error: searchError } = usePropertyLookup();
   const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
   const [zip, setZip] = useState("");
   const [squareFeet, setSquareFeet] = useState("");
   const [result, setResult] = useState<ResultState>({ status: "idle" });
   const [waitlistEmail, setWaitlistEmail] = useState("");
   const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   const acreage = useMemo(() => {
     const parsedSqft = parseFloat(squareFeet);
@@ -43,6 +52,17 @@ const AddressCheckerSection = () => {
     }
     return convertSqftToAcres(parsedSqft);
   }, [squareFeet]);
+
+  // Effect to show error toast when searchError changes
+  useEffect(() => {
+    if (searchError) {
+      toast({
+        title: "Search Failed",
+        description: searchError,
+        variant: "destructive"
+      });
+    }
+  }, [searchError, toast]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -53,34 +73,17 @@ const AddressCheckerSection = () => {
       return;
     }
 
-    // Try to fetch parcel data from Regrid first
-    setIsLoading(true);
-    try {
-      const response = await fetch("/api/regrid/parcel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, zip }),
-      });
+    const data = await lookup(address, normalizedZip, city, state);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to fetch parcel data");
-      }
-
-      const data = await response.json() as { acreage: number; sqft: number };
+    if (data) {
       const fetchedAcreage = data.acreage;
-
-      // Use acreage from Regrid
       const tier = findTierByAcreage(fetchedAcreage);
       if (!tier || tier.subscription === "custom" || fetchedAcreage > 2) {
         setResult({ status: "custom", acreage: fetchedAcreage });
       } else {
         setResult({ status: "in_area", acreage: fetchedAcreage, tierLabel: tier.label });
       }
-
-    } catch (error) {
-      console.error("Error fetching parcel data:", error);
-
+    } else {
       // Fallback: check if zip is in our service area list
       const inArea = serviceAreaZipCodes.includes(normalizedZip);
       if (!inArea) {
@@ -98,8 +101,30 @@ const AddressCheckerSection = () => {
           setResult({ status: "in_area", acreage, tierLabel: tier?.label ?? null });
         }
       }
-    } finally {
-      setIsLoading(false);
+    }
+  };
+
+  const handleReserve = () => {
+    const currentAcreage = result.status === "in_area" ? result.acreage : acreage;
+    const preset = {
+      serviceAddress: address,
+      city: city,
+      state: state,
+      zipCode: zip,
+      notes: currentAcreage ? `Estimated acreage: ${currentAcreage} acres` : "",
+    };
+
+    if (!user) {
+      // Send to signup with preset in state
+      navigate("/login", {
+        state: {
+          from: "/schedule",
+          mode: "signup",
+          preset
+        }
+      });
+    } else {
+      open({ source: "address-checker", preset });
     }
   };
 
@@ -133,7 +158,7 @@ const AddressCheckerSection = () => {
                 {t("address.description")}
               </p>
               <form className="mt-8 grid gap-6" onSubmit={handleSubmit}>
-                <div className="grid gap-4 sm:grid-cols-[1.4fr_0.6fr]">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1fr_1fr]">
                   <label className="flex flex-col gap-2 text-sm font-semibold text-foreground">
                     {t("address.propertyAddress")}
                     <input
@@ -146,12 +171,33 @@ const AddressCheckerSection = () => {
                     />
                   </label>
                   <label className="flex flex-col gap-2 text-sm font-semibold text-foreground">
+                    City
+                    <input
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                      placeholder="City"
+                      className="w-full rounded-2xl border border-border/70 bg-white px-4 py-3 text-sm font-normal text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/80"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm font-semibold text-foreground">
+                    State
+                    <input
+                      value={state}
+                      onChange={(event) => setState(event.target.value)}
+                      placeholder="State"
+                      className="w-full rounded-2xl border border-border/70 bg-white px-4 py-3 text-sm font-normal text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/80"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm font-semibold text-foreground">
                     {t("address.zipCode")}
                     <input
+                      type="text"
+                      inputMode="numeric"
                       value={zip}
-                      onChange={(event) => setZip(event.target.value)}
+                      onChange={(event) => setZip(event.target.value.replace(/[^0-9]/g, ""))}
                       placeholder={t("address.zipPlaceholder")}
                       autoComplete="postal-code"
+                      maxLength={5}
                       className="w-full rounded-2xl border border-border/70 bg-white px-4 py-3 text-sm font-normal text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/80"
                       required
                     />
@@ -176,10 +222,10 @@ const AddressCheckerSection = () => {
                   </p>
                 </label>
                 <div className="flex flex-wrap items-center gap-4">
-                  <button
+                  <Button
                     type="submit"
                     disabled={isLoading}
-                    className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    className="inline-flex h-auto items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-brand"
                   >
                     {isLoading ? (
                       <>
@@ -192,13 +238,14 @@ const AddressCheckerSection = () => {
                         <ArrowRight className="h-4 w-4" aria-hidden />
                       </>
                     )}
-                  </button>
-                  <Link
-                    to="/schedule"
-                    className="inline-flex items-center gap-2 rounded-full border border-border/80 px-6 py-3 text-sm font-semibold text-foreground transition hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleReserve}
+                    className="inline-flex h-auto items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition"
                   >
                     {t("address.skipScheduling")}
-                  </Link>
+                  </Button>
                 </div>
               </form>
               <div className="mt-8 space-y-4 rounded-3xl border border-dashed border-primary/30 bg-primary/5 p-6 text-sm text-muted-foreground">
@@ -253,13 +300,13 @@ const AddressCheckerSection = () => {
                       </p>
                     )}
                   </div>
-                  <Link
-                    to="/schedule"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  <Button
+                    onClick={handleReserve}
+                    className="inline-flex h-auto w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-brand"
                   >
                     {t("address.reserveRoute")}
                     <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Link>
+                  </Button>
                 </div>
               )}
 
@@ -313,12 +360,12 @@ const AddressCheckerSection = () => {
                           required
                         />
                       </label>
-                      <button
+                      <Button
                         type="submit"
-                        className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                        className="inline-flex h-auto items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-brand"
                       >
                         {t("address.joinWaitlistBtn")}
-                      </button>
+                      </Button>
                     </form>
                   )}
                 </div>

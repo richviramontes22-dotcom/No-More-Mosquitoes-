@@ -2,14 +2,16 @@ import SectionHeading from "@/components/common/SectionHeading";
 import { Link } from "react-router-dom";
 import { Mail, PhoneCall } from "lucide-react";
 import { useTranslation } from "@/hooks/use-translation";
-
-const CONTACT_EMAIL = "richard@nomoremosquitoes.us";
-const CONTACT_PHONE_DISPLAY = "(949) 297-6225";
-const CONTACT_PHONE_LINK = "tel:+19492976225";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { siteConfig } from "@/data/site";
 
 const ContactSection = () => {
   const { t } = useTranslation();
-  
+  const { user } = useAuth();
+
+  const schedulePath = user ? "/dashboard/appointments" : "/login";
+
   return (
     <section className="bg-background py-24">
       <div className="mx-auto w-full max-w-4xl px-4 sm:px-6 lg:px-8">
@@ -21,26 +23,34 @@ const ContactSection = () => {
             centered
           />
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <a
-              href={CONTACT_PHONE_LINK}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            <Button
+              asChild
+              className="rounded-full px-6 py-3 h-auto shadow-brand"
             >
-              <PhoneCall className="h-4 w-4" aria-hidden />
-              {t("contact.callOrText")}{CONTACT_PHONE_DISPLAY}
-            </a>
-            <a
-              href={`mailto:${CONTACT_EMAIL}`}
-              className="inline-flex items-center gap-2 rounded-full border border-border/70 px-6 py-3 text-sm font-semibold text-foreground transition hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              <a href={siteConfig.phone.link}>
+                <PhoneCall className="h-4 w-4" aria-hidden />
+                {t("contact.callOrText")}{siteConfig.phone.display}
+              </a>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-full px-6 py-3 h-auto"
             >
-              <Mail className="h-4 w-4" aria-hidden />
-              {CONTACT_EMAIL}
-            </a>
-            <Link
-              to="/schedule"
-              className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-6 py-3 text-sm font-semibold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              <a href={`mailto:${siteConfig.email}`}>
+                <Mail className="h-4 w-4" aria-hidden />
+                {siteConfig.email}
+              </a>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-full bg-primary/5 px-6 py-3 h-auto border-primary/30 text-primary hover:bg-primary/10"
             >
-              {t("contact.bookOnline")}
-            </Link>
+              <Link to={schedulePath}>
+                {t("contact.bookOnline")}
+              </Link>
+            </Button>
           </div>
           <p className="mt-6 text-xs text-muted-foreground">
             {t("contact.afterBooking")}

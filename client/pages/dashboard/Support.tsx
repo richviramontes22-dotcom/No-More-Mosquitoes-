@@ -1,6 +1,7 @@
 import { useState } from "react";
 import SectionHeading from "@/components/common/SectionHeading";
 import { Button } from "@/components/ui/button";
+import { pricingTiers, siteConfig } from "@/data/site";
 import {
   LifeBuoy,
   Phone,
@@ -96,15 +97,15 @@ const Support = () => {
           </CardHeader>
           <CardContent className="pt-6 grid gap-3">
             <Button variant="outline" className="w-full rounded-xl" asChild>
-              <a href="tel:+19497630492">
+              <a href={siteConfig.phone.link}>
                 <Phone className="mr-2 h-4 w-4 text-primary" />
-                Call (949) 763‑0492
+                Call {siteConfig.phone.display}
               </a>
             </Button>
             <Button variant="outline" className="w-full rounded-xl" asChild>
-              <a href="sms:+19497630492">
+              <a href={`sms:${siteConfig.phone.link.replace("tel:", "")}`}>
                 <MessageCircle className="mr-2 h-4 w-4 text-primary" />
-                Text (949) 763‑0492
+                Text {siteConfig.phone.display}
               </a>
             </Button>
           </CardContent>

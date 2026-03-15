@@ -22,6 +22,7 @@ const Pricing = () => {
         title="100% non-toxic, California-approved protection — tough on pests, safe for pets, and made with your family’s well-being in mind."
         description="Powerful protection that’s family‑ and pet‑safe—California‑approved, non‑toxic insecticides that eliminate mosquitoes while keeping your home protected."
         primaryCta={{ label: "Get My Quote", href: "#quote" }}
+        key={Date.now()}
       >
         <p className="text-sm text-muted-foreground">
           <Link to="/safety" className="font-medium text-primary underline-offset-4 hover:underline">Learn more</Link>
@@ -42,10 +43,7 @@ const Pricing = () => {
           className="pointer-events-none select-none hidden md:block absolute right-0 sm:right-2 md:right-4 lg:right-6 xl:right-8 top-6 sm:top-8 md:top-10 lg:top-12 xl:top-14 translate-x-6 md:translate-x-8 lg:translate-x-10 h-16 sm:h-20 md:h-24 lg:h-28 xl:h-32 w-auto opacity-90 rounded shadow-md"
         />
       </PageHero>
-      <section id="quote">
-        <QuoteWidgetSection />
-      </section>
-      <AddressCheckerSection />
+      <QuoteWidgetSection id="quote" />
       <PlanCardsSection />
       <FAQSection ids={["pricing", "safety", "weather"]} searchable />
       <CtaBand title="Need a custom acreage walkthrough?" href="/schedule" ctaLabel="Schedule a walkthrough" description="Larger than two acres or have complex terrain?" />

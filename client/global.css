@@ -11,6 +11,7 @@
    * A different format will require also updating the theme in tailwind.config.ts.
   */
   :root {
+    scroll-behavior: smooth;
     --background: 214 42% 97%;
     --foreground: 215 33% 12%;
 

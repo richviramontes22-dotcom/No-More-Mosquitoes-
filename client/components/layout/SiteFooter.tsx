@@ -4,10 +4,7 @@ import LogoBranding from "@/components/branding/LogoBranding";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "@/hooks/use-translation";
 import { img_dpr_logo_state_of_ca_dpr, img_anaheim_seal, img_state_of_ca_bear_logo } from "@/data/media";
-
-const CONTACT_EMAIL = "richard@nomoremosquitoes.us";
-const CONTACT_PHONE_DISPLAY = "(949) 297-6225";
-const CONTACT_PHONE_LINK = "tel:+19492976225";
+import { siteConfig } from "@/data/site";
 
 export const SiteFooter = () => {
   const { user } = useAuth();
@@ -66,11 +63,11 @@ export const SiteFooter = () => {
                 {t("footer.description")}
               </p>
               <div className="flex flex-col gap-2 text-sm font-semibold text-foreground">
-                <a className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" href={CONTACT_PHONE_LINK}>
-                  {t("footer.callOrText")} {CONTACT_PHONE_DISPLAY}
+                <a className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" href={siteConfig.phone.link}>
+                  {t("footer.callOrText")} {siteConfig.phone.display}
                 </a>
-                <a className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" href={`mailto:${CONTACT_EMAIL}`}>
-                  {CONTACT_EMAIL}
+                <a className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" href={`mailto:${siteConfig.email}`}>
+                  {siteConfig.email}
                 </a>
                 <p className="text-sm font-semibold text-foreground">
                   {t("footer.address")}
@@ -128,7 +125,7 @@ export const SiteFooter = () => {
         {/* Compliance Section - Simple logos */}
         <div className="flex flex-wrap items-center justify-center gap-8 border-t border-border/40 pt-10">
           <a
-            href="https://www.cdpr.ca.gov/docs/license/index.htm"
+            href="https://www.cdpr.ca.gov/wp-content/uploads/2024/08/what_we_do_at_dpr.pdf"
             target="_blank"
             rel="noopener noreferrer"
             className="transition hover:opacity-80 inline-block"
@@ -170,8 +167,13 @@ export const SiteFooter = () => {
           </a>
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-border/70 pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>{(t("footer.copyright") || "© {year} No More Mosquitoes. All rights reserved.").replace("{year}", String(currentYear))}</p>
+        <div className="flex flex-col gap-4 border-t border-border/70 pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p>{(t("footer.copyright") || "© {year} No More Mosquitoes. All rights reserved.").replace("{year}", String(currentYear))}</p>
+            <p className="font-medium text-muted-foreground/80 tracking-wide uppercase text-[10px]">
+              Pest Control Business-Main License: 57621
+            </p>
+          </div>
           <p className="flex flex-wrap gap-3">
             <span>{t("footer.attributes")}</span>
           </p>

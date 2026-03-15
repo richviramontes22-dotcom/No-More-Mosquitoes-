@@ -271,3 +271,12 @@ export const serviceAreaZipCodes = [
   // San Diego County
   "92101", "92102", "92103", "92104", "92105"
 ];
+
+export const siteConfig = {
+  phone: {
+    display: "(949) 297-6225",
+    link: "tel:+19492976225",
+  },
+  email: "richard@nomoremosquitoes.us",
+  crispWebsiteId: import.meta.env.VITE_CRISP_WEBSITE_ID || "b883932b-4716-4cd7-a027-302730273027",
+};

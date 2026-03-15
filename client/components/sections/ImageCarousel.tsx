@@ -85,6 +85,12 @@ const ImageCarousel = ({
         .animate-pan-patio { animation: panPatio 12s linear infinite; }
         .animate-pan-portrait-vertical { animation: panPortraitVertical 12s linear infinite; }
         .animate-pan-slow { animation: panRight 12s linear infinite; }
+        @media (max-width: 768px) {
+          .animate-pan-family, .animate-pan-fogger-wide, .animate-pan-fogger-close, .animate-pan-patio, .animate-pan-portrait-vertical, .animate-pan-slow {
+            animation: none !important;
+            transform: scale(1.0) !important;
+          }
+        }
       ` }} />
       {/* Image Stack */}
       {images.map((image, index) => {

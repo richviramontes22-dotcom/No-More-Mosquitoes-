@@ -12,10 +12,14 @@ export interface DemoResponse {
 }
 
 export interface ScheduleRequestPayload {
+  userId?: string;
+  propertyId?: string;
   fullName: string;
   email: string;
   phone: string;
   serviceAddress: string;
+  city?: string;
+  state?: string;
   zipCode: string;
   serviceFrequency: "single" | "monthly" | "biweekly" | "weekly";
   preferredDate: string;

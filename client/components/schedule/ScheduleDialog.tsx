@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock, Home, Mail, PhoneCall } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock, Home, Mail, PhoneCall, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { FormStatus, isValidEmail, isValidPhone, postJson } from "@/lib/forms";
+import { cn } from "@/lib/utils";
 import type { ScheduleRequestPayload, ScheduleResponse } from "@shared/api";
+import { ScheduleFlow } from "./ScheduleFlow";
 
 const SERVICE_FREQUENCY_OPTIONS = [
   { value: "single", label: "One-time visit" },
@@ -40,6 +42,8 @@ type ScheduleFormValues = {
   email: string;
   phone: string;
   serviceAddress: string;
+  city: string;
+  state: string;
   zipCode: string;
   serviceFrequency: ServiceFrequency;
   preferredDate: string;
@@ -52,6 +56,8 @@ const initialFormValues: ScheduleFormValues = {
   email: "",
   phone: "",
   serviceAddress: "",
+  city: "",
+  state: "",
   zipCode: "",
   serviceFrequency: "monthly",
   preferredDate: "",
@@ -62,6 +68,7 @@ const initialFormValues: ScheduleFormValues = {
 type ScheduleDialogProps = {
   open: boolean;
   origin: string | null;
+  preset?: Partial<ScheduleFormValues> | null;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -123,29 +130,38 @@ const createSchedulePayload = (values: ScheduleFormValues, origin: string | null
   submittedAt: new Date().toISOString(),
 });
 
-const ScheduleDialog = ({ open, origin, onOpenChange }: ScheduleDialogProps) => {
+const ScheduleDialog = ({ open, origin, preset, onOpenChange }: ScheduleDialogProps) => {
   const { toast } = useToast();
-  const { user, signUp } = useAuth();
+  const { user } = useAuth();
   const [formValues, setFormValues] = useState<ScheduleFormValues>(initialFormValues);
-  const [accountPassword, setAccountPassword] = useState("");
-  const [accountPasswordConfirm, setAccountPasswordConfirm] = useState("");
-  const [didCreateAccount, setDidCreateAccount] = useState(false);
   const [status, setStatus] = useState<FormStatus>("idle");
   const [confirmation, setConfirmation] = useState<ScheduleResponse | null>(null);
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      if (preset) {
+        setFormValues(prev => ({
+          ...prev,
+          ...preset,
+          // Pre-fill user name and email if available
+          fullName: preset.fullName || user?.name || prev.fullName,
+          email: preset.email || user?.email || prev.email,
+        }));
+      } else if (user) {
+        setFormValues(prev => ({
+          ...prev,
+          fullName: user.name || prev.fullName,
+          email: user.email || prev.email,
+        }));
+      }
+    } else {
       setStatus("idle");
       setConfirmation(null);
       setFormValues(initialFormValues);
-      setAccountPassword("");
-      setAccountPasswordConfirm("");
-      setDidCreateAccount(false);
     }
-  }, [open]);
+  }, [open, preset, user]);
 
   const isSubmitting = status === "submitting";
-  const passwordStrength = useMemo(() => evaluatePasswordStrength(accountPassword), [accountPassword]);
 
   const invalidReason = useMemo(() => {
     if (!formValues.fullName.trim()) return "Enter your name.";
@@ -155,16 +171,8 @@ const ScheduleDialog = ({ open, origin, onOpenChange }: ScheduleDialogProps) => 
     if (!zipPattern.test(formValues.zipCode.trim())) return "Enter a 5-digit ZIP.";
     if (!formValues.serviceFrequency) return "Choose how often you’d like service.";
     if (!formValues.preferredDate) return "Pick your desired start date.";
-    if (!user) {
-      if (accountPassword.length < 8) return "Create a password that’s at least 8 characters.";
-      if (passwordStrength.score < 2) {
-        return "Make your password stronger by mixing uppercase letters, numbers, or symbols.";
-      }
-      if (!accountPasswordConfirm.trim()) return "Confirm your password.";
-      if (accountPassword !== accountPasswordConfirm) return "Passwords must match.";
-    }
     return null;
-  }, [accountPassword, accountPasswordConfirm, formValues, passwordStrength.score, user]);
+  }, [formValues]);
 
   const handleChange = <T extends keyof ScheduleFormValues>(field: T, value: ScheduleFormValues[T]) => {
     setFormValues((previous) => ({
@@ -182,22 +190,16 @@ const ScheduleDialog = ({ open, origin, onOpenChange }: ScheduleDialogProps) => 
 
     try {
       setStatus("submitting");
-      let createdAccount = false;
       if (!user) {
-        await signUp({ name: formValues.fullName, email: formValues.email, password: accountPassword });
-        createdAccount = true;
-        setDidCreateAccount(true);
-      } else {
-        setDidCreateAccount(false);
+        throw new Error("You must be logged in to schedule a service.");
       }
+
       const response = await postJson<ScheduleResponse>("/api/schedule", createSchedulePayload(formValues, origin));
       setConfirmation(response ?? null);
       setStatus("success");
       toast({
         title: "Request received",
-        description: createdAccount
-          ? "Your portal account is ready. We’ll reach out soon to lock in your visit window."
-          : "We’ll reach out soon to lock in your visit window.",
+        description: "We’ll reach out soon to lock in your visit window.",
       });
     } catch (error) {
       setStatus("idle");
@@ -212,51 +214,44 @@ const ScheduleDialog = ({ open, origin, onOpenChange }: ScheduleDialogProps) => 
     onOpenChange(false);
   };
 
+  const isDashboardFlow = origin === "dashboard-appointments" || user !== null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl rounded-[32px] border-border/70 bg-card/95 p-0 shadow-soft">
+      <DialogContent className={cn(
+        "max-w-3xl rounded-[32px] border-border/70 bg-card/95 p-0 shadow-soft overflow-hidden",
+        isDashboardFlow && "max-w-4xl"
+      )}>
         {status === "success" ? (
           <div className="flex flex-col gap-6 p-10">
             <DialogHeader className="gap-2 text-left">
               <div className="flex items-center gap-3 text-primary">
                 <CheckCircle2 className="h-6 w-6" aria-hidden />
-                <DialogTitle className="text-2xl">Your visit request is in</DialogTitle>
+                <DialogTitle className="text-2xl">Your visit is scheduled</DialogTitle>
               </div>
               <DialogDescription className="text-base text-muted-foreground">
-                Our route coordinator will confirm availability during business hours. We’ll reach out using your preferred contact method.
+                We've received your request and locked in your preferred time. A confirmation has been sent to your email.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 rounded-3xl border border-border/60 bg-background/60 p-6">
-              <p className="text-sm font-semibold text-muted-foreground">Request summary</p>
+              <p className="text-sm font-semibold text-muted-foreground">Appointment Summary</p>
               <ul className="grid gap-2 text-sm text-muted-foreground">
-                <li className="flex items-center gap-2">
-                  <Home className="h-4 w-4 text-primary" aria-hidden />
-                  <span>
-                    {formValues.serviceAddress}, {formValues.zipCode}
-                  </span>
-                </li>
                 <li className="flex items-center gap-2">
                   <CalendarDays className="h-4 w-4 text-primary" aria-hidden />
                   <span>
-                    Preferred start: {new Date(formValues.preferredDate).toLocaleDateString()}
+                    Scheduled for: {formValues.preferredDate ? new Date(formValues.preferredDate).toLocaleDateString() : "TBD"}
                   </span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-primary" aria-hidden />
                   <span>
-                    Frequency: {SERVICE_FREQUENCY_OPTIONS.find((option) => option.value === formValues.serviceFrequency)?.label}
+                    Arrival window: {formValues.notes.includes("Slot:") ? formValues.notes.split("Slot:")[1].split("|")[0].trim() : "Standard Morning"}
                   </span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <PhoneCall className="h-4 w-4 text-primary" aria-hidden />
+                  <Home className="h-4 w-4 text-primary" aria-hidden />
                   <span>
-                    Reach out via {CONTACT_METHOD_OPTIONS.find((option) => option.value === formValues.preferredContactMethod)?.label.toLowerCase()}
-                  </span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-primary" aria-hidden />
-                  <span>
-                    Confirmation sent to {formValues.email}
+                    Location: {formValues.serviceAddress || "Primary Property"}
                   </span>
                 </li>
               </ul>
@@ -266,24 +261,49 @@ const ScheduleDialog = ({ open, origin, onOpenChange }: ScheduleDialogProps) => 
                 </p>
               ) : null}
             </div>
-            {didCreateAccount ? (
-              <p className="rounded-2xl bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-                We created a customer portal account for {formValues.email}. Use your new password to log in and manage visits anytime.
-              </p>
-            ) : null}
-            <DialogFooter className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-              <Button variant="ghost" onClick={() => {
-                setStatus("idle");
-                setConfirmation(null);
-                setFormValues(initialFormValues);
-                setAccountPassword("");
-                setAccountPasswordConfirm("");
-                setDidCreateAccount(false);
-              }}>
-                Schedule another visit
-              </Button>
-              <Button onClick={handleClose}>Close</Button>
+            <DialogFooter className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <Button onClick={handleClose} className="rounded-xl px-8">Done</Button>
             </DialogFooter>
+          </div>
+        ) : isDashboardFlow ? (
+          <div className="p-8 md:p-12">
+            <DialogHeader className="mb-8 space-y-2 text-left">
+              <DialogTitle className="text-3xl font-display font-bold">Schedule Service</DialogTitle>
+              <DialogDescription className="text-muted-foreground text-lg">
+                Pick your preferred timing and tell us about your yard.
+              </DialogDescription>
+            </DialogHeader>
+            <ScheduleFlow
+              onCancel={handleClose}
+              onSuccess={async (data) => {
+                try {
+                  setStatus("submitting");
+                  const payload = {
+                    ...formValues,
+                    userId: user?.id,
+                    propertyId: data.property?.id,
+                    fullName: user?.name || formValues.fullName,
+                    email: user?.email || formValues.email,
+                    phone: data.phone || formValues.phone,
+                    serviceAddress: data.property?.address || formValues.serviceAddress,
+                    zipCode: data.property?.zip || formValues.zipCode,
+                    preferredDate: data.date.toISOString(),
+                    notes: `Slot: ${data.time} | Pets: ${data.questionnaire.hasPets} | Water: ${data.questionnaire.hasStandingWater} | Instructions: ${data.questionnaire.gateInstructions} | Visit Notes: ${data.notes || "None"}`,
+                    submittedAt: new Date().toISOString(),
+                    serviceFrequency: formValues.serviceFrequency || "monthly",
+                    preferredContactMethod: formValues.preferredContactMethod || "text",
+                  };
+                  const response = await postJson<ScheduleResponse>("/api/schedule", createSchedulePayload(payload as any, origin));
+                  setConfirmation(response ?? null);
+                  setStatus("success");
+                  toast({ title: "Appointment Scheduled", description: "See you soon!" });
+                } catch (err) {
+                  console.error("Scheduling Error:", err);
+                  setStatus("idle");
+                  toast({ title: "Error", description: "Failed to schedule. Please try again.", variant: "destructive" });
+                }
+              }}
+            />
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="grid gap-0">
@@ -355,8 +375,8 @@ const ScheduleDialog = ({ open, origin, onOpenChange }: ScheduleDialogProps) => 
                     </Select>
                   </div>
                 </div>
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <div className="grid gap-2 lg:col-span-2">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="grid gap-2">
                     <Label htmlFor="schedule-address">Service address</Label>
                     <Input
                       id="schedule-address"
@@ -367,18 +387,38 @@ const ScheduleDialog = ({ open, origin, onOpenChange }: ScheduleDialogProps) => 
                       required
                     />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="schedule-zip">ZIP</Label>
-                    <Input
-                      id="schedule-zip"
-                      inputMode="numeric"
-                      autoComplete="postal-code"
-                      placeholder="92657"
-                      value={formValues.zipCode}
-                      onChange={(event) => handleChange("zipCode", event.target.value)}
-                      required
-                      maxLength={5}
-                    />
+                  <div className="grid gap-4 grid-cols-[1.5fr_1fr_1fr]">
+                    <div className="grid gap-2">
+                      <Label htmlFor="schedule-city">City</Label>
+                      <Input
+                        id="schedule-city"
+                        placeholder="Springfield"
+                        value={formValues.city}
+                        onChange={(event) => handleChange("city", event.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="schedule-state">State</Label>
+                      <Input
+                        id="schedule-state"
+                        placeholder="IL"
+                        value={formValues.state}
+                        onChange={(event) => handleChange("state", event.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="schedule-zip">ZIP</Label>
+                      <Input
+                        id="schedule-zip"
+                        inputMode="numeric"
+                        autoComplete="postal-code"
+                        placeholder="92657"
+                        value={formValues.zipCode}
+                        onChange={(event) => handleChange("zipCode", event.target.value)}
+                        required
+                        maxLength={5}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="grid gap-4 lg:grid-cols-2">
@@ -412,47 +452,6 @@ const ScheduleDialog = ({ open, origin, onOpenChange }: ScheduleDialogProps) => 
                     />
                   </div>
                 </div>
-                {!user ? (
-                  <div className="grid gap-3">
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <div className="grid gap-2">
-                        <Label htmlFor="schedule-password">Create a password</Label>
-                        <Input
-                          id="schedule-password"
-                          type="password"
-                          autoComplete="new-password"
-                          placeholder="At least 8 characters"
-                          value={accountPassword}
-                          onChange={(event) => setAccountPassword(event.target.value)}
-                          required
-                          minLength={8}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="schedule-password-confirm">Confirm password</Label>
-                        <Input
-                          id="schedule-password-confirm"
-                          type="password"
-                          autoComplete="new-password"
-                          placeholder="Retype your password"
-                          value={accountPasswordConfirm}
-                          onChange={(event) => setAccountPasswordConfirm(event.target.value)}
-                          required
-                          minLength={8}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="h-1.5 w-full rounded-full bg-muted">
-                        <div
-                          className={`h-full rounded-full transition-all ${passwordStrength.colorClass}`}
-                          style={{ width: `${passwordStrength.percent}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">{passwordStrength.label}</p>
-                    </div>
-                  </div>
-                ) : null}
                 <div className="mt-6 grid gap-2">
                   <Label htmlFor="schedule-notes">Notes for your technician (optional)</Label>
                   <Textarea

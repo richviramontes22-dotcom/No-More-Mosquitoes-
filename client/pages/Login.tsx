@@ -1,126 +1,112 @@
-import { FormEvent, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
-
-import SectionHeading from "@/components/common/SectionHeading";
-import { CtaBand, PageHero } from "@/components/page";
+import { Navigate, useLocation, Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTranslation } from "@/hooks/use-translation";
+import { useLogo } from "@/contexts/LogoContext";
 import Seo from "@/components/seo/Seo";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import AuthTabs from "@/components/auth/AuthTabs";
-import { useAuth } from "@/contexts/AuthContext";
-import { useTranslation } from "@/hooks/use-translation";
-import { supabase } from "@/lib/supabase";
+import LogoBranding from "@/components/branding/LogoBranding";
+import { ChevronLeft } from "lucide-react";
+import { useEffect } from "react";
 
 type LocationState = {
   from?: string;
+  mode?: "login" | "signup";
+  preset?: any;
 };
 
 const Login = () => {
   const { isAuthenticated } = useAuth();
   const { t } = useTranslation();
+  const { logoStyle } = useLogo();
   const location = useLocation();
-  const { from } = (location.state as LocationState) ?? {};
+  const navigate = useNavigate();
+  const { from, mode, preset } = (location.state as LocationState) ?? {};
 
-  const isSupabaseConfigured = Boolean(supabase);
-  const hasUrl = Boolean(import.meta.env.VITE_SUPABASE_URL);
-  const hasKey = Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY);
-
-  const [testResult, setTestResult] = useState<string | null>(null);
-
-  const runConnectionTest = async () => {
-    setTestResult("Testing...");
-    try {
-      const start = Date.now();
-      const { data, error } = await supabase.from("profiles").select("count", { count: "exact", head: true });
-      const duration = Date.now() - start;
-      if (error) {
-        setTestResult(`Error: ${error.message} (${duration}ms)`);
+  useEffect(() => {
+    if (isAuthenticated) {
+      // If we have a preset and we are going to /schedule, ensure the preset is passed along
+      const target = from ?? "/dashboard";
+      if (target === "/schedule" && preset) {
+        navigate(target, { state: { preset }, replace: true });
       } else {
-        setTestResult(`Success! Connected in ${duration}ms`);
+        navigate(target, { replace: true });
       }
-    } catch (err) {
-      setTestResult(`Failed: ${(err as Error).message}`);
     }
-  };
+  }, [isAuthenticated, from, preset, navigate]);
 
   if (isAuthenticated) {
-    return <Navigate to={from ?? "/dashboard"} replace />;
+    return null; // Navigation is handled in useEffect
   }
 
   return (
-    <div className="flex flex-col gap-0">
+    <div className="relative min-h-[calc(100dvh-80px)] w-full overflow-hidden bg-background">
       <Seo
         title={t("auth.customerPortal")}
         description={t("auth.portalDesc")}
         canonicalUrl="https://nomoremosquitoes.us/login"
       />
-      <PageHero
-        variant="centered"
-        title={t("auth.customerPortal")}
-        description={t("auth.portalDesc")}
-        primaryCta={{ label: t("auth.viewDashboard"), href: "/dashboard" }}
-        secondaryCta={{ label: t("auth.callSupport"), href: "tel:+19497630492", external: true }}
-      >
-        <div className="flex flex-col items-center gap-4">
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            {t("auth.newToPortal")}
-          </p>
-          <div className="flex flex-col items-center gap-2">
-            <div className={`flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${isSupabaseConfigured ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`}>
-              <div className={`h-1.5 w-1.5 rounded-full ${isSupabaseConfigured ? "bg-green-500" : "bg-red-500"}`} />
-              {isSupabaseConfigured ? "Database Connected" : "Database Offline"}
-            </div>
-            {!isSupabaseConfigured && (
-              <div className="text-[9px] text-muted-foreground">
-                URL: {hasUrl ? "Found" : "Missing"} | Key: {hasKey ? "Found" : "Missing"}
-              </div>
-            )}
-            <button
-              onClick={runConnectionTest}
-              className="mt-1 text-[8px] font-bold uppercase text-primary/60 hover:text-primary underline"
-            >
-              Run Connection Test
-            </button>
-            {testResult && (
-              <div className="text-[8px] text-muted-foreground animate-in fade-in slide-in-from-top-1">
-                {testResult}
-              </div>
-            )}
-          </div>
+      
+      {/* Mesh/Gradient background elements for depth */}
+      <div className="absolute inset-0 -z-10 bg-mesh-overlay opacity-30" aria-hidden="true" />
+      <div className="absolute left-1/2 top-1/2 -z-10 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-[120px]" aria-hidden="true" />
+
+      <div className="container relative flex min-h-[calc(100dvh-80px)] flex-col items-center justify-center py-12">
+        <div className="absolute left-4 top-8 sm:left-8">
+          <Link 
+            to="/" 
+            className="group flex items-center gap-1 text-sm font-semibold text-muted-foreground transition hover:text-primary"
+          >
+            <ChevronLeft className="h-4 w-4 transition group-hover:-translate-x-1" />
+            Back to site
+          </Link>
         </div>
-      </PageHero>
-      <section className="bg-background py-24">
-        <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
-          <Card className="rounded-[32px] border-border/60 bg-card/95 shadow-soft">
-            <CardHeader>
-              <CardTitle className="font-display text-3xl">{t("auth.manageService")}</CardTitle>
-              <CardDescription>{t("auth.signInDesc")}</CardDescription>
+
+        <div className="w-full max-w-md space-y-8">
+          <div className="flex flex-col items-center text-center">
+            <Link to="/">
+              <LogoBranding 
+                style={logoStyle} 
+                className="mb-6"
+                iconClassName="h-16 w-16"
+                textClassName="text-2xl"
+              />
+            </Link>
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+              {t("auth.customerPortal")}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t("auth.portalDesc")}
+            </p>
+          </div>
+
+          <Card className="border-border/60 bg-card/80 shadow-xl backdrop-blur-sm sm:rounded-[24px]">
+            <CardHeader className="space-y-1 text-center">
+              <CardTitle className="text-xl font-semibold tracking-tight">
+                {t("auth.manageService")}
+              </CardTitle>
+              <CardDescription>
+                {t("auth.signInDesc")}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <AuthTabs />
+              <AuthTabs
+                defaultMode={mode || "login"}
+                defaultEmail={preset?.email}
+                defaultName={preset?.fullName}
+              />
             </CardContent>
           </Card>
-          <div className="space-y-10">
-            <div className="rounded-[32px] border border-border/60 bg-muted/40 p-10 shadow-soft">
-              <SectionHeading
-                eyebrow={t("auth.whatYouGet")}
-                title={t("auth.dedicatedDashboard")}
-                description={t("auth.dashboardDesc")}
-              />
-              <ul className="mt-8 space-y-4 text-sm text-muted-foreground">
-                <li>• {t("auth.completionVideos")}</li>
-                <li>• {t("auth.invoiceHistory")}</li>
-                <li>• {t("auth.paymentSettings")}</li>
-              </ul>
-            </div>
-            <CtaBand
-              title={t("auth.needHelp")}
-              href="tel:+19497630492"
-              ctaLabel={t("auth.callOrTextSupport")}
-              external
-            />
-          </div>
+
+          <p className="px-8 text-center text-sm text-muted-foreground">
+            {t("auth.newToPortal")}{" "}
+            <Link to="/contact" className="underline underline-offset-4 hover:text-primary">
+              Contact support
+            </Link>{" "}
+            for help with your account.
+          </p>
         </div>
-      </section>
+      </div>
     </div>
   );
 };

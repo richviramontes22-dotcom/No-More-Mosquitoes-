@@ -1,9 +1,33 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { CheckCircle2, Waves } from "lucide-react";
 import { useTranslation } from "@/hooks/use-translation";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
 
 const PlanCardsSection = () => {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSchedule = (planName: string) => {
+    const preset = {
+      notes: `Interested in plan: ${planName}`,
+    };
+
+    if (!user) {
+      navigate("/login", {
+        state: {
+          from: "/schedule",
+          mode: "signup",
+          preset
+        }
+      });
+    } else {
+      // If user is logged in, we go to dashboard appointments.
+      // The appointments page already handles presets to open the schedule dialog.
+      navigate("/dashboard/appointments", { state: { preset } });
+    }
+  };
 
   const plans = [
     {
@@ -12,7 +36,6 @@ const PlanCardsSection = () => {
       cadence: t("plans.oneCadence"),
       features: t("plans.oneFeatures"),
       ctaLabel: t("plans.oneBook"),
-      ctaHref: "/schedule",
       accent: "bg-secondary/30 text-secondary-foreground",
     },
     {
@@ -21,7 +44,6 @@ const PlanCardsSection = () => {
       cadence: t("plans.subCadence"),
       features: t("plans.subFeatures"),
       ctaLabel: t("plans.subStart"),
-      ctaHref: "/schedule",
       accent: "bg-primary text-primary-foreground",
     },
     {
@@ -50,12 +72,15 @@ const PlanCardsSection = () => {
               {t("plans.plansDesc")}
             </p>
           </div>
-          <Link
-            to="/pricing"
-            className="inline-flex items-center gap-2 rounded-full border border-border/70 px-6 py-3 text-sm font-semibold text-foreground transition hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          <Button
+            asChild
+            variant="outline"
+            className="rounded-full px-6 py-3 h-auto"
           >
-            {t("plans.compareFull")}
-          </Link>
+            <Link to="/pricing">
+              {t("plans.compareFull")}
+            </Link>
+          </Button>
         </div>
         <div className="mt-12 grid gap-6 lg:grid-cols-3">
           {plans.map((plan) => (
@@ -78,13 +103,19 @@ const PlanCardsSection = () => {
                   </li>
                 )) : null}
               </ul>
-              <Link
-                to={plan.ctaHref}
-                className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              <Button
+                className="mt-8 w-full rounded-full px-6 py-3 h-auto shadow-brand"
+                onClick={() => {
+                  if (plan.ctaHref === "/contact") {
+                    navigate("/contact");
+                  } else {
+                    handleSchedule(plan.name);
+                  }
+                }}
               >
                 {plan.ctaLabel}
                 <Waves className="h-4 w-4" aria-hidden />
-              </Link>
+              </Button>
             </div>
           ))}
         </div>

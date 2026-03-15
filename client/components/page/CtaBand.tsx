@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 export type CtaBandProps = {
@@ -14,7 +14,14 @@ export type CtaBandProps = {
 const isExternal = (href: string) => href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("tel:");
 
 const CtaBand = ({ title, href, description, ctaLabel, external, className }: CtaBandProps) => {
-  const resolvedExternal = external ?? isExternal(href);
+  const { user } = useAuth();
+
+  // Account-first scheduling: redirect guests to login
+  const resolvedHref = href === "/schedule"
+    ? (user ? "/dashboard/appointments" : "/login")
+    : href;
+
+  const resolvedExternal = external ?? isExternal(resolvedHref);
   const content = ctaLabel ?? title;
   const baseClassName =
     "inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
@@ -27,15 +34,15 @@ const CtaBand = ({ title, href, description, ctaLabel, external, className }: Ct
         <h2 className="font-display text-2xl text-foreground sm:text-3xl">{title}</h2>
         {resolvedExternal ? (
           <a
-            href={href}
-            target={href.startsWith("http") ? "_blank" : undefined}
+            href={resolvedHref}
+            target={resolvedHref.startsWith("http") ? "_blank" : undefined}
             rel="noreferrer"
             className={baseClassName}
           >
             {content}
           </a>
         ) : (
-          <Link to={href} className={baseClassName}>
+          <Link to={resolvedHref} className={baseClassName}>
             {content}
           </Link>
         )}

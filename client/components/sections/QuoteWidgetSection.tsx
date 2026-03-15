@@ -1,21 +1,32 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { calculatePricing, formatCurrency, ProgramType } from "@/lib/pricing";
 import { frequencyOptions } from "@/data/site";
 import { Check, ChevronRight, MapPin, Loader, Search } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
 import { useTranslation } from "@/hooks/use-translation";
 import { useToast } from "@/hooks/use-toast";
+import { usePropertyLookup } from "@/hooks/use-property-lookup";
+import { useAuth } from "@/contexts/AuthContext";
 
-const QuoteWidgetSection = () => {
+// Forced Refresh: 2025-05-22 11:20:00
+
+type QuoteWidgetSectionProps = {
+  id?: string;
+};
+
+const QuoteWidgetSection = ({ id }: QuoteWidgetSectionProps) => {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { lookup, isLoading: isSearching, error: searchError } = usePropertyLookup();
   const [acreage, setAcreage] = useState(0.2);
   const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
   const [zip, setZip] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchSuccess, setSearchSuccess] = useState<boolean | null>(null);
   const [program, setProgram] = useState<ProgramType>("subscription");
   const [frequency, setFrequency] = useState<(typeof frequencyOptions)[number]>(21);
   const [submitted, setSubmitted] = useState(false);
@@ -35,54 +46,77 @@ const QuoteWidgetSection = () => {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitted(true);
-    open({ source: "quote-widget" });
+
+    const preset = {
+      serviceAddress: address,
+      city: city,
+      state: state,
+      zipCode: zip,
+      notes: `Estimated acreage: ${acreage} acres. Program: ${program}. Frequency: Every ${frequency} days.`,
+    };
+
+    if (!user) {
+      navigate("/login", {
+        state: {
+          from: "/schedule",
+          mode: "signup",
+          preset
+        }
+      });
+    } else {
+      open({ source: "quote-widget", preset });
+    }
   };
 
-  const handleAddressSearch = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleAddressSearch = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+
     if (!address || !zip) {
-      toast({ title: "Missing details", description: "Please enter both address and ZIP code." });
+      toast({
+        title: "Missing details",
+        description: "Please enter at least address and ZIP code.",
+        variant: "destructive"
+      });
       return;
     }
 
-    setIsSearching(true);
-    setSearchSuccess(null);
-    try {
-      const response = await fetch("/api/regrid/parcel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, zip }),
+    toast({
+      title: "Estimating acreage...",
+      description: "Searching parcel data for your property details.",
+    });
+
+    const data = await lookup(address, zip, city, state);
+    if (data) {
+      setAcreage(data.acreage);
+      toast({
+        title: "Address Found!",
+        description: `We've estimated your property at ${data.acreage} acres. Pricing has been updated.`
       });
+    }
+    // Note: usePropertyLookup hook already has error state and could be used for more specific feedback if needed,
+    // but the hook also returns null on failure.
+  };
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to find parcel data");
-      }
-
-      const data = await response.json();
-      if (data.acreage) {
-        setAcreage(data.acreage);
-        setSearchSuccess(true);
-        toast({
-          title: "Address Found!",
-          description: `We've estimated your property at ${data.acreage} acres. Pricing has been updated.`
-        });
-      }
-    } catch (error) {
-      console.error("Address search error:", error);
-      setSearchSuccess(false);
+  // Effect to show error toast when searchError changes
+  useEffect(() => {
+    if (searchError) {
       toast({
         title: "Search Failed",
-        description: error instanceof Error ? error.message : "We couldn't locate that address. Please use the slider instead.",
+        description: searchError,
         variant: "destructive"
       });
-    } finally {
-      setIsSearching(false);
+    }
+  }, [searchError, toast]);
+
+  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddressSearch();
     }
   };
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-background via-background to-primary/5 py-24">
+    <section id={id} className="relative overflow-hidden bg-gradient-to-br from-background via-background to-primary/5 py-24">
       <div className="absolute inset-0 -z-10 bg-mesh-overlay opacity-40" aria-hidden />
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
@@ -113,40 +147,83 @@ const QuoteWidgetSection = () => {
           </div>
           <form
             onSubmit={handleSubmit}
-            className="rounded-[32px] border border-primary/10 bg-card/90 p-6 shadow-soft backdrop-blur lg:p-8"
+            className="rounded-[32px] border border-primary/10 bg-card/90 p-6 shadow-soft lg:p-8"
           >
             <div className="grid gap-8">
-              {/* Address Search via Regrid */}
-              <div className="space-y-4 rounded-2xl bg-primary/5 p-4 border border-primary/10">
-                <div className="flex items-center gap-2 mb-2">
-                  <Search className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-bold text-foreground uppercase tracking-wider">Search by Address</p>
+              {/* Simplified Address Search - FORCED REFRESH */}
+              <div id="schedule-form" className="space-y-6 rounded-2xl bg-primary/5 p-6 border border-primary/10 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Search className="h-5 w-5 text-primary" />
+                  <p className="text-sm font-bold text-foreground uppercase tracking-widest">Search acreage by address</p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-[1fr_100px_auto]">
-                  <input
-                    placeholder="123 Coastal View"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="rounded-xl border border-border/70 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                  <input
-                    placeholder="ZIP"
-                    value={zip}
-                    onChange={(e) => setZip(e.target.value)}
-                    maxLength={5}
-                    className="rounded-xl border border-border/70 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
+                
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-primary/80 ml-1">Street Address</label>
+                    <input
+                      placeholder="Street Address"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      onKeyDown={handleInputKeyDown}
+                      className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-inner"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-primary/80 ml-1">City</label>
+                      <input
+                        placeholder="City"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        onKeyDown={handleInputKeyDown}
+                        className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-inner"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-primary/80 ml-1">State</label>
+                      <input
+                        placeholder="State"
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                        onKeyDown={handleInputKeyDown}
+                        className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-inner"
+                      />
+                    </div>
+                    <div className="space-y-1.5 col-span-2 md:col-span-1">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-primary/80 ml-1">ZIP Code</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="ZIP"
+                        value={zip}
+                        onChange={(e) => setZip(e.target.value.replace(/[^0-9]/g, ""))}
+                        onKeyDown={handleInputKeyDown}
+                        maxLength={5}
+                        className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-sm"
+                      />
+                    </div>
+                  </div>
+                  
                   <Button
                     type="button"
-                    onClick={handleAddressSearch}
+                    onClick={() => handleAddressSearch()}
                     disabled={isSearching}
-                    className="rounded-xl h-auto py-2"
+                    className="w-full rounded-xl h-12 shadow-brand bg-primary hover:bg-primary/90 transition-all font-bold text-base"
                   >
-                    {isSearching ? <Loader className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                    {isSearching ? (
+                      <Loader className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-5 w-5" />
+                        <span>Search Property Acreage</span>
+                      </div>
+                    )}
                   </Button>
                 </div>
-                <p className="text-[10px] text-muted-foreground italic">
-                  Powered by Regrid parcel data for accurate acreage estimation.
+                
+                <p className="text-[11px] text-muted-foreground leading-tight italic">
+                  Searching your address automatically sets the acreage slider for exact pricing.
                 </p>
               </div>
 
@@ -184,18 +261,17 @@ const QuoteWidgetSection = () => {
                   {(Object.keys(programLabels) as ProgramType[]).map((value) => {
                     const isActive = program === value;
                     return (
-                      <button
+                      <Button
                         key={value}
                         type="button"
+                        variant={isActive ? "default" : "outline"}
                         onClick={() => setProgram(value)}
-                        className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                          isActive
-                            ? "border-primary bg-primary text-primary-foreground shadow-brand"
-                            : "border-border/70 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        className={`rounded-2xl px-4 py-3 text-sm font-semibold h-auto ${
+                          isActive ? "shadow-brand" : "bg-white text-muted-foreground hover:text-foreground hover:border-primary/50"
                         }`}
                       >
                         {programLabels[value]}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -207,19 +283,18 @@ const QuoteWidgetSection = () => {
                   {frequencyOptions.map((option) => {
                     const isActive = frequency === option;
                     return (
-                      <button
+                      <Button
                         key={option}
                         type="button"
+                        variant={isActive ? "default" : "outline"}
                         onClick={() => setFrequency(option)}
-                        className={`rounded-2xl border px-4 py-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                          isActive
-                            ? "border-primary bg-primary/90 text-primary-foreground shadow-brand"
-                            : "border-border/70 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        className={`rounded-2xl px-4 py-3 font-semibold h-auto ${
+                          isActive ? "shadow-brand bg-primary/90" : "bg-white text-muted-foreground hover:text-foreground hover:border-primary/50"
                         }`}
                         aria-pressed={isActive}
                       >
                         {option}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -249,21 +324,24 @@ const QuoteWidgetSection = () => {
               </div>
 
               {pricing.isCustom ? (
-                <Link
-                  to="/contact"
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-border/70 px-6 py-3 text-sm font-semibold text-foreground transition hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                <Button
+                  asChild
+                  variant="outline"
+                  className="rounded-full px-6 py-3 h-auto"
                 >
-                  {t("quote.customWalkthrough")}
-                  <ChevronRight className="h-4 w-4" aria-hidden />
-                </Link>
+                  <Link to="/contact">
+                    {t("quote.customWalkthrough")}
+                    <ChevronRight className="h-4 w-4" aria-hidden />
+                  </Link>
+                </Button>
               ) : (
-                <button
+                <Button
                   type="submit"
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="rounded-full px-6 py-3 h-auto shadow-brand"
                 >
                   {t("quote.saveQuote")}
                   <ChevronRight className="h-4 w-4" aria-hidden />
-                </button>
+                </Button>
               )}
 
               {submitted && !pricing.isCustom ? (

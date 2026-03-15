@@ -13,9 +13,9 @@ import { useTranslation } from "@/hooks/use-translation";
 import { FlagUS, FlagMX, FlagJP, FlagCN } from "@/components/common/FlagIcon";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAuthDialog } from "@/components/auth/AuthDialogProvider";
-import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { siteConfig } from "@/data/site";
 
 const NAV_LINKS = [
   { label: "Home", path: "/", key: "home" },
@@ -30,8 +30,30 @@ const NAV_LINKS = [
   { label: "Contact", path: "/contact", key: "contact" },
 ];
 
-const CONTACT_PHONE_DISPLAY = "(949) 297-6225";
-const CONTACT_PHONE_LINK = "tel:+19492976225";
+const PRIMARY_PATHS = new Set(["/pricing", "/services", "/reviews", "/contact", "/schedule"]);
+
+const setVarsForScheme = (scheme: string) => {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  const body = document.body;
+  const map: Record<string, { sans: string; display: string }> = {
+    "1": { sans: '"Manrope", "Inter", system-ui, sans-serif', display: '"Playfair Display", serif' },
+    "2": { sans: '"Inter", "Manrope", system-ui, sans-serif', display: '"Playfair Display", serif' },
+    "3": { sans: '"Manrope", "Inter", system-ui, sans-serif', display: '"Inter", "Manrope", system-ui, sans-serif' },
+    "4": { sans: '"Inter", "Manrope", system-ui, sans-serif', display: '"Inter", "Manrope", system-ui, sans-serif' },
+    "5": { sans: 'system-ui, "Manrope", "Inter", sans-serif', display: '"Playfair Display", serif' },
+    "6": { sans: 'system-ui, "Inter", "Manrope", sans-serif', display: '"Inter", "Manrope", system-ui, sans-serif' },
+    "7": { sans: '"Manrope", "Inter", system-ui, sans-serif', display: 'serif' },
+    "8": { sans: '"Inter", "Manrope", system-ui, sans-serif', display: 'serif' },
+    "9": { sans: 'serif', display: '"Playfair Display", serif' },
+    "10": { sans: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif', display: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif' },
+  };
+  const chosen = map[scheme] ?? map["1"];
+  root.style.setProperty("--font-sans", chosen.sans);
+  root.style.setProperty("--font-display", chosen.display);
+  body.style.setProperty("--font-sans", chosen.sans);
+  body.style.setProperty("--font-display", chosen.display);
+};
 
 export const SiteHeader = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -39,9 +61,14 @@ export const SiteHeader = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, logout } = useAuth();
-  const [fontScheme, setFontScheme] = useState<string>("6");
+  const [fontScheme, setFontScheme] = useState<string>(() => {
+    try {
+      return (typeof window !== "undefined" && localStorage.getItem("fontScheme")) || "6";
+    } catch {
+      return "6";
+    }
+  });
   const { open: openAuthDialog } = useAuthDialog();
-  const { open: openScheduleDialog } = useScheduleDialog();
   const { language, setLanguage } = useLanguage();
   const { logoStyle } = useLogo();
   const { t } = useTranslation();
@@ -54,90 +81,81 @@ export const SiteHeader = () => {
   const navLinks = useMemo(() => {
     const translatedLinks = NAV_LINKS.map(link => ({
       ...link,
-      label: t(`nav.${link.key as keyof typeof translations.en.nav}`) || link.label
+      label: t(`nav.${link.key}`) || link.label
     }));
 
-    if (!user) return translatedLinks.filter((l) => l.path !== "/login");
-    return translatedLinks.map((link) =>
-      link.path === "/login"
-        ? { ...link, label: t("nav.dashboard") || "Dashboard", path: "/dashboard" }
-        : link
-    );
+    return translatedLinks.map((link) => {
+      if (link.path === "/login") {
+        return user
+          ? { ...link, label: t("nav.dashboard") || "Dashboard", path: "/dashboard" }
+          : link;
+      }
+      if (link.path === "/schedule") {
+        return { ...link, path: user ? "/dashboard/appointments" : "/login" };
+      }
+      return link;
+    }).filter((l) => {
+      if (user && l.path === "/login") return false;
+      return true;
+    });
   }, [user, t]);
 
-  const primaryPaths = new Set(["/pricing", "/services", "/reviews", "/contact", "/schedule"]);
-  const primaryLinks = useMemo(() => navLinks.filter((l) => primaryPaths.has(l.path) || l.path === "/"), [navLinks]);
-  const moreLinks = useMemo(() => navLinks.filter((l) => !primaryPaths.has(l.path) && l.path !== "/"), [navLinks]);
+  const primaryLinks = useMemo(() => navLinks.filter((l) => PRIMARY_PATHS.has(l.path) || l.path === "/"), [navLinks]);
+  const moreLinks = useMemo(() => navLinks.filter((l) => !PRIMARY_PATHS.has(l.path) && l.path !== "/"), [navLinks]);
 
   useEffect(() => {
-    setMobileOpen(false);
+    if (mobileOpen) {
+      setMobileOpen(false);
+    }
   }, [location.pathname]);
-
-  const setVarsForScheme = (scheme: string) => {
-    const root = document.documentElement;
-    const body = document.body;
-    const map: Record<string, { sans: string; display: string }> = {
-      "1": { sans: '"Manrope", "Inter", system-ui, sans-serif', display: '"Playfair Display", serif' },
-      "2": { sans: '"Inter", "Manrope", system-ui, sans-serif', display: '"Playfair Display", serif' },
-      "3": { sans: '"Manrope", "Inter", system-ui, sans-serif', display: '"Inter", "Manrope", system-ui, sans-serif' },
-      "4": { sans: '"Inter", "Manrope", system-ui, sans-serif', display: '"Inter", "Manrope", system-ui, sans-serif' },
-      "5": { sans: 'system-ui, "Manrope", "Inter", sans-serif', display: '"Playfair Display", serif' },
-      "6": { sans: 'system-ui, "Inter", "Manrope", sans-serif', display: '"Inter", "Manrope", system-ui, sans-serif' },
-      "7": { sans: '"Manrope", "Inter", system-ui, sans-serif', display: 'serif' },
-      "8": { sans: '"Inter", "Manrope", system-ui, sans-serif', display: 'serif' },
-      "9": { sans: 'serif', display: '"Playfair Display", serif' },
-      "10": { sans: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif', display: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif' },
-    };
-    const chosen = map[scheme] ?? map["1"];
-    root.style.setProperty("--font-sans", chosen.sans);
-    root.style.setProperty("--font-display", chosen.display);
-    body.style.setProperty("--font-sans", chosen.sans);
-    body.style.setProperty("--font-display", chosen.display);
-  };
 
   useEffect(() => {
     try {
-      const saved = (typeof window !== "undefined" && localStorage.getItem("fontScheme")) || "6";
-      setFontScheme(saved);
-      setVarsForScheme(saved);
+      setVarsForScheme(fontScheme);
       const root = document.documentElement;
       const body = document.body;
       for (let i = 1; i <= 10; i++) {
         root.classList.remove(`font-scheme-${i}`);
         body.classList.remove(`font-scheme-${i}`);
       }
-      root.classList.add(`font-scheme-${saved}`);
-      body.classList.add(`font-scheme-${saved}`);
+      root.classList.add(`font-scheme-${fontScheme}`);
+      body.classList.add(`font-scheme-${fontScheme}`);
     } catch {}
-  }, []);
+  }, [fontScheme]);
 
-  const applyFontScheme = (value: string) => {
+  const applyFontScheme = useCallback((value: string) => {
     setFontScheme(value);
     try {
       localStorage.setItem("fontScheme", value);
     } catch {}
-    setVarsForScheme(value);
-    const root = document.documentElement;
-    const body = document.body;
-    for (let i = 1; i <= 10; i++) {
-      root.classList.remove(`font-scheme-${i}`);
-      body.classList.remove(`font-scheme-${i}`);
-    }
-    root.classList.add(`font-scheme-${value}`);
-    body.classList.add(`font-scheme-${value}`);
-  };
+  }, []);
 
-  const handleSignOut = () => {
+  const handleSignOut = useCallback(() => {
     logout();
     toast({ title: "Signed out", description: "You’ve been signed out of your account." });
     navigate("/login", { replace: true });
-  };
+  }, [logout, navigate, toast]);
 
   const handleScheduleOpen = useCallback(
     (source: string) => {
-      openScheduleDialog({ source });
+      const target = user ? "/dashboard/appointments" : "/schedule";
+      if (location.pathname === target) {
+        if (target === "/schedule") {
+          const element = document.getElementById("schedule-form");
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }
+        return;
+      }
+
+      if (!user) {
+        navigate("/schedule", { state: { from: "/schedule", source } });
+      } else {
+        navigate("/dashboard/appointments");
+      }
     },
-    [openScheduleDialog],
+    [user, navigate, location.pathname],
   );
 
   const handleAuthOpen = useCallback(
@@ -215,13 +233,13 @@ export const SiteHeader = () => {
           {/* Right: Actions (Desktop) */}
           <div className="hidden">
             <a
-              href={CONTACT_PHONE_LINK}
+              href={siteConfig.phone.link}
               className="group inline-flex items-center gap-2 rounded-full border border-border/60 px-4 py-2 text-sm font-semibold text-foreground transition hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                 <Phone className="h-4 w-4" aria-hidden />
               </span>
-              Call or Text {CONTACT_PHONE_DISPLAY}
+              Call or Text {siteConfig.phone.display}
             </a>
             {!user ? (
               <Button
@@ -236,13 +254,12 @@ export const SiteHeader = () => {
                 Sign out
               </Button>
             )}
-            <button
-              type="button"
+            <Button
               onClick={() => handleScheduleOpen("site-header-primary")}
-              className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-brand transition hover:translate-y-px hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="rounded-full px-5 py-2.5 text-sm font-semibold shadow-brand"
             >
               Schedule Service
-            </button>
+            </Button>
           </div>
 
           {/* Mobile: Phone + Language + Hamburger (Sheet) */}
@@ -275,11 +292,11 @@ export const SiteHeader = () => {
               </DropdownMenuContent>
             </DropdownMenu>
             <a
-              href={CONTACT_PHONE_LINK}
+              href={siteConfig.phone.link}
               className="inline-flex items-center justify-center rounded-full border border-border/60 p-2 text-foreground hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Phone className="h-5 w-5" aria-hidden />
-              <span className="sr-only">Call or text {CONTACT_PHONE_DISPLAY}</span>
+              <span className="sr-only">Call or text {siteConfig.phone.display}</span>
             </a>
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -292,7 +309,7 @@ export const SiteHeader = () => {
                   <Menu className="h-5 w-5" aria-hidden />
                 </button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-full px-6 pt-6 pb-6 sm:max-w-sm">
+              <SheetContent side="right" className="w-full px-6 pt-6 pb-6 sm:max-w-sm overflow-y-auto">
                 <div className="flex justify-start pb-6">
                   <LogoBranding
                     style={logoStyle}
@@ -306,13 +323,13 @@ export const SiteHeader = () => {
                 </SheetHeader>
                 <div className="grid gap-2">
                   <a
-                    href={CONTACT_PHONE_LINK}
+                    href={siteConfig.phone.link}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/60 px-4 py-3 text-base font-semibold text-foreground hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   >
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
                       <Phone className="h-4 w-4" aria-hidden />
                     </span>
-                    <span>{t("footer.callOrText") || "Call or Text"} {CONTACT_PHONE_DISPLAY}</span>
+                    <span>{t("footer.callOrText") || "Call or Text"} {siteConfig.phone.display}</span>
                   </a>
 
                   <DropdownMenu>

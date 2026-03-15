@@ -3,10 +3,7 @@ import { MessageSquare, Phone, Mail, X, Send } from "lucide-react";
 import { useTranslation } from "@/hooks/use-translation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-const CONTACT_PHONE_DISPLAY = "(949) 297-6225";
-const CONTACT_PHONE_LINK = "tel:+19492976225";
-const CONTACT_EMAIL = "richard@nomoremosquitoes.us";
+import { siteConfig } from "@/data/site";
 
 declare global {
   interface Window {
@@ -61,7 +58,7 @@ export const ChatWidget = () => {
           </button>
 
           <a
-            href={CONTACT_PHONE_LINK}
+            href={siteConfig.phone.link}
             className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition group"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition">
@@ -69,12 +66,12 @@ export const ChatWidget = () => {
             </div>
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("chat.callOrText") || "Call or Text"}</p>
-              <p className="text-sm font-bold text-foreground">{CONTACT_PHONE_DISPLAY}</p>
+              <p className="text-sm font-bold text-foreground">{siteConfig.phone.display}</p>
             </div>
           </a>
 
           <a
-            href={`mailto:${CONTACT_EMAIL}`}
+            href={`mailto:${siteConfig.email}`}
             className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition group"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition">
@@ -82,7 +79,7 @@ export const ChatWidget = () => {
             </div>
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("chat.emailUs") || "Email Us"}</p>
-              <p className="text-sm font-bold text-foreground truncate w-40">{CONTACT_EMAIL}</p>
+              <p className="text-sm font-bold text-foreground truncate w-40">{siteConfig.email}</p>
             </div>
           </a>
 

@@ -6,6 +6,7 @@ export type AuthDialogOpenOptions = {
   defaultMode?: "login" | "signup";
   redirectTo?: string;
   source?: string;
+  preset?: any;
 };
 
 type AuthDialogContextValue = {
@@ -46,6 +47,7 @@ export const AuthDialogProvider = ({ children }: { children: ReactNode }) => {
         defaultMode={options?.defaultMode}
         redirectTo={options?.redirectTo ?? null}
         source={options?.source ?? null}
+        preset={options?.preset ?? null}
       />
     </AuthDialogContext.Provider>
   );

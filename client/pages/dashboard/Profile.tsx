@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "@/lib/supabase";
 import SectionHeading from "@/components/common/SectionHeading";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,15 +25,35 @@ const Profile = () => {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!user) return;
     setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
+
+    const name = (document.getElementById("full-name") as HTMLInputElement).value;
+    const email = (document.getElementById("email") as HTMLInputElement).value;
+    const phone = (document.getElementById("phone") as HTMLInputElement).value;
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ name, email, phone, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
       toast({
         title: "Profile Updated",
         description: "Your account changes have been saved successfully.",
       });
-    }, 1000);
+    } catch (error: any) {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to save profile changes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -67,7 +88,7 @@ const Profile = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" type="tel" placeholder="(949) 555-0123" className="rounded-xl" />
+                  <Input id="phone" type="tel" defaultValue={user?.phone ?? ""} placeholder="(949) 555-0123" className="rounded-xl" />
                 </div>
               </div>
               <Button onClick={handleSave} disabled={isSaving} className="rounded-xl">

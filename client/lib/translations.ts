@@ -230,7 +230,7 @@ export const translations = {
       },
     },
     schedule: {
-      title: "Schedule",
+      title: "Step",
       stepLabel: "Step",
       step1: "Check address & acreage",
       step1Desc:
@@ -241,10 +241,10 @@ export const translations = {
       step3: "Lock in day & technician",
       step3Desc:
         "See real-time availability, pay securely, and receive your portal login with ETA tracking.",
-      scheduleFlow: "Schedule flow",
+      scheduleFlow: "Schedule service",
       threeSteps: "Three steps. Transparent, fast, and portal-ready.",
       flowDesc: "Our booking flow handles address verification, program selection, technician assignment, and payment in minutes.",
-      launchSchedule: "Launch schedule flow",
+      launchSchedule: "Schedule service",
     },
     story: {
       title: "Our Story",
@@ -400,7 +400,7 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
     },
     quote: {
       instant: "Instant quote",
-      calculateTitle: "Calculate pricing with acreage, cadence, and visit program.",
+      calculateTitle: "Get your instant quote with acreage, cadence, and visit program.",
       calculateDesc: "Adjust acreage and frequency to see the total investment. Pricing updates instantly. Ready to schedule? Use the quote summary to lock in your first visit and secure customer portal access.",
       searchByAddress: "Search by Address",
       searchPlaceholder: "123 Coastal View",
@@ -423,7 +423,7 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
       annualTotal: "Annual total",
       visitsPerYear: "Visits per year: ",
       customWalkthrough: "Book custom walkthrough",
-      saveQuote: "Save quote & continue",
+      saveQuote: "Get My Quote & Continue",
       quoteSaved: "Quote saved! We'll pre-fill your scheduling flow with these selections and email a PDF summary shortly.",
     },
     bugsTreated: {
@@ -1083,7 +1083,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       annualTotal: "Total anual",
       visitsPerYear: "Visitas por año: ",
       customWalkthrough: "Reservar recorrido personalizado",
-      saveQuote: "Guardar cotización y continuar",
+      saveQuote: "Obtener mi cotización y continuar",
       quoteSaved: "¡Cotización guardada! Pre-llenaremos tu flujo de programación con estas selecciones y te enviaremos un resumen en PDF pronto.",
     },
     bugsTreated: {
@@ -1598,7 +1598,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       annualTotal: "年間合計",
       visitsPerYear: "年間訪問回数: ",
       customWalkthrough: "カスタム下見を予約する",
-      saveQuote: "見積もりを保存して次へ",
+      saveQuote: "見積もりを取得して次へ",
       quoteSaved: "見積もりが保存されました！予約フローにこれらの選択内容が事前に入力され、PDFのサマリーがまもなくメールで届きます。",
     },
     bugsTreated: {
@@ -2173,7 +2173,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       annualTotal: "年度总计",
       visitsPerYear: "每年访问次数：",
       customWalkthrough: "预约定制实地勘察",
-      saveQuote: "保存报价并继续",
+      saveQuote: "获取报价并继续",
       quoteSaved: "报价已保存！我们将使用这些选择预填您的预约流程，并很快通过电子邮件发送 PDF 摘要。",
     },
     bugsTreated: {

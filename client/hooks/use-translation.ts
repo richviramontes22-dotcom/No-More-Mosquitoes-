@@ -1,10 +1,11 @@
+import { useCallback, useMemo } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { translations } from "@/lib/translations";
 
 export function useTranslation() {
   const { language } = useLanguage();
 
-  const t = (key: string, replacements?: Record<string, string | number>): any => {
+  const t = useCallback((key: string, replacements?: Record<string, string | number>): any => {
     const keys = key.split(".");
     let value: any = translations[language];
     for (const k of keys) {
@@ -18,7 +19,7 @@ export function useTranslation() {
     }
 
     return value;
-  };
+  }, [language]);
 
-  return { t, language };
+  return useMemo(() => ({ t, language }), [t, language]);
 }

@@ -5,6 +5,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/pricing";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  CreditCard,
+  Search,
+  Filter,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  RefreshCcw,
+  DollarSign,
+  TrendingUp
+} from "lucide-react";
 
 const Billing = () => {
   const [items, setItems] = useState<Invoice[]>(() => seed.slice());
@@ -38,97 +52,147 @@ const Billing = () => {
   const refund = (id: string) => setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "refunded" } : i)));
 
   return (
-    <div className="grid gap-8">
-      <SectionHeading
-        eyebrow="Billing"
-        title="Invoices and payments"
-        description="Stripe sync, refunds/credits, and dunning status."
-      />
-
-      <div className="grid gap-3 rounded-2xl border border-border/70 bg-card/95 p-4">
-        <div className="flex items-center justify-between rounded-xl border bg-background/50 p-3 text-sm">
-          <div>
-            Stripe connection: {stripeStatus.enabled ? <span className="text-emerald-600">Connected</span> : <span className="text-amber-600">Not connected</span>}
-            {stripeStatus.account?.email ? <span className="ml-2">({stripeStatus.account.email})</span> : null}
-          </div>
-          <div className="space-x-2">
-            <a className="text-primary underline" href="/admin/revenue">Revenue</a>
-            <a className="text-primary underline" href="https://dashboard.stripe.com" target="_blank" rel="noreferrer">Open Stripe</a>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <div className="text-xs text-muted-foreground">Paid</div>
-            <div className="text-xl font-display">{formatCurrency(totals.paid)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Open</div>
-            <div className="text-xl font-display">{formatCurrency(totals.open)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Overdue</div>
-            <div className="text-xl font-display">{formatCurrency(totals.overdue)}</div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <Input className="w-64" placeholder="Search name or email" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="all">All statuses</option>
-              <option value="paid">Paid</option>
-              <option value="open">Open</option>
-              <option value="overdue">Overdue</option>
-              <option value="refunded">Refunded</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="rounded-xl border p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((i) => {
-                const c = findCustomer(i.customerId);
-                return (
-                  <TableRow key={i.id}>
-                    <TableCell>{new Date(i.date).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <div className="font-medium">{c.name}</div>
-                      <div className="text-xs text-muted-foreground">{c.email}</div>
-                    </TableCell>
-                    <TableCell className="capitalize">{i.status}</TableCell>
-                    <TableCell>{formatCurrency(i.total)}</TableCell>
-                    <TableCell>{new Date(i.dueDate).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right space-x-2">
-                      {i.status !== "paid" && i.status !== "refunded" && (
-                        <Button size="sm" variant="outline" onClick={() => markPaid(i.id)}>
-                          Mark paid
-                        </Button>
-                      )}
-                      {i.status === "paid" && (
-                        <Button size="sm" variant="destructive" onClick={() => refund(i.id)}>
-                          Refund
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+    <div className="grid gap-10">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <SectionHeading
+          eyebrow="Financials"
+          title="Billing & Invoicing"
+          description="Manage customer payments, monitor Stripe synchronization, and handle manual overrides."
+        />
+        <Button variant="outline" className="rounded-xl shadow-sm bg-background border-border/60" asChild>
+          <a href="https://dashboard.stripe.com" target="_blank" rel="noreferrer">
+            <CreditCard className="mr-2 h-4 w-4 text-primary" />
+            Open Stripe Dashboard
+            <ExternalLink className="ml-2 h-3.5 w-3.5 opacity-50" />
+          </a>
+        </Button>
       </div>
+
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="rounded-[28px] border-border/60 bg-card/95 shadow-soft overflow-hidden">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-green-50 text-green-600 flex items-center justify-center">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Total Paid</p>
+              <p className="text-2xl font-display font-bold">{formatCurrency(totals.paid)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="rounded-[28px] border-border/60 bg-card/95 shadow-soft overflow-hidden">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Clock className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Total Open</p>
+              <p className="text-2xl font-display font-bold">{formatCurrency(totals.open)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="rounded-[28px] border-border/60 bg-card/95 shadow-soft overflow-hidden">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Total Overdue</p>
+              <p className="text-2xl font-display font-bold">{formatCurrency(totals.overdue)}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="rounded-[32px] border-border/60 bg-card/95 shadow-soft overflow-hidden mb-10">
+        <CardHeader className="bg-muted/20 px-8 py-6 border-b border-border/40">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-background px-3 py-1.5 rounded-lg border border-border/60 text-xs font-medium">
+                Stripe: {stripeStatus.enabled ? <Badge className="bg-green-100 text-green-700 border-none">Connected</Badge> : <Badge className="bg-amber-100 text-amber-700 border-none">Syncing...</Badge>}
+              </div>
+              <Button variant="ghost" size="sm" className="text-primary font-bold h-8 px-2" asChild>
+                <a href="/admin/revenue">View Analytics <TrendingUp className="ml-1 h-3.5 w-3.5" /></a>
+              </Button>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input className="w-64 pl-9 rounded-xl h-10" placeholder="Search customer..." value={query} onChange={(e) => setQuery(e.target.value)} />
+              </div>
+              <select className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm font-medium outline-none" value={status} onChange={(e) => setStatus(e.target.value as any)}>
+                <option value="all">All Statuses</option>
+                <option value="paid">Paid</option>
+                <option value="open">Open</option>
+                <option value="overdue">Overdue</option>
+                <option value="refunded">Refunded</option>
+              </select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 border-none">
+                  <TableHead className="pl-8 py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Date</TableHead>
+                  <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Customer</TableHead>
+                  <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Status</TableHead>
+                  <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Total</TableHead>
+                  <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Due Date</TableHead>
+                  <TableHead className="pr-8 py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((i) => {
+                  const c = findCustomer(i.customerId);
+                  return (
+                    <TableRow key={i.id} className="hover:bg-muted/20 transition-colors border-border/40 group">
+                      <TableCell className="pl-8 py-5 text-sm font-medium">
+                        {new Date(i.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </TableCell>
+                      <TableCell className="py-5">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-sm">{c.name}</span>
+                          <span className="text-xs text-muted-foreground italic">{c.email}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-5">
+                        <Badge
+                          variant="outline"
+                          className={`capitalize font-bold border-none ${
+                            i.status === 'paid' ? 'bg-green-100 text-green-700' :
+                            i.status === 'overdue' ? 'bg-red-100 text-red-700' :
+                            'bg-muted text-muted-foreground'
+                          }`}
+                        >
+                          {i.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-5 font-bold text-sm">{formatCurrency(i.total)}</TableCell>
+                      <TableCell className="py-5 text-xs text-muted-foreground font-medium">
+                        {new Date(i.dueDate).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="pr-8 py-5 text-right space-x-2">
+                        {i.status !== "paid" && i.status !== "refunded" && (
+                          <Button size="sm" variant="ghost" className="rounded-xl font-bold hover:bg-green-50 hover:text-green-700 h-8" onClick={() => markPaid(i.id)}>
+                            Mark Paid
+                          </Button>
+                        )}
+                        {i.status === "paid" && (
+                          <Button size="sm" variant="ghost" className="rounded-xl font-bold hover:bg-red-50 hover:text-red-700 h-8" onClick={() => refund(i.id)}>
+                            Refund
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabase";
+
 export type FormStatus = "idle" | "submitting" | "success" | "error";
 
 export type SubmissionResult = {
@@ -8,11 +10,21 @@ export type SubmissionResult = {
 export const emptySubmissionResult: SubmissionResult = { status: "idle" };
 
 export async function postJson<TResponse = unknown>(endpoint: string, payload: unknown): Promise<TResponse> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Add authorization header if session exists
+  if (supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers["Authorization"] = `Bearer ${session.access_token}`;
+    }
+  }
+
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(payload),
   });
 

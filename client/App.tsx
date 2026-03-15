@@ -25,6 +25,9 @@ import Reviews from "./pages/Reviews";
 import ServiceArea from "./pages/ServiceArea";
 import FAQ from "./pages/FAQ";
 import Blog from "./pages/Blog";
+import BlogPost from "./pages/BlogPost";
+import Contact from "./pages/Contact";
+import Safety from "./pages/Safety";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Schedule from "./pages/Schedule";
@@ -65,14 +68,6 @@ import EmployeeLogin from "./pages/employee/Login";
 const queryClient = new QueryClient();
 
 const PLACEHOLDER_ROUTES = [
-  {
-    path: "/contact",
-    title: "Contact",
-    description:
-      "Reach our local office for quotes, billing, or technician dispatch. We reply to calls, texts, and emails Monday–Saturday 7a–7p.",
-    callToActionLabel: "Call or Text Now",
-    callToActionPath: "tel:+19497630492",
-  },
   {
     path: "/privacy",
     title: "Privacy Policy",
@@ -121,6 +116,9 @@ const App = () => (
                     <Route path="/service-area" element={<ServiceArea />} />
                     <Route path="/faq" element={<FAQ />} />
                     <Route path="/blog" element={<Blog />} />
+                    <Route path="/blog/:slug" element={<BlogPost />} />
+                    <Route path="/contact" element={<Contact />} />
+                    <Route path="/safety" element={<Safety />} />
                     <Route path="/schedule" element={<Schedule />} />
                     <Route path="/login" element={<Login />} />
                     <Route

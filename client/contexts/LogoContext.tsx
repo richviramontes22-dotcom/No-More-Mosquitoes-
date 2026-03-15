@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useCallback, useMemo } from "react";
 
 export type LogoStyle = "circular" | "banner" | "full-text";
 
@@ -11,10 +11,12 @@ const LogoContext = createContext<LogoContextType | undefined>(undefined);
 
 export const LogoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const logoStyle: LogoStyle = "banner";
-  const setLogoStyle = () => {}; // No-op now
+  const setLogoStyle = useCallback(() => {}, []); // No-op now
+
+  const value = useMemo(() => ({ logoStyle, setLogoStyle }), [logoStyle, setLogoStyle]);
 
   return (
-    <LogoContext.Provider value={{ logoStyle, setLogoStyle }}>
+    <LogoContext.Provider value={value}>
       {children}
     </LogoContext.Provider>
   );

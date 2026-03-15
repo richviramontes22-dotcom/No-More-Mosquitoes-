@@ -9,12 +9,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
-export const PropertyQuestionnaire = () => {
+export type PropertyQuestionnaireData = {
+  hasPets: boolean;
+  petDetails: string;
+  childrenUseYard: boolean;
+  primaryConcerns: string;
+  hasStandingWater: boolean;
+  yardUsage: string;
+  gateInstructions: string;
+};
+
+interface PropertyQuestionnaireProps {
+  data?: PropertyQuestionnaireData;
+  onChange?: (data: PropertyQuestionnaireData) => void;
+  hideSubmit?: boolean;
+  disabled?: boolean;
+}
+
+export const PropertyQuestionnaire = ({
+  data,
+  onChange,
+  hideSubmit = false,
+  disabled = false,
+}: PropertyQuestionnaireProps) => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
+  const [internalFormData, setInternalFormData] = useState<PropertyQuestionnaireData>({
     hasPets: false,
     petDetails: "",
     childrenUseYard: false,
@@ -23,6 +45,16 @@ export const PropertyQuestionnaire = () => {
     yardUsage: "weekly",
     gateInstructions: "",
   });
+
+  const formData = data || internalFormData;
+  const setFormData = (updater: any) => {
+    const newData = typeof updater === 'function' ? updater(formData) : updater;
+    if (onChange) {
+      onChange(newData);
+    } else {
+      setInternalFormData(newData);
+    }
+  };
 
   const usageOptions = t("questionnaire.usageOptions");
 
@@ -63,6 +95,7 @@ export const PropertyQuestionnaire = () => {
                   id="hasPets"
                   checked={formData.hasPets}
                   onCheckedChange={(checked) => setFormData({ ...formData, hasPets: checked })}
+                  disabled={disabled}
                 />
               </div>
               {formData.hasPets && (
@@ -71,6 +104,7 @@ export const PropertyQuestionnaire = () => {
                   value={formData.petDetails}
                   onChange={(e) => setFormData({ ...formData, petDetails: e.target.value })}
                   className="bg-background/50"
+                  disabled={disabled}
                 />
               )}
             </div>
@@ -84,6 +118,7 @@ export const PropertyQuestionnaire = () => {
                 id="childrenUseYard"
                 checked={formData.childrenUseYard}
                 onCheckedChange={(checked) => setFormData({ ...formData, childrenUseYard: checked })}
+                disabled={disabled}
               />
             </div>
 
@@ -96,6 +131,7 @@ export const PropertyQuestionnaire = () => {
                 id="hasStandingWater"
                 checked={formData.hasStandingWater}
                 onCheckedChange={(checked) => setFormData({ ...formData, hasStandingWater: checked })}
+                disabled={disabled}
               />
             </div>
 
@@ -107,6 +143,7 @@ export const PropertyQuestionnaire = () => {
               <Select
                 value={formData.yardUsage}
                 onValueChange={(val) => setFormData({ ...formData, yardUsage: val })}
+                disabled={disabled}
               >
                 <SelectTrigger className="bg-background/50">
                   <SelectValue />
@@ -132,6 +169,7 @@ export const PropertyQuestionnaire = () => {
                 value={formData.primaryConcerns}
                 onChange={(e) => setFormData({ ...formData, primaryConcerns: e.target.value })}
                 className="bg-background/50"
+                disabled={disabled}
               />
             </div>
 
@@ -145,13 +183,16 @@ export const PropertyQuestionnaire = () => {
                 value={formData.gateInstructions}
                 onChange={(e) => setFormData({ ...formData, gateInstructions: e.target.value })}
                 className="bg-background/50 resize-none h-24"
+                disabled={disabled}
               />
             </div>
           </div>
 
-          <Button type="submit" className="w-full rounded-xl py-6 text-base font-bold" disabled={loading}>
-            {loading ? t("questionnaire.saving") : t("questionnaire.save")}
-          </Button>
+          {!hideSubmit && !disabled && (
+            <Button type="submit" className="w-full rounded-xl py-6 text-base font-bold" disabled={loading}>
+              {loading ? t("questionnaire.saving") : t("questionnaire.save")}
+            </Button>
+          )}
         </form>
       </CardContent>
     </Card>

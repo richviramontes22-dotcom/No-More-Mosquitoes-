@@ -1,16 +1,74 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SectionHeading from "@/components/common/SectionHeading";
 import FixedCalendar from "@/components/admin/FixedCalendar";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Search,
+  Filter,
+  Calendar as CalendarIcon,
+  User,
+  MapPin,
+  Clock,
+  ChevronRight,
+  UserPlus,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  RotateCcw,
+  Loader2
+} from "lucide-react";
 import { appointments as seed, Appointment, findCustomer, findProperty, technicians } from "@/data/admin";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 const Appointments = () => {
+  const { toast } = useToast();
   const [selected, setSelected] = useState<Date | undefined>(new Date());
   const [items, setItems] = useState<Appointment[]>(() => seed.slice());
   const [editing, setEditing] = useState<Appointment | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
+  const fetchAppointments = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("*")
+        .order("scheduled_at", { ascending: true });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Map Supabase appointments to the Admin UI format
+        const mapped: Appointment[] = data.map(app => ({
+          id: app.id,
+          customerId: app.user_id,
+          propertyId: app.property_id,
+          date: app.scheduled_at.split("T")[0],
+          startTime: app.notes?.includes("Slot:") ? (app.notes.split("Slot:")[1] || "").split("|")[0]?.trim() || "08:00" : "08:00",
+          endTime: "10:00", // Placeholder
+          type: app.service_type === "one_time" ? "one_time" : "subscription",
+          status: app.status as any,
+          technician: "Unassigned"
+        }));
+        setItems(mapped);
+      }
+    } catch (err) {
+      console.error("Error fetching appointments:", err);
+      // Fallback to seed data if fetch fails
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filters
   const [query, setQuery] = useState("");
@@ -76,9 +134,25 @@ const Appointments = () => {
     });
   };
 
-  const updateAppointment = (next: Appointment) => {
-    setItems((prev) => prev.map((a) => (a.id === next.id ? next : a)));
-    setEditing(null);
+  const updateAppointment = async (next: Appointment) => {
+    try {
+      const { error } = await supabase
+        .from("appointments")
+        .update({
+          scheduled_at: next.date,
+          status: next.status,
+          notes: `Slot: ${next.startTime} | Updated via Admin`
+        })
+        .eq("id", next.id);
+
+      if (error) throw error;
+
+      setItems((prev) => prev.map((a) => (a.id === next.id ? next : a)));
+      setEditing(null);
+      toast({ title: "Appointment Updated", description: "Changes persisted to database." });
+    } catch (err) {
+      toast({ title: "Update Failed", description: "Could not save changes to database.", variant: "destructive" });
+    }
   };
 
   const assignSelected = () => {
@@ -97,106 +171,165 @@ const Appointments = () => {
   };
 
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-10">
       <SectionHeading
-        eyebrow="Appointments"
-        title="Calendar and list of appointments"
-        description="Assign technicians, reschedule, and manage capacity."
+        eyebrow="Scheduling"
+        title="Appointment Control"
+        description="Assign technicians, optimize routes, and manage service capacity across OC."
       />
 
-      <div className="rounded-2xl border border-border/70 bg-card/95 p-4">
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <Input placeholder="Search name/address" value={query} onChange={(e)=>setQuery(e.target.value)} />
-          <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={plan} onChange={(e)=>setPlan(e.target.value as any)}>
-            <option value="all">All plans</option>
-            <option value="subscription">Subscription</option>
-            <option value="one_time">One-time</option>
-            <option value="inspection">Inspection</option>
-          </select>
-          <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={techFilter} onChange={(e)=>setTechFilter(e.target.value)}>
-            <option value="all">All technicians</option>
-            {technicians.map((t)=> (<option key={t} value={t}>{t}</option>))}
-          </select>
-          <Input placeholder="City or ZIP" value={area} onChange={(e)=>setArea(e.target.value)} />
-          <input type="date" className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={from} onChange={(e)=>setFrom(e.target.value)} />
-          <div className="flex items-center gap-2">
-            <input type="date" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={to} onChange={(e)=>setTo(e.target.value)} />
-            <Button variant="outline" onClick={clearFilters}>Clear</Button>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs text-muted-foreground">{visibleAppointments.length} matching · {selectedIds.size} selected</div>
-          <div className="flex items-center gap-2">
-            <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={assignTech} onChange={(e)=>setAssignTech(e.target.value)}>
-              <option value="">Assign to…</option>
+      <Card className="rounded-[28px] border-border/60 bg-card/95 shadow-soft overflow-hidden">
+        <CardContent className="p-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search name/address" className="pl-9 rounded-xl h-10" value={query} onChange={(e)=>setQuery(e.target.value)} />
+            </div>
+            <select className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" value={plan} onChange={(e)=>setPlan(e.target.value as any)}>
+              <option value="all">All Plan Types</option>
+              <option value="subscription">Subscription</option>
+              <option value="one_time">One-time</option>
+              <option value="inspection">Inspection</option>
+            </select>
+            <select className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" value={techFilter} onChange={(e)=>setTechFilter(e.target.value)}>
+              <option value="all">All Technicians</option>
               {technicians.map((t)=> (<option key={t} value={t}>{t}</option>))}
             </select>
-            <Button onClick={assignSelected} disabled={!assignTech || selectedIds.size===0}>Assign selected</Button>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="City or ZIP" className="pl-9 rounded-xl h-10" value={area} onChange={(e)=>setArea(e.target.value)} />
+            </div>
+            <input type="date" className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" value={from} onChange={(e)=>setFrom(e.target.value)} />
+            <div className="flex items-center gap-2">
+              <input type="date" className="h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" value={to} onChange={(e)=>setTo(e.target.value)} />
+              <Button variant="ghost" size="icon" onClick={clearFilters} className="rounded-xl h-10 w-10 border border-border/60">
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
+          <div className="mt-6 pt-6 border-t border-border/40 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest bg-muted/30 px-3 py-1.5 rounded-lg">
+              {visibleAppointments.length} matching visits · {selectedIds.size} selected for bulk action
+            </div>
+            <div className="flex items-center gap-3">
+              <select className="h-10 rounded-xl border border-border/60 bg-background px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" value={assignTech} onChange={(e)=>setAssignTech(e.target.value)}>
+                <option value="">Assign technician...</option>
+                {technicians.map((t)=> (<option key={t} value={t}>{t}</option>))}
+              </select>
+              <Button onClick={assignSelected} disabled={!assignTech || selectedIds.size===0} className="rounded-xl h-10 shadow-brand font-bold px-6">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Apply Assignment
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-border/70 bg-card/95 p-4 min-w-0 overflow-hidden flex items-start justify-center">
+      <div className="grid gap-8 lg:grid-cols-[350px_1fr]">
+        <Card className="rounded-[32px] border-border/60 bg-card/95 shadow-soft p-6 min-w-0 overflow-hidden flex items-start justify-center h-fit sticky top-4">
           <FixedCalendar selected={selected} onSelect={(d)=> setSelected(d)} />
-        </div>
-        <div className="rounded-2xl border border-border/70 bg-card/95 p-0 min-w-0 overflow-hidden">
-          <div className="flex items-center justify-between border-b p-4">
-            <div className="text-sm font-semibold">{selected ? selected.toDateString() : "Select a date"}</div>
-          </div>
-          <Table className="w-full">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-primary"
-                    checked={allVisibleSelected}
-                    onChange={(e)=> toggleSelectAll(e.target.checked)}
-                  />
-                </TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Property</TableHead>
-                <TableHead>Technician</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visibleAppointments.map((a) => {
-                const c = findCustomer(a.customerId);
-                const p = findProperty(a.propertyId);
-                return (
-                  <TableRow key={a.id}>
-                    <TableCell>
+        </Card>
+
+        <Card className="rounded-[32px] border-border/60 bg-card/95 shadow-soft overflow-hidden mb-10">
+          <CardHeader className="bg-muted/20 px-8 py-6 border-b border-border/40">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-display font-bold flex items-center gap-2">
+                <CalendarIcon className="h-5 w-5 text-primary" />
+                {selected ? selected.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : "Select a date"}
+              </CardTitle>
+              {visibleAppointments.length > 0 && (
+                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">{visibleAppointments.length} Appointments</Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30 border-none">
+                    <TableHead className="w-12 pl-8 py-4">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 accent-primary"
-                        checked={selectedIds.has(a.id)}
-                        onChange={(e)=> toggleRow(a.id, e.target.checked)}
+                        className="h-4 w-4 rounded-sm border-border/60 text-primary accent-primary"
+                        checked={allVisibleSelected}
+                        onChange={(e)=> toggleSelectAll(e.target.checked)}
                       />
-                    </TableCell>
-                    <TableCell>
-                      {a.startTime}–{a.endTime}
-                    </TableCell>
-                    <TableCell>{c.name}</TableCell>
-                    <TableCell>
-                      {p.address1}, {p.city}
-                    </TableCell>
-                    <TableCell>{a.technician}</TableCell>
-                    <TableCell className="capitalize">{a.status}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => setEditing(a)}>
-                        Reschedule
-                      </Button>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Time Slot</TableHead>
+                    <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Customer/Property</TableHead>
+                    <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Technician</TableHead>
+                    <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Status</TableHead>
+                    <TableHead className="pr-8 py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest text-right">Action</TableHead>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                </TableHeader>
+                <TableBody>
+                  {visibleAppointments.length > 0 ? visibleAppointments.map((a) => {
+                    const c = findCustomer(a.customerId);
+                    const p = findProperty(a.propertyId);
+                    return (
+                      <TableRow key={a.id} className="hover:bg-muted/20 transition-colors border-border/40 group">
+                        <TableCell className="pl-8 py-5">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded-sm border-border/60 text-primary accent-primary"
+                            checked={selectedIds.has(a.id)}
+                            onChange={(e)=> toggleRow(a.id, e.target.checked)}
+                          />
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3.5 w-3.5 text-primary" />
+                            <span className="font-bold text-sm">{a.startTime}–{a.endTime}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-sm">{c.name}</span>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <MapPin className="h-3 w-3" /> {p.address1}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <div className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center">
+                              <User className="h-3 w-3 text-muted-foreground" />
+                            </div>
+                            <span className="text-sm font-medium">{a.technician}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <Badge
+                            variant="outline"
+                            className={`capitalize font-bold border-none ${
+                              a.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
+                              a.status === 'completed' ? 'bg-green-100 text-green-700' :
+                              a.status === 'canceled' ? 'bg-red-100 text-red-700' :
+                              'bg-muted text-muted-foreground'
+                            }`}
+                          >
+                            {a.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="pr-8 py-5 text-right">
+                          <Button variant="ghost" size="sm" className="rounded-xl group-hover:bg-primary group-hover:text-white transition-all font-bold" onClick={() => setEditing(a)}>
+                            Modify
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-40 text-center text-muted-foreground italic bg-muted/5">
+                        No appointments found for the selected filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {editing && (
@@ -218,44 +351,56 @@ const RescheduleDialog = ({ appt, onClose, onSave }: { appt: Appointment; onClos
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Reschedule appointment</DialogTitle>
-          <DialogDescription>Update time or technician. Customer will be notified.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <div>
-            <label className="text-sm font-medium">Date</label>
-            <input className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium">Start</label>
-              <input className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+      <DialogContent className="max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
+        <div className="bg-primary/5 p-8 border-b border-border/40">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-2xl font-display font-bold text-primary flex items-center gap-2">
+              <RotateCcw className="h-6 w-6" /> Modify Appointment
+            </DialogTitle>
+            <DialogDescription className="text-base">
+              Update timing or service personnel for this visit.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+
+        <div className="p-8 space-y-6">
+          <div className="grid gap-5">
+            <div className="space-y-2">
+              <label className="text-sm font-bold uppercase tracking-widest text-muted-foreground pl-1">Scheduled Date</label>
+              <input className="h-12 w-full rounded-xl border border-border/60 bg-background px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
-            <div>
-              <label className="text-sm font-medium">End</label>
-              <input className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-muted-foreground pl-1">Start Time</label>
+                <input className="h-12 w-full rounded-xl border border-border/60 bg-background px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-muted-foreground pl-1">End Time</label>
+                <input className="h-12 w-full rounded-xl border border-border/60 bg-background px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium">Technician</label>
-            <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={tech} onChange={(e) => setTech(e.target.value)}>
-              {technicians.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-2">
+              <label className="text-sm font-bold uppercase tracking-widest text-muted-foreground pl-1">Assigned Technician</label>
+              <select className="h-12 w-full rounded-xl border border-border/60 bg-background px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-primary/20" value={tech} onChange={(e) => setTech(e.target.value)}>
+                {technicians.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
-        <DialogFooter>
+
+        <DialogFooter className="p-8 bg-muted/30 border-t border-border/40 flex gap-3">
+          <Button variant="ghost" onClick={onClose} className="rounded-xl h-12 flex-1 font-bold">Cancel</Button>
           <Button
+            className="rounded-xl h-12 flex-1 shadow-brand font-bold"
             onClick={() =>
               onSave({ ...appt, date, startTime: start, endTime: end, technician: tech, status: appt.status === "canceled" ? "rescheduled" : appt.status })
             }
           >
-            Save
+            Update Appointment
           </Button>
         </DialogFooter>
       </DialogContent>

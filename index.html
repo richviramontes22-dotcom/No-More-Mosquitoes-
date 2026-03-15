@@ -9,8 +9,12 @@
   <body>
     <div id="root"></div>
 
-    <script type="text/javascript">
-      window.$crisp=[];window.CRISP_WEBSITE_ID="b883932b-4716-4cd7-a027-302730273027";
+      <script type="text/javascript">
+      window.$crisp=[];
+      const CRISP_ID = "%VITE_CRISP_WEBSITE_ID%";
+      // Check if Vite replaced the variable, otherwise use a fallback
+      window.CRISP_WEBSITE_ID = (CRISP_ID && !CRISP_ID.startsWith("%")) ? CRISP_ID : "b883932b-4716-4cd7-a027-302730273027";
+
       (function(){d=document;s=d.createElement("script");s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();
       window.$crisp.push(["set", "chat:hide", [true]]);
     </script>

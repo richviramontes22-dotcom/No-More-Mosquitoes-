@@ -28,7 +28,7 @@ export type PageHeroProps = {
 
 const CTA_ICON = <ArrowRight className="h-4 w-4" aria-hidden />;
 
-const isExternal = (href: string) => href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("tel:");
+const isExternal = (href: string) => href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("#");
 
 const CtaButton = ({ cta, priority }: { cta: PageHeroCta; priority: "primary" | "secondary" }) => {
   const { label, href, external, icon } = cta;
