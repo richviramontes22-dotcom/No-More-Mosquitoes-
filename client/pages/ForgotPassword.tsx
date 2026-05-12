@@ -24,14 +24,23 @@ const ForgotPassword = () => {
       // Use the production URL for the redirect; falls back to current origin in dev
       const redirectTo = `${window.location.origin}/reset-password`;
 
+      if (import.meta.env.DEV) {
+        console.log("[ForgotPassword] redirectTo:", redirectTo);
+        console.log("[ForgotPassword] IMPORTANT: This URL must be in Supabase Dashboard → Auth → URL Configuration → Redirect URLs");
+      }
+
       const { error: supabaseError } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
         { redirectTo }
       );
 
-      if (supabaseError) throw supabaseError;
+      if (supabaseError) {
+        if (import.meta.env.DEV) console.error("[ForgotPassword] Supabase error:", supabaseError);
+        throw supabaseError;
+      }
       setSent(true);
     } catch (err: any) {
+      if (import.meta.env.DEV) console.error("[ForgotPassword] Email send failed:", err);
       // Return generic message — do NOT reveal whether email exists in DB
       setError("If that email is registered, you'll receive a reset link shortly. Check your spam folder if you don't see it.");
       setSent(true); // show success UI regardless to prevent email enumeration

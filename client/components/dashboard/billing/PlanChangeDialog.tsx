@@ -83,6 +83,14 @@ export const PlanChangeDialog = ({
     : null;
 
   const handleUpdate = async () => {
+    if (selectedProgram === "one_time") {
+      toast({
+        title: "Use the Marketplace for one-time treatments",
+        description: "One-time treatments are purchased through the Marketplace, not subscription settings. Select a subscription or annual plan to continue here.",
+      });
+      return;
+    }
+
     setIsUpdating(true);
     try {
       if (!property?.id) throw new Error("Property information is missing. Please refresh the page.");

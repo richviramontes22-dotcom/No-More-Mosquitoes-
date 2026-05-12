@@ -250,6 +250,14 @@ router.post("/update-subscription-plan", async (req, res) => {
     if (!acreage) throw new Error("Acreage is required");
     if (!frequency) throw new Error("Frequency is required");
 
+    // Guard: one-time programs require Stripe Checkout, not subscription management.
+    // Stripe rejects subscription creation/update with a one-time price ID.
+    if (program === "one_time") {
+      return res.status(400).json({
+        error: "One-time treatments must be purchased through the marketplace — not via subscription management."
+      });
+    }
+
     const user = await getAuthenticatedUser(req);
     const customerId = await getOrCreateStripeCustomer(user);
 
@@ -288,7 +296,8 @@ router.post("/update-subscription-plan", async (req, res) => {
         });
         console.log(`[Billing] Successfully updated subscription ${targetSub.id} for property ${propertyId}`);
       } catch (stripeError: any) {
-        console.error("[Billing] Stripe subscription update failed:", stripeError);
+        const detail = typeof stripeError === 'object' ? (stripeError.message || JSON.stringify(stripeError)) : String(stripeError);
+        console.error("[Billing] Stripe subscription update failed:", detail);
         throw new Error("Failed to update subscription in Stripe");
       }
 
@@ -314,7 +323,8 @@ router.post("/update-subscription-plan", async (req, res) => {
         });
         console.log(`[Billing] Successfully created subscription ${subscription.id} for property ${propertyId}`);
       } catch (stripeError: any) {
-        console.error("[Billing] Stripe subscription creation failed:", stripeError);
+        const detail = typeof stripeError === 'object' ? (stripeError.message || JSON.stringify(stripeError)) : String(stripeError);
+        console.error("[Billing] Stripe subscription creation failed:", detail);
         throw new Error("Failed to create subscription in Stripe");
       }
 
