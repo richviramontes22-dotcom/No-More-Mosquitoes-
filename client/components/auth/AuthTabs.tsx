@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -61,45 +62,34 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
       return;
     }
     if (loginPassword.trim().length < MIN_PASSWORD_LENGTH) {
-      toast({ title: "Check your password", description: `Passwords must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+      toast({ title: "Check your password", description: `Passwords must be at least ${MIN_PASSWORD_LENGTH} characters.`, variant: "destructive" });
       return;
     }
 
-    // Safety timeout to reset the button if Supabase hangs
+    // Safety timeout to reset if Supabase hangs
     const timeoutId = setTimeout(() => {
-      if (isSubmitting) {
-        setIsSubmitting(false);
-        toast({
-          title: "Request taking longer than expected",
-          description: "Please check your internet connection or try refreshing the page.",
-          variant: "destructive"
-        });
-      }
+      setIsSubmitting(false);
+      toast({
+        title: "Request taking longer than expected",
+        description: "Please check your internet connection or try refreshing.",
+        variant: "destructive",
+      });
     }, 10000);
 
     try {
       setIsSubmitting(true);
       await login({ email: loginEmail, password: loginPassword });
       clearTimeout(timeoutId);
-      
-      // Show role-appropriate welcome message based on email
-      const isAdmin = loginEmail.toLowerCase().includes("admin");
-      if (isAdmin) {
-        toast({ title: "Welcome back, Admin.", description: "You're now signed in to the admin panel." });
-      } else {
-        toast({ title: "Welcome back", description: "You're now signed in to your customer portal." });
-      }
-      
+      toast({ title: "Welcome back", description: "You're now signed in to your portal." });
       onSuccess?.("login");
     } catch (error) {
       clearTimeout(timeoutId);
       const message = error instanceof Error ? error.message : "We couldn't verify those details.";
       const isEmailNotConfirmed = message.toLowerCase().includes("confirm") || message.toLowerCase().includes("verify");
-
       toast({
         title: isEmailNotConfirmed ? "Email confirmation required" : "Unable to sign in",
         description: isEmailNotConfirmed
-          ? "Please check your inbox or confirm the user in your Supabase dashboard."
+          ? "Please check your inbox and confirm your email before signing in."
           : message,
         variant: "destructive",
       });
@@ -110,7 +100,6 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
 
   const handleSignupSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
     if (invalidSignupReason) {
       toast({ title: "Update your details", description: invalidSignupReason, variant: "destructive" });
       return;
@@ -120,8 +109,8 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
       setIsSubmitting(true);
       await signUp({ name: signupName, email: signupEmail, password: signupPassword });
       toast({
-        title: "Account Created",
-        description: "You might need to confirm your email before logging in. Check your inbox or the Supabase dashboard."
+        title: "Account created",
+        description: "Check your inbox to confirm your email, then sign in.",
       });
       onSuccess?.("signup");
       setMode("login");
@@ -140,13 +129,13 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
     if (mode === "login") {
       setLoginEmail("johndoe@test.com");
       setLoginPassword("TestCustomer123!");
-      toast({ title: "Customer Account Filled", description: "Click 'Sign in' to proceed." });
+      toast({ title: "Customer credentials filled", description: "Click 'Sign in' to proceed." });
     } else {
       setSignupName("John Doe");
       setSignupEmail("johndoe@test.com");
       setSignupPassword("TestCustomer123!");
       setSignupConfirmPassword("TestCustomer123!");
-      toast({ title: "Customer Account Filled", description: "Click 'Create account' to proceed." });
+      toast({ title: "Customer credentials filled", description: "Click 'Create account' to proceed." });
     }
   };
 
@@ -154,27 +143,29 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
     if (mode === "login") {
       setLoginEmail("admin@nnm.com");
       setLoginPassword("Password!");
-      toast({ title: "Admin Account Filled", description: "Click 'Sign in' to proceed." });
+      toast({ title: "Admin credentials filled", description: "Click 'Sign in' to proceed." });
     } else {
       setSignupName("Admin User");
       setSignupEmail("admin@nnm.com");
       setSignupPassword("Password!");
       setSignupConfirmPassword("Password!");
-      toast({ title: "Admin Account Filled", description: "Click 'Create account' to proceed." });
+      toast({ title: "Admin credentials filled", description: "Click 'Create account' to proceed." });
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="login">Log in</TabsTrigger>
-          <TabsTrigger value="signup">Sign up</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+          <TabsTrigger value="login" className="rounded-lg">Sign in</TabsTrigger>
+          <TabsTrigger value="signup" className="rounded-lg">Create account</TabsTrigger>
         </TabsList>
-        <TabsContent value="login" className="mt-8">
-          <form onSubmit={handleLoginSubmit} className="space-y-6">
-            <div className="grid gap-2">
-              <Label htmlFor="login-email">Email</Label>
+
+        {/* ── Login Tab ── */}
+        <TabsContent value="login" className="mt-6">
+          <form onSubmit={handleLoginSubmit} className="space-y-4" noValidate>
+            <div className="space-y-1.5">
+              <Label htmlFor="login-email">Email address</Label>
               <Input
                 id="login-email"
                 type="email"
@@ -182,30 +173,58 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
                 autoComplete="email"
                 placeholder="you@example.com"
                 value={loginEmail}
-                onChange={(event) => setLoginEmail(event.target.value)}
+                onChange={(e) => setLoginEmail(e.target.value)}
                 required
+                className="rounded-xl h-11"
+                aria-describedby="login-email-desc"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="login-password">Password</Label>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="login-password">Password</Label>
+                {/* Forgot password — always visible, right-aligned for quick access */}
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-medium text-primary hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                  tabIndex={0}
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <Input
                 id="login-password"
                 type="password"
                 autoComplete="current-password"
                 placeholder="Enter your password"
                 value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
+                onChange={(e) => setLoginPassword(e.target.value)}
                 required
+                className="rounded-xl h-11"
               />
             </div>
-            <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in..." : "Sign in"}
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full rounded-full shadow-brand mt-2"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+                  Signing in…
+                </span>
+              ) : "Sign in"}
             </Button>
           </form>
         </TabsContent>
-        <TabsContent value="signup" className="mt-8">
-          <form onSubmit={handleSignupSubmit} className="space-y-6">
-            <div className="grid gap-2">
+
+        {/* ── Sign Up Tab ── */}
+        <TabsContent value="signup" className="mt-6">
+          <form onSubmit={handleSignupSubmit} className="space-y-4" noValidate>
+            <div className="space-y-1.5">
               <Label htmlFor="signup-name">Full name</Label>
               <Input
                 id="signup-name"
@@ -213,12 +232,14 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
                 autoComplete="name"
                 placeholder="Taylor Johnson"
                 value={signupName}
-                onChange={(event) => setSignupName(event.target.value)}
+                onChange={(e) => setSignupName(e.target.value)}
                 required
+                className="rounded-xl h-11"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="signup-email">Email</Label>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="signup-email">Email address</Label>
               <Input
                 id="signup-email"
                 type="email"
@@ -226,38 +247,59 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
                 autoComplete="email"
                 placeholder="you@example.com"
                 value={signupEmail}
-                onChange={(event) => setSignupEmail(event.target.value)}
+                onChange={(e) => setSignupEmail(e.target.value)}
                 required
+                className="rounded-xl h-11"
               />
             </div>
-            <div className="grid gap-2">
+
+            <div className="space-y-1.5">
               <Label htmlFor="signup-password">Password</Label>
               <Input
                 id="signup-password"
                 type="password"
                 autoComplete="new-password"
-                placeholder="Create a password"
+                placeholder="8+ characters"
                 value={signupPassword}
-                onChange={(event) => setSignupPassword(event.target.value)}
+                onChange={(e) => setSignupPassword(e.target.value)}
                 required
                 minLength={MIN_PASSWORD_LENGTH}
+                className="rounded-xl h-11"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="signup-confirm-password">Confirm password</Label>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="signup-confirm">Confirm password</Label>
               <Input
-                id="signup-confirm-password"
+                id="signup-confirm"
                 type="password"
                 autoComplete="new-password"
                 placeholder="Repeat your password"
                 value={signupConfirmPassword}
-                onChange={(event) => setSignupConfirmPassword(event.target.value)}
+                onChange={(e) => setSignupConfirmPassword(e.target.value)}
                 required
                 minLength={MIN_PASSWORD_LENGTH}
+                className="rounded-xl h-11"
               />
             </div>
-            <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Creating account..." : "Create account"}
+
+            {invalidSignupReason && signupConfirmPassword.length > 0 && (
+              <p className="text-xs text-destructive" role="alert">{invalidSignupReason}</p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full rounded-full shadow-brand mt-2"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+                  Creating account…
+                </span>
+              ) : "Create account"}
             </Button>
           </form>
         </TabsContent>
@@ -265,7 +307,7 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
 
       {/* Development-only: test credential shortcuts — stripped from production builds */}
       {import.meta.env.DEV && (
-        <>
+        <div className="space-y-2 pt-2">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border/60" />
@@ -274,16 +316,13 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
               <span className="bg-card px-2 text-muted-foreground">Dev Only</span>
             </div>
           </div>
-
-          <div className="space-y-2">
-            <Button variant="outline" className="w-full border-dashed text-xs" onClick={useCustomerAccount}>
-              [Dev] Fill Customer Credentials
-            </Button>
-            <Button variant="outline" className="w-full border-dashed text-xs" onClick={useAdminAccount}>
-              [Dev] Fill Admin Credentials
-            </Button>
-          </div>
-        </>
+          <Button variant="outline" className="w-full border-dashed text-xs" onClick={useCustomerAccount}>
+            [Dev] Fill Customer Credentials
+          </Button>
+          <Button variant="outline" className="w-full border-dashed text-xs" onClick={useAdminAccount}>
+            [Dev] Fill Admin Credentials
+          </Button>
+        </div>
       )}
     </div>
   );

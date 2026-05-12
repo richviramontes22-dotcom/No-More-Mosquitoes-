@@ -10,7 +10,6 @@ import { useLogo } from "@/contexts/LogoContext";
 import { useTranslation } from "@/hooks/use-translation";
 import { FlagUS, FlagMX, FlagJP, FlagCN } from "@/components/common/FlagIcon";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { useAuthDialog } from "@/components/auth/AuthDialogProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/hooks/useProfile";
 import { useToast } from "@/hooks/use-toast";
@@ -87,7 +86,6 @@ export const SiteHeader = () => {
       return "6";
     }
   })();
-  const { open: openAuthDialog } = useAuthDialog();
   const { language, setLanguage } = useLanguage();
   const { logoStyle } = useLogo();
   const { t } = useTranslation();
@@ -184,11 +182,12 @@ export const SiteHeader = () => {
     [activeUser, navigate, location.pathname],
   );
 
+  // Navigate to the unified /login page — single auth experience for all screen sizes
   const handleAuthOpen = useCallback(
-    (source: string, defaultMode: "login" | "signup" = "login") => {
-      openAuthDialog({ source, defaultMode, redirectTo: "/dashboard" });
+    (_source: string, defaultMode: "login" | "signup" = "login") => {
+      navigate("/login", { state: { mode: defaultMode } });
     },
-    [openAuthDialog],
+    [navigate],
   );
 
   return (

@@ -17,7 +17,6 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { LogoProvider } from "@/contexts/LogoContext";
 import { CartProvider } from "@/contexts/CartContext";
-import { AuthDialogProvider } from "@/components/auth/AuthDialogProvider";
 import { ScheduleDialogProvider } from "@/components/schedule/ScheduleDialogProvider";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -108,8 +107,7 @@ const App = () => (
           <LogoProvider>
             <CartProvider>
             <TooltipProvider>
-              <AuthDialogProvider>
-                <ScheduleDialogProvider>
+              <ScheduleDialogProvider>
                 <Toaster />
                 <Sonner />
                 <Routes>
@@ -204,7 +202,6 @@ const App = () => (
                   </Route>
                 </Routes>
                 </ScheduleDialogProvider>
-              </AuthDialogProvider>
             </TooltipProvider>
             </CartProvider>
           </LogoProvider>
