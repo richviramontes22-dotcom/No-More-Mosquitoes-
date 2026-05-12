@@ -1,0 +1,95 @@
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+node_modules
+dist
+dist-ssr
+build
+coverage
+.turbo
+.cache
+
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.local
+
+# ── Certificates & private keys (never commit) ───────────────────────────────
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# ── Databases ─────────────────────────────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+
+# ── Temporary & backup files ──────────────────────────────────────────────────
+*.backup
+*.bak
+*.tmp
+*.temp
+*.swp
+*~
+
+# ── Editor directories and files ──────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── OS files ──────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Desktop.ini
+
+# ── Internal developer documentation ──────────────────────────────────────────
+# All dev-notes are internal working documents — never publish
+dev-notes/
+
+# ── Claude Code agent files ───────────────────────────────────────────────────
+.claude/
+
+# ── Misc internal configs ─────────────────────────────────────────────────────
+.config/
+*.local.ts
+*.local.js
+
+# ── Internal tooling / AI workflow artifacts ──────────────────────────────────
+.builder/
+reports/
+codex-audit-reports/
+
+# ── Internal documentation directories ────────────────────────────────────────
+docs/
+
+# ── Internal markdown documentation ──────────────────────────────────────────
+# Excludes all .md files except the public-facing README
+*.md
+!README.md
+
+# ── Root-level dev/seed SQL scripts (not migrations) ─────────────────────────
+# Proper migrations live in db/migrations/ and ARE committed
+initialize_database.sql
+seed_admin_data.sql
+update_admin_schema.sql
+DASHBOARD_TABLES.sql
+DASHBOARD_TABLES_SIMPLE.sql
