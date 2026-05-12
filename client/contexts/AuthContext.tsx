@@ -105,6 +105,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
 
+      // PASSWORD_RECOVERY is a temporary session used only by the reset-password page.
+      // Do NOT treat it as a regular sign-in — the ResetPassword component handles it
+      // separately via its own onAuthStateChange listener. If we set the user here,
+      // isAuthenticated becomes true and other components may redirect away from /reset-password.
+      if (event === "PASSWORD_RECOVERY") return;
+
       if (session?.user) {
         const authUser = createAuthUserFromSession(session.user);
         setUser(authUser);

@@ -21,16 +21,23 @@ const ResetPassword = () => {
   // onAuthStateChange fires with event "PASSWORD_RECOVERY" when the user
   // lands on this page after clicking the email link.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" && session) {
         setSessionReady(true);
       }
     });
 
-    // Also check if we already have a valid session (user returning to tab)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setSessionReady(true);
-    });
+    // Fallback: if the Supabase client already processed the hash before this
+    // component mounted, the PASSWORD_RECOVERY event may have already fired.
+    // Detect this by checking the URL hash for the recovery token type.
+    const hash = window.location.hash;
+    if (hash.includes("type=recovery") || hash.includes("type=signup")) {
+      // Hash is present — Supabase will process it and fire PASSWORD_RECOVERY.
+      // getSession() here returns the recovery session if it was already established.
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) setSessionReady(true);
+      });
+    }
 
     return () => subscription.unsubscribe();
   }, []);

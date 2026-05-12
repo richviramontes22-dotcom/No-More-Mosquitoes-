@@ -21,6 +21,15 @@
   status = 200
   to = "/.netlify/functions/api/:splat"
 
+# SPA catch-all: serve index.html for all non-API, non-asset routes.
+# Required so direct navigation (e.g. password reset email links to /reset-password)
+# loads the React SPA instead of returning a Netlify 404.
+# MUST come after the /api/* rule so API calls are not intercepted.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
 # Security headers
 [[headers]]
   for = "/*"

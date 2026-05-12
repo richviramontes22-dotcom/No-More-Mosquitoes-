@@ -63,7 +63,7 @@ function getSecret() {
   return key || undefined;
 }
 
-async function stripeFetch(path: string, init?: RequestInit) {
+async function stripeFetch(path: string, init?: RequestInit, timeoutMs = 8000) {
   const secret = getSecret();
   if (!secret) throw Object.assign(new Error("Stripe not configured"), { status: 501 });
 
@@ -75,16 +75,31 @@ async function stripeFetch(path: string, init?: RequestInit) {
     headers["Content-Type"] = "application/x-www-form-urlencoded";
   }
 
-  const res = await fetch(`${STRIPE_API}${path}`, {
-    ...init,
-    headers: { ...headers, ...init?.headers },
-  } as RequestInit);
+  // Abort controller guards against Netlify's 10s function timeout.
+  // 8s leaves 2s buffer for the outer handler to return a clean error response.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(`${STRIPE_API}${path}`, {
+      ...init,
+      headers: { ...headers, ...init?.headers },
+      signal: controller.signal,
+    } as RequestInit);
+  } catch (fetchErr: any) {
+    clearTimeout(timer);
+    if (fetchErr?.name === "AbortError") {
+      throw Object.assign(new Error("Stripe API request timed out"), { status: 504 });
+    }
+    throw Object.assign(new Error("Stripe API unreachable"), { status: 502 });
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const text = await res.text();
-    const keyPrefix = secret.slice(0, 12);
-    console.error(`[STRIPE DEBUG] Stripe Error (${res.status}): Key prefix: ${keyPrefix}, Path: ${path}, Error:`, text.slice(0, 200));
-    console.error(`Stripe Error (${res.status}):`, text);
+    console.error(`[Billing] Stripe Error (${res.status}): ${path}`, text.slice(0, 200));
     throw Object.assign(new Error(text), { status: res.status });
   }
 
@@ -349,30 +364,48 @@ router.post("/update-subscription-plan", async (req, res) => {
 router.post("/update-subscription-cadence", async (req, res) => {
   try {
     const { propertyId, acreage, newCadence } = req.body;
+
+    if (!propertyId) return res.status(400).json({ error: "Property ID is required" });
+    if (!acreage) return res.status(400).json({ error: "Acreage is required" });
+    if (!newCadence) return res.status(400).json({ error: "New cadence is required" });
+
     const user = await getAuthenticatedUser(req);
     const customerId = await getOrCreateStripeCustomer(user);
 
     const plan = await findStripePriceAsync(acreage, newCadence, false, supabase);
-    if (!plan) throw new Error("Invalid cadence for this property size.");
+    if (!plan) return res.status(400).json({ error: "Invalid cadence for this property size." });
 
-    const subscriptions = await stripeFetch(`/subscriptions?customer=${customerId}&status=active`);
-    const targetSub = subscriptions.data.find((s: any) => s.metadata.property_id === propertyId);
+    const subscriptionData = await stripeFetch(`/subscriptions?customer=${customerId}&status=active`);
 
-    if (targetSub) {
-      const itemId = targetSub.items.data[0].id;
-      await stripeFetch(`/subscriptions/${targetSub.id}`, {
-        method: 'POST',
-        body: new URLSearchParams({
-          'items[0][id]': itemId,
-          'items[0][price]': plan.stripePriceId,
-          'metadata[cadence_days]': newCadence.toString()
-        }).toString()
-      });
+    // Guard: Stripe response must have a data array
+    const subList: any[] = Array.isArray(subscriptionData?.data) ? subscriptionData.data : [];
+    const targetSub = subList.find(
+      (s: any) => s.metadata?.property_id === propertyId
+    );
+
+    if (!targetSub) {
+      // No active subscription found — not an error; cadence unchanged
+      return res.json({ success: true, message: "No active subscription found for this property." });
     }
+
+    const itemId = targetSub.items?.data?.[0]?.id;
+    if (!itemId) {
+      return res.status(500).json({ error: "Subscription item ID could not be resolved." });
+    }
+
+    await stripeFetch(`/subscriptions/${targetSub.id}`, {
+      method: 'POST',
+      body: new URLSearchParams({
+        'items[0][id]': itemId,
+        'items[0][price]': plan.stripePriceId,
+        'metadata[cadence_days]': newCadence.toString()
+      }).toString()
+    });
 
     res.json({ success: true, message: "Cadence updated successfully." });
   } catch (e: any) {
-    res.status(e.status || 500).json({ error: e.message });
+    console.error("[Billing] update-subscription-cadence error:", e.message);
+    res.status(e.status || 500).json({ error: e.message || "Failed to update cadence." });
   }
 });
 
