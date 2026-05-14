@@ -38,7 +38,7 @@ export const translations = {
       toggleChat: "Toggle chat widget",
     },
     hero: {
-      eyebrow: "Premium Insect Control Services",
+      eyebrow: "A California Employee/Community Based Company",
       title: "Enjoy the comfort of your yard all season",
       description:
         "Premium mosquito and insect control for those who expect more from their outdoor space. Precision treatments, proven results, and a 100% satisfaction guarantee—so you can enjoy your yard in total comfort.",
@@ -461,7 +461,7 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
       copyright: "© {year} No More Mosquitoes. All rights reserved.",
       licenses: "California Structural Pest Control License pending publication.",
       attributes: "Insured • 100% satisfaction guarantee.",
-      tagline: "California Employee/Community Based Company",
+      tagline: "Premium Insect Control Services",
       description: "We treat mosquitoes, ticks, ants, spiders, and the pests that keep your family indoors. Every visit comes with a completion video, proactive prevention notes, and weather-adjusted scheduling.",
       callOrText: "Call or Text",
       links: {

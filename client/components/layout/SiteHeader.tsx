@@ -256,10 +256,12 @@ export const SiteHeader = () => {
               </div>
             )}
 
-            {/* Desktop: weather widget + login / sign-out (public pages only) */}
+            {/* Weather widget: always visible on desktop regardless of page */}
+            <HeaderWeatherWidget />
+
+            {/* Desktop: login / sign-out (public pages only — app pages use avatar above) */}
             {!isAppPage && (
               <div className="hidden md:flex items-center gap-2">
-                <HeaderWeatherWidget />
                 {!activeUser ? (
                   <Button
                     variant="outline"
@@ -276,7 +278,8 @@ export const SiteHeader = () => {
               </div>
             )}
 
-            {/* Language selector (always visible) */}
+            {/* Language selector (desktop only — replaced by weather on mobile) */}
+            <div className="hidden md:block">
             <DropdownMenu>
               <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-full border border-border/60 p-2 text-foreground hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                 {language === "en" && <FlagUS />}
@@ -304,6 +307,7 @@ export const SiteHeader = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
 
             {/* Phone icon: mobile only */}
             <a

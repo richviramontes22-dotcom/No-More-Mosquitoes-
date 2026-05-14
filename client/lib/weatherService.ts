@@ -1,7 +1,41 @@
 /**
  * Non-blocking weather service for dashboard and header widget.
  * Falls back gracefully if API fails.
+ * Caches results in sessionStorage for 15 minutes to avoid re-fetching on every navigation.
  */
+
+const CACHE_KEY = "nmm_weather_cache";
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+interface WeatherCache {
+  data: WeatherData;
+  timestamp: number;
+}
+
+function readCache(): WeatherData | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const cache: WeatherCache = JSON.parse(raw);
+    if (Date.now() - cache.timestamp > CACHE_TTL_MS) {
+      sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    // Restore lastUpdated as a Date object
+    return { ...cache.data, lastUpdated: new Date(cache.data.lastUpdated) };
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(data: WeatherData): void {
+  try {
+    const cache: WeatherCache = { data, timestamp: Date.now() };
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // sessionStorage unavailable — non-fatal
+  }
+}
 
 export interface WeatherData {
   temperature: number;
@@ -42,9 +76,10 @@ const getUserLocation = (): Promise<{ lat: number; lon: number }> => {
         resolve({ lat: latitude, lon: longitude });
       },
       (error) => {
-        console.log(`[Weather] Geolocation permission denied or error: ${error.message}, using default location`);
+        console.log(`[Weather] Geolocation denied/error: ${error.message}, using default`);
         resolve({ lat: 33.8353, lon: -117.9129 }); // Anaheim, CA fallback
-      }
+      },
+      { timeout: 3000, maximumAge: 10 * 60 * 1000 } // 3s timeout, accept 10-min cached position
     );
   });
 };
@@ -58,6 +93,13 @@ export const fetchWeatherData = async (
   latitude?: number,
   longitude?: number
 ): Promise<WeatherData | null> => {
+  // Return cached data if still fresh (avoids re-fetching on every navigation)
+  const cached = readCache();
+  if (cached) {
+    console.log("[Weather] Returning cached data");
+    return cached;
+  }
+
   try {
     // If no coordinates provided, attempt to get user's location
     let lat = latitude;
@@ -117,6 +159,7 @@ export const fetchWeatherData = async (
         `Status: ${serviceStatus}`
     );
 
+    writeCache(weatherData);
     return weatherData;
   } catch (err) {
     console.error("[Weather] Fetch failed:", err instanceof Error ? err.message : String(err));

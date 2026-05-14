@@ -6,29 +6,12 @@ export type TeamMember = {
 };
 
 export const leadershipTeam: TeamMember[] = [
+  // Row 1: positions [1][5][3] → Richard, Sandy, Christina
   {
     name: "Richard Viramontes",
     role: "Founder & Lead Technician",
     bio: "Licensed structural pest control operator who personally trains every employee-based technician on California DPR compliance.",
     imageAlt: "Portrait of Richard Viramontes, founder of No More Mosquitoes",
-  },
-  {
-    name: "Elijah Noble",
-    role: "IT Director / Platform Engineer",
-    bio: "Architects the customer platform, service portal, and digital infrastructure that powers every booking, route, and customer interaction.",
-    imageAlt: "Portrait of Elijah Noble, IT Director and Platform Engineer",
-  },
-  {
-    name: "Christina Nguyen",
-    role: "Quality Control",
-    bio: "Ensures every treatment meets our premium standards through post-service inspections, product calibration checks, and technician feedback.",
-    imageAlt: "Portrait of Christina Nguyen, Quality Control",
-  },
-  {
-    name: "Bobby Reynoso",
-    role: "Field Technician",
-    bio: "Delivers precision insecticide applications across Orange County properties, following strict California DPR safety protocols on every visit.",
-    imageAlt: "Portrait of Bobby Reynoso, Field Technician",
   },
   {
     name: "Sandy Viramontes",
@@ -37,9 +20,28 @@ export const leadershipTeam: TeamMember[] = [
     imageAlt: "Portrait of Sandy Viramontes, Account Representative",
   },
   {
+    name: "Christina Nguyen",
+    role: "Quality Control",
+    bio: "Ensures every treatment meets our premium standards through post-service inspections, product calibration checks, and technician feedback.",
+    imageAlt: "Portrait of Christina Nguyen, Quality Control",
+  },
+  // Row 2: positions [4][6][2] → Bobby, Brianna, Elijah
+  {
+    name: "Bobby Reynoso",
+    role: "Field Technician",
+    bio: "Delivers precision insecticide applications across Orange County properties, following strict California DPR safety protocols on every visit.",
+    imageAlt: "Portrait of Bobby Reynoso, Field Technician",
+  },
+  {
     name: "Brianna Miyake",
     role: "Operations & Customer Service",
     bio: "Oversees daily operations and serves as the primary point of contact for customer inquiries, scheduling coordination, and service follow-ups.",
     imageAlt: "Portrait of Brianna Miyake, Operations and Customer Service",
+  },
+  {
+    name: "Elijah Noble",
+    role: "IT / Operations",
+    bio: "Architects the customer platform, service portal, and digital infrastructure that powers every booking, route, and customer interaction.",
+    imageAlt: "Portrait of Elijah Noble, IT and Operations",
   },
 ];

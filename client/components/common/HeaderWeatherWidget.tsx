@@ -55,7 +55,7 @@ export const HeaderWeatherWidget = () => {
 
   if (isLoading) {
     return (
-      <div className="hidden md:flex items-center justify-center rounded-full border border-border/60 p-2 text-muted-foreground opacity-50">
+      <div className="flex items-center justify-center rounded-full border border-border/60 p-2 text-muted-foreground opacity-50">
         <Cloud className="h-5 w-5 animate-pulse" aria-hidden />
         <span className="sr-only">Loading weather</span>
       </div>
@@ -63,7 +63,7 @@ export const HeaderWeatherWidget = () => {
   }
 
   return (
-    <div className="relative hidden md:block">
+    <div className="relative">
       <button
         ref={buttonRef}
         type="button"
