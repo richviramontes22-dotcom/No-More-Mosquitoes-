@@ -7,7 +7,6 @@
 [functions]
   external_node_modules = ["express"]
   node_bundler = "esbuild"
-  timeout = 26
 
 # Force HTTPS redirect
 [[redirects]]
