@@ -248,8 +248,10 @@ export const translations = {
     },
     story: {
       title: "Our Story",
-      subtitle: "How One Backyard Evening Sparked a Mission to Protect Yours",
-      content: `No More Mosquitoes began back in 2016, in the comfort of Grandma's backyard — or so we thought. What started as a relaxing evening quickly turned into a battlefield. Within minutes of stepping outside, we were being eaten alive by mosquitoes. Laughter turned to slaps as we armed ourselves with sprays, lit candles, and tried every gadget we could find. Before long, our conversation turned into the never-ending goodbye from Grandma's home.
+      subtitle: "A California Employee/Community Based Company",
+      content: `At No More Mosquitoes, we provide premium insecticide application services designed for those who expect the highest standard of outdoor comfort. Our mission is to eliminate mosquitoes and other insects that overrun communal areas. Through advanced treatments, precision application, safe & effective insecticides, and exceptional care we guarantee 100% satisfaction in all our treatments. As we commit to protecting the health and comfort of our community, you will undoubtedly trust and enjoy your mosquito-free environment.
+
+No More Mosquitoes began back in 2016, in the comfort of Grandma's backyard — or so we thought. What started as a relaxing evening quickly turned into a battlefield. Within minutes of stepping outside, we were being eaten alive by mosquitoes. Laughter turned to slaps as we armed ourselves with sprays, lit candles, and tried every gadget we could find. Before long, our conversation turned into the never-ending goodbye from Grandma's home.
 
 Our time together was cut short, and those itchy bites were a reminder of a simple problem that deserved a better solution. We promised ourselves to find a safe and dependable way to protect our community from those relentless pests.
 
@@ -257,13 +259,13 @@ Years later, No More Mosquitoes was born with one simple mission: to protect you
 
 From that backyard in 2016 to the homes we serve today, No More Mosquitoes has become a trusted name in pest control. Because for us, this isn't just about bugs — it's about keeping your family safe, your time outdoors enjoyable, and your trust well-earned.`,
       ourStoryTitle: "Our Story",
-      ourStoryDesc: "The family story behind No More Mosquitoes.",
+      ourStoryDesc: "Premium insecticide application services for those who expect the highest standard of outdoor comfort.",
       valuesTitle: "The values that guide every route.",
       valuesDesc: "Our brand DNA comes straight from our family—care for others, do the work right the first time, and keep promises.",
       teamDesc: "Every technician is trained in-house on California structural pest compliance, safety protocols, and customer care.",
       getFirstVisit: "Get Your First Visit",
       storyEyebrow: "Our story",
-      heroDesc: "Born in 2016 from Grandma’s backyard, built on honesty, hard work, and dependability. 100% satisfaction guarantee.",
+      heroDesc: "Premium insecticide application services for those who expect the highest standard of outdoor comfort. 100% satisfaction guarantee.",
       heroIntro: "We transformed a frustrating family gathering into a full-service mosquito and pest program trusted by hundreds of Orange County homeowners.",
       meetTeam: "Meet the Team",
       brandValues: [

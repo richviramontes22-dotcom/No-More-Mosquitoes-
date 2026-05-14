@@ -110,6 +110,19 @@ const IMAGE_URL_MAP: Record<string, string> = {
   "fish_variety.jpg": "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F6dd4876bcabb4733a3557cba33d32165?format=webp&width=800&height=1200",
   "pond-fish-setup.jpg": "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F6dd4876bcabb4733a3557cba33d32165?format=webp&width=800&height=1200",
   "pond_fish_setup.jpg": "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F6dd4876bcabb4733a3557cba33d32165?format=webp&width=800&height=1200",
+
+  // Add-on Service Images (local public assets)
+  "mosquito-dunks.jpg": "/addons/mosquito-dunks.jpg",
+  "mosquito_dunks.jpg": "/addons/mosquito-dunks.jpg",
+  "Mosquito_Dunks.jpg": "/addons/mosquito-dunks.jpg",
+  "gutter-cleaning.jpg": "/addons/gutter-cleaning.jpg",
+  "gutter_cleaning.jpg": "/addons/gutter-cleaning.jpg",
+  "Gutter_Cleaning_Service.jpg": "/addons/gutter-cleaning.jpg",
+  "flytrap-service.jpg": "/addons/flytrap-service.jpg",
+  "flytrap_service.jpg": "/addons/flytrap-service.jpg",
+  "spiderweb-removal.jpg": "/addons/spiderweb-removal.jpg",
+  "spiderweb-cleaning.jpg": "/addons/spiderweb-removal.jpg",
+  "spiderweb_cleaning.jpg": "/addons/spiderweb-removal.jpg",
 };
 
 /**
@@ -125,6 +138,11 @@ const IMAGE_URL_MAP: Record<string, string> = {
 export function resolveImageUrl(filename: string | null): string | null {
   if (!filename) {
     return null;
+  }
+
+  // Pass through values that are already full URLs or absolute paths
+  if (filename.startsWith("http") || filename.startsWith("/")) {
+    return filename;
   }
 
   // Try exact match first

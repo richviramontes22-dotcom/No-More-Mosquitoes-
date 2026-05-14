@@ -1,6 +1,6 @@
 export const img_logo_nomoremoss_black = {
-  src: "https://cdn.builder.io/api/v1/image/assets%2F3f65886cb3984feeb522bf6a7d2292f8%2F2b3c51840df24579b587af7ce8f714ec?format=webp&width=800&height=1200",
-  alt: "NO MORE MOSQUITOES logo",
+  src: "/nmm-logo.png",
+  alt: "No More Mosquitoes and Bugs logo",
 };
 
 export const img_logo_full_text = {

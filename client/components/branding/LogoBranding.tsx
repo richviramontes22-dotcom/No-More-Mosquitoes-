@@ -34,7 +34,7 @@ const LogoBranding: React.FC<LogoBrandingProps> = ({
     <div className={cn("flex items-center gap-3", className)}>
       {/* Icon: flex-shrink-0 so it never compresses when space is tight */}
       <LogoCutout
-        className={cn("h-12 w-12 sm:h-14 sm:w-14 md:h-16 md:w-16 flex-shrink-0", iconClassName)}
+        className={cn("h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 flex-shrink-0", iconClassName)}
         alt="No More Mosquitoes icon"
       />
       {/* Text block: min-w-0 allows it to shrink and wrap on narrow viewports */}

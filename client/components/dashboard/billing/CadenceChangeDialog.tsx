@@ -12,11 +12,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Clock, CheckCircle2, Loader2 } from "lucide-react";
 import { supabase, withTimeout } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 interface CadenceChangeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   propertyId: string;
+  acreage: number;
   currentCadence: number;
   onSuccess: (newCadence: number) => void;
 }
@@ -25,9 +27,11 @@ export const CadenceChangeDialog = ({
   open,
   onOpenChange,
   propertyId,
+  acreage,
   currentCadence,
   onSuccess,
 }: CadenceChangeDialogProps) => {
+  const { toast } = useToast();
   const [selectedCadence, setSelectedCadence] = useState(currentCadence.toString());
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -37,7 +41,7 @@ export const CadenceChangeDialog = ({
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      if (!token) throw new Error("No active session");
+      if (!token) throw new Error("Your session has expired. Please log in again.");
 
       const response = await withTimeout(fetch("/api/billing/update-subscription-cadence", {
         method: "POST",
@@ -47,17 +51,32 @@ export const CadenceChangeDialog = ({
         },
         body: JSON.stringify({
           propertyId,
-          newCadence: parseInt(selectedCadence)
+          acreage,
+          newCadence: parseInt(selectedCadence),
         }),
       }), 10000, "Update cadence");
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to update cadence");
+      let data: any = {};
+      try { data = await response.json(); } catch { /* non-JSON body */ }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          (response.status === 502 || response.status === 503
+            ? "The server took too long to respond. Please try again."
+            : "Failed to update cadence.")
+        );
+      }
 
       onSuccess(parseInt(selectedCadence));
       onOpenChange(false);
     } catch (error: any) {
       console.error("Cadence Update Error:", error);
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update service frequency. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsUpdating(false);
     }

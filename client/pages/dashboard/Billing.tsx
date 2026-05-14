@@ -599,6 +599,7 @@ const Billing = () => {
           }
         }}
         propertyId={selectedProperty?.id || ""}
+        acreage={selectedProperty?.acreage ?? 0}
         currentCadence={selectedProperty?.cadence || 30}
         onSuccess={handleCadenceChangeSuccess}
       />

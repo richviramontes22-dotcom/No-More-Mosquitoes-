@@ -121,9 +121,14 @@ export const PlanChangeDialog = ({
         "Update plan"
       );
 
-      const data = await response.json();
+      let data: any = {};
+      try { data = await response.json(); } catch { /* non-JSON body (Netlify 502 page) */ }
+
       if (!response.ok) {
-        const errorMsg = data.error || "An error occurred";
+        const errorMsg = data?.error
+          || (response.status === 502 || response.status === 503
+            ? "The server took too long to respond. Please try again in a moment."
+            : "An error occurred");
         if (errorMsg.includes("No active subscription"))
           throw new Error("No subscription found. Please create a new subscription first.");
         if (errorMsg.includes("Invalid plan configuration"))
@@ -139,7 +144,7 @@ export const PlanChangeDialog = ({
           selectedProgram === "annual"
             ? pricing?.annualTotal || 0
             : pricing?.perVisit || 0,
-        cadence: selectedProgram === "one_time" ? undefined : selectedFrequency,
+        cadence: selectedFrequency,
       });
       onOpenChange(false);
 

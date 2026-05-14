@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/hooks/useProfile";
 import { useToast } from "@/hooks/use-toast";
 import { siteConfig } from "@/data/site";
+import { HeaderWeatherWidget } from "@/components/common/HeaderWeatherWidget";
 
 const NAV_LINKS = [
   { label: "Home", path: "/", key: "home" },
@@ -255,9 +256,10 @@ export const SiteHeader = () => {
               </div>
             )}
 
-            {/* Desktop: login / sign-out (public pages only) */}
+            {/* Desktop: weather widget + login / sign-out (public pages only) */}
             {!isAppPage && (
-              <div className="hidden md:flex items-center">
+              <div className="hidden md:flex items-center gap-2">
+                <HeaderWeatherWidget />
                 {!activeUser ? (
                   <Button
                     variant="outline"

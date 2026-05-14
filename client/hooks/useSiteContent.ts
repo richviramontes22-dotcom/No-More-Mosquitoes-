@@ -11,6 +11,8 @@ export const CONTENT_DEFAULTS: Record<string, string> = {
   hero_cta_secondary:  "Check Pricing by Address",
   services_intro:      "Premium protection that is family- and pet-safe — California-approved, non-toxic insecticides that eliminate mosquitoes while keeping your home protected.",
   about_tagline:       "A California Employee/Community Based Company",
+  about_mission:       "At No More Mosquitoes, we provide premium insecticide application services designed for those who expect the highest standard of outdoor comfort. Our mission is to eliminate mosquitoes and other insects that overrun communal areas. Through advanced treatments, precision application, safe & effective insecticides, and exceptional care we guarantee 100% satisfaction in all our treatments. As we commit to protecting the health and comfort of our community, you will undoubtedly trust and enjoy your mosquito-free environment.",
+  about_story:         "No More Mosquitoes began back in 2016, in the comfort of Grandma's backyard — or so we thought. What started as a relaxing evening quickly turned into a battlefield. Within minutes of stepping outside, we were being eaten alive by mosquitoes. Laughter turned to slaps as we armed ourselves with sprays, lit candles, and tried every gadget we could find. Before long, our conversation turned into the never-ending goodbye from Grandma's home.\n\nOur time together was cut short, and those itchy bites were a reminder of a simple problem that deserved a better solution. We promised ourselves to find a safe and dependable way to protect our community from those relentless pests.\n\nYears later, No More Mosquitoes was born with one simple mission: to protect your space and your peace of mind. We built NMM on the same values Grandma instilled in us — honesty, hard work, and dependability. When we say we'll protect your yard, we mean it. That's why we back every service with a 100% satisfaction guarantee. You can count on us to show up on time, deliver reliable results, and keep your home mosquito-free all season long.\n\nFrom that backyard in 2016 to the homes we serve today, No More Mosquitoes has become a trusted name in pest control. Because for us, this isn't just about bugs — it's about keeping your family safe, your time outdoors enjoyable, and your trust well-earned.",
   guarantee_text:      "100% satisfaction guarantee — so you can enjoy your yard in total comfort.",
   footer_tagline:      "Premium Insect Control Services",
 };
@@ -30,6 +32,8 @@ export const CONTENT_SLOTS = [
   { key: "hero_cta_secondary", label: "Hero Secondary Button",     maxLength: 40 },
   { key: "services_intro",     label: "Services Introduction",     maxLength: 300 },
   { key: "about_tagline",      label: "About / Our Story Tagline", maxLength: 120 },
+  { key: "about_mission",      label: "Our Story — Mission Statement", maxLength: 800 },
+  { key: "about_story",        label: "Our Story — Grandma's Story (separate paragraphs with blank line)", maxLength: 3000 },
   { key: "guarantee_text",     label: "Guarantee Description",     maxLength: 220 },
   { key: "footer_tagline",     label: "Footer Tagline",            maxLength: 60 },
 ] as const;

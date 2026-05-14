@@ -127,7 +127,9 @@ const CONTENT_USAGE: Record<string, { whereUsed: string; source: string; note?: 
   hero_cta_text: { whereUsed: "Website Manager Preview only", source: "CMS Slot", note: "Public homepage currently uses translation text for this CTA.", needsMigration: true },
   hero_cta_secondary: { whereUsed: "Website Manager Preview only", source: "CMS Slot", note: "Public homepage currently uses translation text for this CTA.", needsMigration: true },
   services_intro: { whereUsed: "Homepage Services Section", source: "CMS Managed" },
-  about_tagline: { whereUsed: "Our Story Page Hero", source: "CMS Managed" },
+  about_tagline: { whereUsed: "Deprecated — no longer shown publicly", source: "CMS Slot", note: "Replaced by about_mission and about_story slots. Can be safely ignored.", needsMigration: true },
+  about_mission: { whereUsed: "Our Story Page — Mission Statement Hero", source: "CMS Managed" },
+  about_story:   { whereUsed: "Our Story Page — Grandma's Story Section", source: "CMS Managed" },
   guarantee_text: { whereUsed: "Guarantee Page Hero", source: "CMS Managed" },
   footer_tagline: { whereUsed: "Footer", source: "CMS Managed" },
 };

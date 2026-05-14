@@ -1,5 +1,5 @@
 /**
- * Non-blocking weather service for dashboard.
+ * Non-blocking weather service for dashboard and header widget.
  * Falls back gracefully if API fails.
  */
 
@@ -10,6 +10,12 @@ export interface WeatherData {
   humidity: number;
   serviceStatus: "good" | "caution" | "reschedule";
   lastUpdated: Date;
+  // Extended fields for header widget
+  uvi?: number;
+  precipitation?: number;
+  visibility?: number;
+  pressure?: number;
+  airQualityIndex?: number;
 }
 
 export interface WeatherError {
@@ -66,7 +72,7 @@ export const fetchWeatherData = async (
     console.log(`[Weather] Fetching weather data for coordinates: ${lat}, ${lon}`);
 
     const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit`,
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation,surface_pressure,visibility,uv_index&temperature_unit=fahrenheit`,
       { signal: AbortSignal.timeout(5000) }
     );
 
@@ -92,13 +98,17 @@ export const fetchWeatherData = async (
       serviceStatus = "caution"; // Rain or moderate wind
     }
 
-    const weatherData = {
+    const weatherData: WeatherData = {
       temperature: Math.round(current.temperature_2m),
       condition: getWeatherCondition(current.weather_code),
       windSpeed: Math.round(current.wind_speed_10m),
       humidity: current.relative_humidity_2m,
       serviceStatus,
       lastUpdated: new Date(),
+      uvi: current.uv_index != null ? Math.round(current.uv_index * 10) / 10 : undefined,
+      precipitation: current.precipitation != null ? Math.round(current.precipitation * 100) / 100 : undefined,
+      visibility: current.visibility != null ? Math.round(current.visibility / 1000 * 10) / 10 : undefined,
+      pressure: current.surface_pressure != null ? Math.round(current.surface_pressure) : undefined,
     };
 
     console.log(

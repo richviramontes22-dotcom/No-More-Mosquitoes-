@@ -85,9 +85,7 @@ async function stripeFetch(path: string, init?: RequestInit) {
 
   if (!res.ok) {
     const text = await res.text();
-    const keyPrefix = secret.slice(0, 12);
-    console.error(`[STRIPE DEBUG] Stripe Error (${res.status}): Key prefix: ${keyPrefix}, Path: ${path}, Error:`, text.slice(0, 200));
-    console.error(`Stripe Error (${res.status}):`, text);
+    console.error(`[Marketplace] Stripe Error (${res.status}): ${path}`, text.slice(0, 200));
     throw Object.assign(new Error(text), { status: res.status });
   }
 

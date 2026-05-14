@@ -54,18 +54,46 @@ const FAQSection = ({
   const defaultTitle = title || t("faq.defaultTitle");
   const defaultDescription = description || t("faq.defaultDesc");
 
+  const isSearching = searchable && query.trim().length > 0;
+
   const filteredFaqs = useMemo(() => {
-    // Filter by IDs if provided
     const base = ids?.length
       ? allFaqs.filter((faq) => ids.includes(faq.id))
       : allFaqs;
-
     if (!query.trim()) return base;
     const q = query.toLowerCase();
     return base.filter((faq) =>
       faq.question.toLowerCase().includes(q) || faq.answer.toLowerCase().includes(q)
     );
   }, [allFaqs, ids, query]);
+
+  // Group by category when not in search mode
+  const grouped = useMemo(() => {
+    if (isSearching) return null;
+    const base = ids?.length ? allFaqs.filter((faq) => ids.includes(faq.id)) : allFaqs;
+    const map = new Map<string, typeof base>();
+    for (const faq of base) {
+      const cat = (faq as any).category || "General";
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(faq);
+    }
+    return map;
+  }, [allFaqs, ids, isSearching]);
+
+  const renderAccordion = (items: typeof filteredFaqs) => (
+    <Accordion type="multiple" className="divide-y divide-border/80 rounded-[28px] border border-border/70 bg-card/90 px-6">
+      {items.map((faq) => (
+        <AccordionItem key={faq.id} value={faq.id} className="border-none">
+          <AccordionTrigger className="text-left text-base font-semibold text-foreground">
+            {t(`faq.${faq.id}.question`) || faq.question}
+          </AccordionTrigger>
+          <AccordionContent className="text-sm text-muted-foreground">
+            {t(`faq.${faq.id}.answer`) || faq.answer}
+          </AccordionContent>
+        </AccordionItem>
+      ))}
+    </Accordion>
+  );
 
   return (
     <section className={cn("bg-background py-24", className)}>
@@ -87,25 +115,29 @@ const FAQSection = ({
             />
           </div>
         ) : null}
-        <Accordion
-          type="multiple"
-          className="mt-12 divide-y divide-border/80 rounded-[28px] border border-border/70 bg-card/90 px-6"
-        >
-          {filteredFaqs.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">{t("faq.noAnswers")}</div>
-          ) : (
-            filteredFaqs.map((faq) => (
-              <AccordionItem key={faq.id} value={faq.id} className="border-none">
-                <AccordionTrigger className="text-left text-base font-semibold text-foreground">
-                  {t(`faq.${faq.id}.question`) || faq.question}
-                </AccordionTrigger>
-                <AccordionContent className="text-sm text-muted-foreground">
-                  {t(`faq.${faq.id}.answer`) || faq.answer}
-                </AccordionContent>
-              </AccordionItem>
-            ))
-          )}
-        </Accordion>
+
+        {/* Grouped by category (default view) */}
+        {!isSearching && grouped ? (
+          <div className="mt-12 space-y-10">
+            {Array.from(grouped.entries()).map(([category, items]) => (
+              <div key={category}>
+                <h2 className="mb-4 text-sm font-bold uppercase tracking-[0.2em] text-primary">
+                  {category}
+                </h2>
+                {renderAccordion(items)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Flat list during search */
+          <div className="mt-12">
+            {filteredFaqs.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">{t("faq.noAnswers")}</div>
+            ) : (
+              renderAccordion(filteredFaqs)
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

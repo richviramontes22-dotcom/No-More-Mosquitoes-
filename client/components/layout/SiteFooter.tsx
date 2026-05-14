@@ -181,6 +181,26 @@ export const SiteFooter = () => {
           </a>
         </div>
 
+        {/* Trust Badges */}
+        <div className="flex flex-wrap items-center justify-center gap-3 border-t border-border/40 pt-8">
+          {[
+            "Licensed",
+            "Insured",
+            "100% Satisfaction Guarantee",
+            "Employee/Community Based Company",
+          ].map((badge) => (
+            <span
+              key={badge}
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-primary"
+            >
+              <svg viewBox="0 0 12 12" className="h-3 w-3 flex-shrink-0 fill-primary" aria-hidden>
+                <path d="M10.28 2.28L4 8.56 1.72 6.28a1 1 0 0 0-1.44 1.44l3 3a1 1 0 0 0 1.44 0l7-7a1 1 0 0 0-1.44-1.44z" />
+              </svg>
+              {badge}
+            </span>
+          ))}
+        </div>
+
         {/* Compliance Section - Simple logos */}
         <div className="flex flex-wrap items-center justify-center gap-8 border-t border-border/40 pt-10">
           <a
@@ -222,6 +242,21 @@ export const SiteFooter = () => {
               src={img_anaheim_seal.src}
               alt={img_anaheim_seal.alt}
               className="h-32 sm:h-44 w-auto grayscale-0"
+            />
+          </a>
+
+          <a
+            href="https://www.ca.gov"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition hover:opacity-80 inline-block"
+            aria-label="State of California Seal"
+          >
+            <img
+              src="/ca-state-seal.jpg"
+              alt="State of California Seal"
+              className="h-32 sm:h-44 w-auto grayscale-0 object-contain"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
             />
           </a>
         </div>

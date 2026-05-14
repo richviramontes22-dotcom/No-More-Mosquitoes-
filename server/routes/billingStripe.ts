@@ -58,9 +58,21 @@ function getStripeOrigin(request: any): string {
 
 function getSecret() {
   const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || process.env.STRIPE_SECRET;
+  if (!key) return undefined;
 
-  // TEMPORARY DEBUG: Log Stripe key source (safe - only prefix)
-  return key || undefined;
+  // Environment/mode mismatch guard — logs a warning but does not block.
+  // Prevents test keys running in production or live keys running in dev by accident.
+  const isLiveKey = key.startsWith("sk_live_");
+  const isTestKey = key.startsWith("sk_test_");
+  const isProd = process.env.NODE_ENV === "production";
+  if (isProd && isTestKey) {
+    console.warn("[Billing] WARNING: STRIPE_SECRET_KEY is a TEST key but NODE_ENV=production. Charges will not be real.");
+  }
+  if (!isProd && isLiveKey) {
+    console.warn("[Billing] WARNING: STRIPE_SECRET_KEY is a LIVE key but NODE_ENV is not production. Real charges may occur.");
+  }
+
+  return key;
 }
 
 async function stripeFetch(path: string, init?: RequestInit, timeoutMs = 8000) {
@@ -247,7 +259,7 @@ router.post("/update-subscription-plan", async (req, res) => {
 
     // Validate required fields
     if (!propertyId) throw new Error("Property ID is required");
-    if (!acreage) throw new Error("Acreage is required");
+    if (acreage === undefined || acreage === null) throw new Error("Acreage is required");
     if (!frequency) throw new Error("Frequency is required");
 
     // Guard: one-time programs require Stripe Checkout, not subscription management.
@@ -261,19 +273,25 @@ router.post("/update-subscription-plan", async (req, res) => {
     const user = await getAuthenticatedUser(req);
     const customerId = await getOrCreateStripeCustomer(user);
 
-    // 1. Resolve new Price ID
-    const plan = await findStripePriceAsync(acreage, frequency, program === "one_time", supabase);
-    if (!plan) {
-      throw new Error(`Invalid plan configuration: acreage=${acreage}, frequency=${frequency}, program=${program}`);
+    // 1+2. Resolve price AND fetch subscriptions in parallel — cuts wall-clock time
+    //       significantly vs. sequential calls (each Stripe call can take 500-2000ms).
+    let plan: any;
+    let subscriptions: any;
+    try {
+      [plan, subscriptions] = await Promise.all([
+        findStripePriceAsync(acreage, frequency, false, supabase),
+        stripeFetch(`/subscriptions?customer=${customerId}&limit=100`),
+      ]);
+    } catch (parallelError: any) {
+      const detail = typeof parallelError === 'object'
+        ? (parallelError.message || JSON.stringify(parallelError))
+        : String(parallelError);
+      console.error("[Billing] Plan lookup or subscription fetch failed:", detail);
+      throw Object.assign(new Error("Failed to load plan data. Please try again."), { status: 502 });
     }
 
-    // 2. Find existing subscription for this property (check all non-cancelled statuses)
-    let subscriptions;
-    try {
-      subscriptions = await stripeFetch(`/subscriptions?customer=${customerId}&limit=100`);
-    } catch (stripeError: any) {
-      console.error("[Billing] Stripe fetch error:", stripeError);
-      throw new Error("Failed to fetch subscriptions from Stripe");
+    if (!plan) {
+      throw new Error(`Invalid plan configuration: acreage=${acreage}, frequency=${frequency}, program=${program}`);
     }
 
     const targetSub = subscriptions.data?.find((s: any) =>
@@ -309,6 +327,10 @@ router.post("/update-subscription-plan", async (req, res) => {
       const params = new URLSearchParams({
         customer: customerId,
         'items[0][price]': plan.stripePriceId,
+        // default_incomplete: subscription is created without immediately charging.
+        // Prevents hard failure when customer has no default payment method at creation time.
+        'payment_behavior': 'default_incomplete',
+        'payment_settings[save_default_payment_method]': 'on_subscription',
         'metadata[user_id]': user.id,
         'metadata[property_id]': propertyId,
         'metadata[tier_key]': plan.id,
@@ -325,7 +347,13 @@ router.post("/update-subscription-plan", async (req, res) => {
       } catch (stripeError: any) {
         const detail = typeof stripeError === 'object' ? (stripeError.message || JSON.stringify(stripeError)) : String(stripeError);
         console.error("[Billing] Stripe subscription creation failed:", detail);
-        throw new Error("Failed to create subscription in Stripe");
+        // Surface a meaningful message for the most common creation failure
+        const isNoPaymentMethod = detail.includes("payment") || detail.includes("payment_method") || detail.includes("card");
+        throw new Error(
+          isNoPaymentMethod
+            ? "No payment method found. Please add a payment method before updating your plan."
+            : "Failed to create subscription in Stripe"
+        );
       }
 
       // Also save to Supabase for local tracking
@@ -376,16 +404,29 @@ router.post("/update-subscription-cadence", async (req, res) => {
     const { propertyId, acreage, newCadence } = req.body;
 
     if (!propertyId) return res.status(400).json({ error: "Property ID is required" });
-    if (!acreage) return res.status(400).json({ error: "Acreage is required" });
+    if (acreage === undefined || acreage === null) return res.status(400).json({ error: "Acreage is required" });
     if (!newCadence) return res.status(400).json({ error: "New cadence is required" });
 
     const user = await getAuthenticatedUser(req);
     const customerId = await getOrCreateStripeCustomer(user);
 
-    const plan = await findStripePriceAsync(acreage, newCadence, false, supabase);
-    if (!plan) return res.status(400).json({ error: "Invalid cadence for this property size." });
+    // Resolve price + fetch subscriptions in parallel
+    let plan: any;
+    let subscriptionData: any;
+    try {
+      [plan, subscriptionData] = await Promise.all([
+        findStripePriceAsync(acreage, newCadence, false, supabase),
+        stripeFetch(`/subscriptions?customer=${customerId}&status=active`),
+      ]);
+    } catch (parallelError: any) {
+      const detail = typeof parallelError === 'object'
+        ? (parallelError.message || JSON.stringify(parallelError))
+        : String(parallelError);
+      console.error("[Billing] Cadence plan lookup or subscription fetch failed:", detail);
+      return res.status(502).json({ error: "Failed to load plan data. Please try again." });
+    }
 
-    const subscriptionData = await stripeFetch(`/subscriptions?customer=${customerId}&status=active`);
+    if (!plan) return res.status(400).json({ error: "Invalid cadence for this property size." });
 
     // Guard: Stripe response must have a data array
     const subList: any[] = Array.isArray(subscriptionData?.data) ? subscriptionData.data : [];
