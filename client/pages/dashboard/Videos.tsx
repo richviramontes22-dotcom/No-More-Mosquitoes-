@@ -253,15 +253,6 @@ const Videos = () => {
         )}
       </div>
 
-      <div className="rounded-[32px] bg-muted/40 border border-border/60 p-10 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-background shadow-sm mb-6">
-          <VideoIcon className="h-8 w-8 text-primary" />
-        </div>
-        <h4 className="text-xl font-bold font-display mb-2">Technician Notes</h4>
-        <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
-          Every visit includes a detailed video recap so you can see exactly where we treated and any areas of concern our technicians identified.
-        </p>
-      </div>
     </div>
   );
 };

@@ -5,6 +5,11 @@ const router = Router();
 const REGRID_API_KEY = process.env.REGRID_API_KEY?.trim();
 const REGRID_API_BASE = "https://api.regrid.com/api/v2";
 
+// Netlify functions have a 10-second execution limit.
+// Allow 7 seconds total for all Regrid attempts (3s headroom for overhead).
+const TOTAL_BUDGET_MS = 7000;
+const PER_ATTEMPT_MS  = 3000;
+
 interface RegridParcel {
   acreage?: number;
   lot_area_sqft?: number;
@@ -19,12 +24,19 @@ interface RegridResponse {
   }>;
 }
 
-// Convert square feet to acres
-const sqftToAcres = (sqft: number) => {
-  return Math.round((sqft / 43560) * 100) / 100;
-};
+const sqftToAcres = (sqft: number) => Math.round((sqft / 43560) * 100) / 100;
 
-// Get parcel information by address
+// Fetch with a hard timeout — aborts and throws if the deadline is exceeded.
+async function fetchWithTimeout(url: string, headers: Record<string, string>, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { method: "GET", headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 router.post("/parcel", async (req, res) => {
   try {
     let { address, zip, city, state } = req.body;
@@ -33,129 +45,112 @@ router.post("/parcel", async (req, res) => {
       return res.status(400).json({ error: "Address and ZIP code required" });
     }
 
-    // --- TEMPORARY FALLBACK FOR TEST ADDRESS ---
+    // Hardcoded bypass for the dev test address — no API call needed.
     if (address.toLowerCase().includes("caminito escobedo") || address.toLowerCase().includes("22216")) {
-      console.log("Using pre-verified data for test address.");
-      return res.json({
-        acreage: 0.07,
-        sqft: 3049,
-        note: "Data retrieved from local cache"
-      });
+      console.log("[Regrid] Using pre-verified data for test address.");
+      return res.json({ acreage: 0.07, sqft: 3049, note: "Data retrieved from local cache" });
     }
-    // --- END FALLBACK ---
 
     if (!REGRID_API_KEY) {
-      console.error("REGRID_API_KEY is missing or empty");
+      console.error("[Regrid] REGRID_API_KEY is missing or empty");
       return res.status(501).json({ error: "Regrid API not configured" });
     }
-    console.log(`REGRID_API_KEY length: ${REGRID_API_KEY.length}`);
 
-    // Basic normalization: trim and remove extra spaces
+    // Normalize input
     address = address.trim().replace(/\s+/g, " ");
-    zip = zip.trim();
-    city = city?.trim().replace(/\s+/g, " ");
-    state = state?.trim();
+    zip     = zip.trim();
+    city    = city?.trim().replace(/\s+/g, " ");
+    state   = state?.trim();
 
-    // Map common state names to abbreviations for better Regrid matching
     const stateMap: Record<string, string> = {
-      "california": "CA",
-      "texas": "TX",
-      "florida": "FL",
-      "new york": "NY",
-      // Add more if needed, but CA is primary for this user
+      "california": "CA", "texas": "TX", "florida": "FL", "new york": "NY",
     };
-    if (state && stateMap[state.toLowerCase()]) {
-      state = stateMap[state.toLowerCase()];
-    }
+    if (state && stateMap[state.toLowerCase()]) state = stateMap[state.toLowerCase()];
 
-    // Search for parcels by address - including city and state if provided
     const searchParts = [address];
-    if (city) searchParts.push(city);
+    if (city)  searchParts.push(city);
     if (state) searchParts.push(state);
     searchParts.push(zip);
 
     const searchQuery = encodeURIComponent(searchParts.join(", "));
-    // Use token query parameter which is most widely supported by Regrid v2
-    const buildSearchUrl = (baseUrl: string, params: string) => {
-      const joinChar = baseUrl.includes("?") ? "&" : "?";
-      return `${baseUrl}${joinChar}${params}&token=${REGRID_API_KEY}`;
+
+    const buildUrl = (baseUrl: string, params: string) => {
+      const sep = baseUrl.includes("?") ? "&" : "?";
+      return `${baseUrl}${sep}${params}&token=${REGRID_API_KEY}`;
     };
 
-    let searchUrl = buildSearchUrl(`${REGRID_API_BASE}/parcels`, `q=${searchQuery}&limit=1`);
+    const headers = { "Content-Type": "application/json" };
 
-    console.log(`Searching Regrid (Primary): ${searchUrl.replace(REGRID_API_KEY || "", "TOKEN")}`);
+    // Build the fallback chain — tried in order until one returns features.
+    const attempts = [
+      buildUrl(`${REGRID_API_BASE}/parcels`, `q=${searchQuery}&limit=1`),
+      buildUrl(`${REGRID_API_BASE}/parcels`, [
+        `address=${encodeURIComponent(address)}`,
+        `zip=${encodeURIComponent(zip)}`,
+        city  ? `city=${encodeURIComponent(city)}`   : "",
+        state ? `state=${encodeURIComponent(state)}` : "",
+        "limit=1",
+      ].filter(Boolean).join("&")),
+      buildUrl(`${REGRID_API_BASE}/parcels`, `q=${encodeURIComponent(`${address}, ${zip}`)}&limit=1`),
+      buildUrl(`${REGRID_API_BASE}/parcels/typeahead`, `query=${searchQuery}&limit=1`),
+    ];
 
-    const headers = {
-      "Content-Type": "application/json"
-    };
-
-    let response = await fetch(searchUrl, {
-      method: "GET",
-      headers: headers,
-    });
-
+    const deadline = Date.now() + TOTAL_BUDGET_MS;
+    let response: Response | null = null;
     let data: RegridResponse = {};
-    if (response.ok) {
-      data = await response.json() as RegridResponse;
-    }
 
-    // If initial search returns no features or fails, try alternative formats
-    if (!response.ok || !data.features || data.features.length === 0) {
-      console.log("Primary search failed or found nothing, trying fallback with explicit parameters...");
-      let fallbackParams = `address=${encodeURIComponent(address)}&zip=${encodeURIComponent(zip)}`;
-      if (city) fallbackParams += `&city=${encodeURIComponent(city)}`;
-      if (state) fallbackParams += `&state=${encodeURIComponent(state)}`;
-
-      searchUrl = buildSearchUrl(`${REGRID_API_BASE}/parcels`, `${fallbackParams}&limit=1`);
-      response = await fetch(searchUrl, {
-        method: "GET",
-        headers: headers,
-      });
-      if (response.ok) {
-        data = await response.json() as RegridResponse;
+    for (let i = 0; i < attempts.length; i++) {
+      const remaining = deadline - Date.now();
+      if (remaining < 500) {
+        console.warn("[Regrid] Budget exhausted — stopping fallback chain early");
+        break;
       }
-    }
 
-    if (!response.ok || !data.features || data.features.length === 0) {
-      console.log("Secondary search failed or found nothing, trying fallback with just address and zip...");
-      searchUrl = buildSearchUrl(`${REGRID_API_BASE}/parcels`, `q=${encodeURIComponent(`${address}, ${zip}`)}&limit=1`);
-      response = await fetch(searchUrl, {
-        method: "GET",
-        headers: headers,
-      });
-      if (response.ok) {
-        data = await response.json() as RegridResponse;
+      const url = attempts[i].replace(REGRID_API_KEY, "TOKEN");
+      console.log(`[Regrid] Attempt ${i + 1}: ${url}`);
+
+      try {
+        const timeoutMs = Math.min(remaining - 200, PER_ATTEMPT_MS);
+        response = await fetchWithTimeout(attempts[i], headers, timeoutMs);
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          console.warn(`[Regrid] Attempt ${i + 1} timed out after ${PER_ATTEMPT_MS}ms`);
+        } else {
+          console.error(`[Regrid] Attempt ${i + 1} fetch error:`, err?.message);
+        }
+        response = null;
+        continue;
       }
-    }
 
-    if (!response.ok || !data.features || data.features.length === 0) {
-      console.log("Secondary fallback failed, trying typeahead...");
-      searchUrl = buildSearchUrl(`${REGRID_API_BASE}/parcels/typeahead`, `query=${searchQuery}&limit=1`);
-      response = await fetch(searchUrl, {
-        method: "GET",
-        headers: headers,
-      });
-      if (response.ok) {
-        data = await response.json() as RegridResponse;
-      }
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Regrid API error (${response.status}):`, errorText);
+      // Auth failures won't be fixed by retrying — bail immediately.
       if (response.status === 401 || response.status === 403) {
+        const errorText = await response.text();
+        console.error(`[Regrid] Auth error (${response.status}):`, errorText);
         return res.status(response.status).json({
-          error: "Your Regrid API key has expired or is invalid. Please update it in your account settings.",
+          error: "Your Regrid API key has expired or is invalid.",
           isExpired: true,
-          details: errorText
+          details: errorText,
         });
       }
-      return res.status(response.status).json({ error: "Failed to fetch parcel data from provider.", details: errorText });
+
+      if (response.ok) {
+        data = await response.json() as RegridResponse;
+        if (data.features && data.features.length > 0) {
+          console.log(`[Regrid] Found results on attempt ${i + 1}`);
+          break;
+        }
+      }
+
+      console.log(`[Regrid] Attempt ${i + 1} returned no features — trying next`);
     }
 
-    console.log(`Regrid search completed. Status: ${response.status}. Features found: ${data.features?.length || 0}`);
-
-    if (!data.features || data.features.length === 0) {
+    if (!response || !response.ok || !data.features || data.features.length === 0) {
+      if (response && !response.ok) {
+        let errorText = "";
+        try { errorText = await response.text(); } catch { /* ignore */ }
+        console.error(`[Regrid] All attempts failed. Last status: ${response.status}`, errorText);
+        return res.status(response.status).json({ error: "Failed to fetch parcel data from provider.", details: errorText });
+      }
       return res.status(404).json({ error: "No parcel found for this address. Please enter square footage manually." });
     }
 
@@ -164,27 +159,21 @@ router.post("/parcel", async (req, res) => {
       return res.status(404).json({ error: "No parcel properties found for this address." });
     }
 
-    // Regrid provides area info in several possible fields
-    // Try to extract acreage or sqft from any available source
     let acreage = parcel.acreage || parcel.parcel_acreage || parcel.calculated_acreage;
-    let sqft = parcel.lot_area_sqft || parcel.area_sqft;
+    let sqft    = parcel.lot_area_sqft || parcel.area_sqft;
 
-    if (!acreage && sqft) {
-      acreage = sqftToAcres(sqft);
-    } else if (acreage && !sqft) {
-      sqft = Math.round(acreage * 43560);
-    }
+    if (!acreage && sqft)  acreage = sqftToAcres(sqft);
+    else if (acreage && !sqft) sqft = Math.round(acreage * 43560);
 
     if (!acreage) {
       return res.status(404).json({ error: "Parcel found but acreage data is missing. Please enter square footage manually." });
     }
 
-    return res.json({
-      acreage: acreage,
-      sqft: sqft,
-    });
-  } catch (error) {
-    console.error("Regrid route error:", error);
+    console.log(`[Regrid] Success — acreage: ${acreage}, sqft: ${sqft}`);
+    return res.json({ acreage, sqft });
+
+  } catch (error: any) {
+    console.error("[Regrid] Unexpected error:", error?.message);
     return res.status(500).json({ error: "Internal server error" });
   }
 });

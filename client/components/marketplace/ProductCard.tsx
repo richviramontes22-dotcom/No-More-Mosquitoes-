@@ -1,8 +1,7 @@
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { CatalogItem, formatItemPrice } from "@/hooks/dashboard/useCatalogItems";
-import { ShoppingCart, AlertCircle, Phone, Image as ImageIcon } from "lucide-react";
 import { useState, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { CatalogItem, formatItemPrice } from "@/hooks/dashboard/useCatalogItems";
+import { ShoppingCart, Phone, AlertCircle, Sparkles } from "lucide-react";
 import { resolveImageUrl } from "@/lib/marketplace/imageResolver";
 
 interface ProductCardProps {
@@ -11,121 +10,106 @@ interface ProductCardProps {
   onRequestConsultation?: (item: CatalogItem) => void;
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  add_on:       "Add-On",
+  product:      "Product",
+  consultation: "Consultation",
+  service:      "Service",
+};
+
 const ProductImage = ({ item }: { item: CatalogItem }) => {
   const [imageError, setImageError] = useState(false);
 
-  // Resolve the image URL from the catalog item's image_url filename
-  const resolvedImageUrl = useMemo(() => {
-    if (!item.imageUrl) return null;
-    // Try to resolve from the filename in imageUrl
-    const cdnUrl = resolveImageUrl(item.imageUrl);
-    return cdnUrl;
-  }, [item.imageUrl]);
+  const src = useMemo(() => {
+    // 1. Try imageResolver (CDN + local maps)
+    const resolved = resolveImageUrl(item.imageUrl ?? null);
+    if (resolved) return resolved;
+    // 2. Fallback: try /addons/{slug}.jpg for add-on services
+    if (item.category === "add_on" && item.slug) return `/addons/${item.slug}.jpg`;
+    return null;
+  }, [item.imageUrl, item.category, item.slug]);
 
-  // Show placeholder if no resolved image or error loading it
-  if (!resolvedImageUrl || imageError) {
+  if (!src || imageError) {
     return (
-      <div className="w-full h-48 rounded-lg bg-gradient-to-br from-muted/50 to-muted/30 flex flex-col items-center justify-center border border-border/40 mb-4">
-        <ImageIcon className="h-8 w-8 text-muted-foreground/40 mb-2" />
-        <p className="text-xs text-muted-foreground text-center px-2">
-          {item.category === "product" ? "Product image" : "Service image"} coming soon
+      <div className="aspect-[4/3] w-full bg-gradient-to-br from-primary/5 via-primary/3 to-muted/30 flex flex-col items-center justify-center">
+        <Sparkles className="h-10 w-10 text-primary/20 mb-1.5" />
+        <p className="text-[11px] text-muted-foreground/50 font-medium">
+          {CATEGORY_LABELS[item.category] ?? "Service"}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-48 rounded-lg overflow-hidden bg-muted/10 mb-4">
-      <img
-        src={resolvedImageUrl}
-        alt={item.name}
-        className="w-full h-full object-cover"
-        onError={() => setImageError(true)}
-      />
-    </div>
+    <img
+      src={src}
+      alt={item.name}
+      className="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+      onError={() => setImageError(true)}
+    />
   );
 };
 
-export const ProductCard = ({
-  item,
-  onAddToCart,
-  onRequestConsultation,
-}: ProductCardProps) => {
-  const isConsultationItem = item.priceType === "consultation" || item.requiresConsultation;
-  const categoryLabels: Record<string, string> = {
-    add_on: "Add-On Service",
-    product: "Product",
-    consultation: "Consultation",
-    service: "Service",
-  };
+export const ProductCard = ({ item, onAddToCart, onRequestConsultation }: ProductCardProps) => {
+  const isConsultation = item.priceType === "consultation" || item.requiresConsultation;
 
   return (
-    <article className="flex h-full flex-col justify-between rounded-[24px] border border-border/60 bg-card/95 shadow-soft overflow-hidden hover:shadow-md transition-shadow">
-      {/* Image Container */}
-      <div className="p-4 pb-0">
+    <article className="group flex flex-col rounded-[20px] border border-border/60 bg-card overflow-hidden shadow-soft hover:shadow-md hover:border-primary/20 transition-all duration-300">
+      {/* Image */}
+      <div className="overflow-hidden">
         <ProductImage item={item} />
       </div>
 
-      {/* Header */}
-      <div className="px-6 py-4 mb-0">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="font-display text-lg text-foreground flex-1">{item.name}</h3>
-          <Badge variant="secondary" className="shrink-0 bg-primary/10 text-primary border-none">
-            {categoryLabels[item.category]}
-          </Badge>
-        </div>
-
-        <p className="text-sm text-muted-foreground mb-4 line-clamp-3">
-          {item.description}
-        </p>
-      </div>
-
-      {/* Details Section */}
-      <div className="space-y-3 mb-6 px-6 py-4 border-y border-border/40">
-        {/* Price */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-muted-foreground">Price:</span>
-          <span className="text-lg font-display font-semibold text-foreground">
+      {/* Content */}
+      <div className="flex flex-col flex-1 p-5 gap-3">
+        {/* Name + price */}
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-display text-base font-bold text-foreground leading-snug flex-1">
+            {item.name}
+          </h3>
+          <span className="text-sm font-black text-primary whitespace-nowrap shrink-0">
             {formatItemPrice(item)}
           </span>
         </div>
 
-        {/* Service Requirements */}
+        {/* Description */}
+        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2 flex-1">
+          {item.description}
+        </p>
+
+        {/* Scheduling / consultation notice */}
         {(item.requiresSchedule || item.requiresConsultation) && (
-          <div className="flex items-start gap-2 bg-primary/5 rounded-lg p-3">
-            <AlertCircle className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-            <div className="text-xs space-y-1">
-              {item.requiresSchedule && (
-                <div>Requires appointment scheduling</div>
-              )}
-              {item.requiresConsultation && (
-                <div>Consultation required - we'll call within 24 hours</div>
-              )}
-            </div>
+          <div className="flex items-start gap-2 bg-primary/5 rounded-xl px-3 py-2 text-xs text-primary/80">
+            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            {item.requiresConsultation
+              ? "Consultation required — we'll call within 24 hrs"
+              : "Delivered at your next scheduled service visit"}
           </div>
         )}
-      </div>
 
-      {/* Action Buttons */}
-      <div className="px-6 pb-6 grid grid-cols-1 gap-2">
-        {isConsultationItem ? (
-          <Button
-            onClick={() => onRequestConsultation?.(item)}
-            variant="outline"
-            className="rounded-full border-border/60 h-10"
-          >
-            <Phone className="mr-2 h-4 w-4 text-primary" />
-            Request Consultation
-          </Button>
-        ) : (
-          <Button
-            onClick={() => onAddToCart?.(item)}
-            className="rounded-full h-10 shadow-brand"
-          >
-            <ShoppingCart className="mr-2 h-4 w-4" />
-            Add to Cart
-          </Button>
-        )}
+        {/* CTA */}
+        <div className="pt-1">
+          {isConsultation ? (
+            <Button
+              onClick={() => onRequestConsultation?.(item)}
+              variant="outline"
+              size="sm"
+              className="w-full rounded-xl border-primary/30 text-primary hover:bg-primary/5 h-10"
+            >
+              <Phone className="mr-2 h-3.5 w-3.5" />
+              Request Consultation
+            </Button>
+          ) : (
+            <Button
+              onClick={() => onAddToCart?.(item)}
+              size="sm"
+              className="w-full rounded-xl h-10 shadow-sm"
+            >
+              <ShoppingCart className="mr-2 h-3.5 w-3.5" />
+              Add to Cart
+            </Button>
+          )}
+        </div>
       </div>
     </article>
   );

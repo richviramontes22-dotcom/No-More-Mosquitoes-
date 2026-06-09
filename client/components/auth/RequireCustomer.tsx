@@ -28,8 +28,13 @@ const RequireCustomer = ({ children }: { children: ReactNode }) => {
   // Check if user is admin (use profile role with fallback to JWT role)
   const userRole = profile?.role || user?.role;
   if (userRole === "admin") {
-    // Admins should use /admin instead
     return <Navigate to="/admin" replace />;
+  }
+
+  // Non-onboarded customers haven't completed setup — send them there.
+  // Wait for profile to load before evaluating (is_onboarded may not be set yet).
+  if (!profileLoading && profile?.is_onboarded === false) {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return <>{children}</>;

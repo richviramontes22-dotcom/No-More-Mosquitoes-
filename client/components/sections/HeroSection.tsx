@@ -12,10 +12,14 @@ const HeroSection = () => {
   const { t } = useTranslation();
 
   // CMS-driven content — falls back to translation strings if DB is empty
-  const cmsTitle     = useSiteContent("hero_title");
-  const cmsSubtitle  = useSiteContent("hero_subtitle");
-  const heroTitle    = cmsTitle    || t("hero.title");
-  const heroSubtitle = cmsSubtitle || t("hero.description");
+  const cmsTitle        = useSiteContent("hero_title");
+  const cmsSubtitle     = useSiteContent("hero_subtitle");
+  const cmsCta          = useSiteContent("hero_cta_text");
+  const cmsCtaSecondary = useSiteContent("hero_cta_secondary");
+  const heroTitle       = cmsTitle    || t("hero.title");
+  const heroSubtitle    = cmsSubtitle || t("hero.description");
+  const heroCta         = cmsCta          || t("hero.scheduleService");
+  const heroCtaSecondary = cmsCtaSecondary || t("hero.checkPricing");
 
   // Carousel images from DB — falls back to static lifestyleImages if empty
   const { data: dbCarouselItems = [] } = useQuery({
@@ -62,16 +66,14 @@ const HeroSection = () => {
           objectFit="cover"
         />
 
-        {/* Header Spacer — must match fixed header height: mobile ~72px, sm ~80px, md ~96px */}
-        <div className="pt-[72px] sm:pt-[80px] md:pt-[96px]" />
+        {/* Header Spacer — matches fixed header height (no band — band is in page flow below) */}
+        <div className="pt-[92px] sm:pt-[106px] md:pt-[122px]" />
 
-        {/* Slim Banner under Header */}
-        <div className="w-full bg-black/20 border-b border-white/10 py-1.5 backdrop-blur-md relative z-20">
-          <div className="mx-auto max-w-6xl px-4 text-center">
-            <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.4em] text-white/90">
-              {t("hero.eyebrow")}
-            </p>
-          </div>
+        {/* Announcement band — in page flow so it scrolls behind the fixed header */}
+        <div className="relative z-10 py-1.5 bg-secondary/10 backdrop-blur-sm border-b border-secondary/15">
+          <p className="text-center text-[10px] sm:text-[11px] font-black uppercase tracking-[0.4em] text-secondary-foreground/55">
+            {t("hero.eyebrow")}
+          </p>
         </div>
 
         {/* Dark overlay for text visibility */}
@@ -94,17 +96,17 @@ const HeroSection = () => {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
               <Link
-                to="/schedule"
+                to="/#quote"
                 className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto"
               >
-                {t("hero.scheduleService")}
+                {heroCta}
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden />
               </Link>
               <Link
                 to="/pricing"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-secondary/40 bg-secondary px-6 py-3.5 text-sm font-semibold text-secondary-foreground transition hover:bg-secondary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto"
               >
-                {t("hero.checkPricing")}
+                {heroCtaSecondary}
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
               <a

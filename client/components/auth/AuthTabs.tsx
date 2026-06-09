@@ -25,35 +25,39 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginEmail, setLoginEmail] = useState(defaultEmail);
   const [loginPassword, setLoginPassword] = useState("");
-  const [signupName, setSignupName] = useState(defaultName);
+  const [signupFirstName, setSignupFirstName] = useState("");
+  const [signupLastName, setSignupLastName] = useState("");
   const [signupEmail, setSignupEmail] = useState(defaultEmail);
+  const [signupPhone, setSignupPhone] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const { toast } = useToast();
   const { login, signUp } = useAuth();
 
-  useEffect(() => {
-    setMode(defaultMode);
-  }, [defaultMode]);
+  useEffect(() => { setMode(defaultMode); }, [defaultMode]);
 
   useEffect(() => {
-    if (defaultEmail) {
-      setLoginEmail(defaultEmail);
-      setSignupEmail(defaultEmail);
-    }
+    if (defaultEmail) { setLoginEmail(defaultEmail); setSignupEmail(defaultEmail); }
+    // Pre-fill first/last from defaultName (e.g. from QuoteWidget preset "Taylor Johnson")
     if (defaultName) {
-      setSignupName(defaultName);
+      const parts = defaultName.trim().split(" ");
+      setSignupFirstName(parts[0] || "");
+      setSignupLastName(parts.slice(1).join(" ") || "");
     }
   }, [defaultEmail, defaultName]);
 
   const invalidSignupReason = useMemo(() => {
-    if (!signupName.trim()) return "Add your name";
+    if (!signupFirstName.trim()) return "Enter your first name";
+    if (!signupLastName.trim())  return "Enter your last name";
     if (!isValidEmail(signupEmail)) return "Enter a valid email";
+    if (signupPhone.trim() && !/^\+?[\d\s\-().]{7,15}$/.test(signupPhone.trim())) return "Enter a valid phone number";
     if (signupPassword.trim().length < MIN_PASSWORD_LENGTH) return `Use at least ${MIN_PASSWORD_LENGTH} characters`;
     if (signupPassword !== signupConfirmPassword) return "Passwords must match";
+    if (!termsAccepted) return "Please accept the terms to continue";
     return null;
-  }, [signupConfirmPassword, signupEmail, signupName, signupPassword]);
+  }, [signupFirstName, signupLastName, signupEmail, signupPhone, signupPassword, signupConfirmPassword, termsAccepted]);
 
   const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -107,13 +111,32 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
 
     try {
       setIsSubmitting(true);
-      await signUp({ name: signupName, email: signupEmail, password: signupPassword });
-      toast({
-        title: "Account created",
-        description: "Check your inbox to confirm your email, then sign in.",
+      const isTestAccount = import.meta.env.DEV &&
+        signupEmail.trim().toLowerCase().endsWith("@test.com");
+
+      await signUp({
+        firstName: signupFirstName,
+        lastName:  signupLastName,
+        email:     signupEmail,
+        phone:     signupPhone,
+        password:  signupPassword,
       });
-      onSuccess?.("signup");
-      setMode("login");
+
+      if (isTestAccount) {
+        toast({
+          title: "Test account ready",
+          description: "Auto-confirmed — you're being signed in now.",
+        });
+        // signUp already triggered auto-login; no need to switch to login tab
+        onSuccess?.("signup");
+      } else {
+        toast({
+          title: "Account created",
+          description: "Check your inbox to confirm your email, then sign in.",
+        });
+        onSuccess?.("signup");
+        setMode("login");
+      }
     } catch (error) {
       toast({
         title: "Unable to create account",
@@ -131,10 +154,10 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
       setLoginPassword("TestCustomer123!");
       toast({ title: "Customer credentials filled", description: "Click 'Sign in' to proceed." });
     } else {
-      setSignupName("John Doe");
-      setSignupEmail("johndoe@test.com");
-      setSignupPassword("TestCustomer123!");
-      setSignupConfirmPassword("TestCustomer123!");
+      setSignupFirstName("John"); setSignupLastName("Doe");
+      setSignupEmail("johndoe@test.com"); setSignupPhone("9495550100");
+      setSignupPassword("TestCustomer123!"); setSignupConfirmPassword("TestCustomer123!");
+      setTermsAccepted(true);
       toast({ title: "Customer credentials filled", description: "Click 'Create account' to proceed." });
     }
   };
@@ -145,10 +168,10 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
       setLoginPassword("Password!");
       toast({ title: "Admin credentials filled", description: "Click 'Sign in' to proceed." });
     } else {
-      setSignupName("Admin User");
-      setSignupEmail("admin@nnm.com");
-      setSignupPassword("Password!");
-      setSignupConfirmPassword("Password!");
+      setSignupFirstName("Admin"); setSignupLastName("User");
+      setSignupEmail("admin@nnm.com"); setSignupPhone("");
+      setSignupPassword("Password!"); setSignupConfirmPassword("Password!");
+      setTermsAccepted(true);
       toast({ title: "Admin credentials filled", description: "Click 'Create account' to proceed." });
     }
   };
@@ -224,18 +247,35 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
         {/* ── Sign Up Tab ── */}
         <TabsContent value="signup" className="mt-6">
           <form onSubmit={handleSignupSubmit} className="space-y-4" noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="signup-name">Full name</Label>
-              <Input
-                id="signup-name"
-                type="text"
-                autoComplete="name"
-                placeholder="Taylor Johnson"
-                value={signupName}
-                onChange={(e) => setSignupName(e.target.value)}
-                required
-                className="rounded-xl h-11"
-              />
+
+            {/* First + Last name */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="signup-first-name">First name</Label>
+                <Input
+                  id="signup-first-name"
+                  type="text"
+                  autoComplete="given-name"
+                  placeholder="Taylor"
+                  value={signupFirstName}
+                  onChange={(e) => setSignupFirstName(e.target.value)}
+                  required
+                  className="rounded-xl h-11"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="signup-last-name">Last name</Label>
+                <Input
+                  id="signup-last-name"
+                  type="text"
+                  autoComplete="family-name"
+                  placeholder="Johnson"
+                  value={signupLastName}
+                  onChange={(e) => setSignupLastName(e.target.value)}
+                  required
+                  className="rounded-xl h-11"
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -249,6 +289,22 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
                 value={signupEmail}
                 onChange={(e) => setSignupEmail(e.target.value)}
                 required
+                className="rounded-xl h-11"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="signup-phone">
+                Phone <span className="text-muted-foreground text-xs font-normal">(for technician updates)</span>
+              </Label>
+              <Input
+                id="signup-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="(949) 555-0123"
+                value={signupPhone}
+                onChange={(e) => setSignupPhone(e.target.value)}
                 className="rounded-xl h-11"
               />
             </div>
@@ -283,7 +339,28 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
               />
             </div>
 
-            {invalidSignupReason && signupConfirmPassword.length > 0 && (
+            {/* Terms acceptance */}
+            <div className="flex items-start gap-3 pt-1">
+              <input
+                id="signup-terms"
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer"
+              />
+              <label htmlFor="signup-terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
+                I agree to the{" "}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-4 hover:no-underline">
+                  Terms of Service
+                </a>{" "}
+                and{" "}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-4 hover:no-underline">
+                  Privacy Policy
+                </a>
+              </label>
+            </div>
+
+            {invalidSignupReason && (signupConfirmPassword.length > 0 || termsAccepted !== undefined) && (
               <p className="text-xs text-destructive" role="alert">{invalidSignupReason}</p>
             )}
 

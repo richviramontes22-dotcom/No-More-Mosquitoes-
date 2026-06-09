@@ -1,5 +1,10 @@
 import { Router } from "express";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { getStripeDiagnostics } from "../lib/stripeMode";
+import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabaseAdmin";
+
+const notifDb = supabaseAdmin ?? supabase;
 
 const router = Router();
 
@@ -84,11 +89,11 @@ router.get("/stripe/revenue", requireAdmin, async (req, res) => {
     const since = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000);
     const params = new URLSearchParams();
     params.set("limit", "100");
-    params.set("status", "succeeded");
     params.set("created[gte]", String(since));
     const data = await stripeFetch(`/payment_intents?${params.toString()}`);
     const buckets = new Map<string, number>();
     for (const pi of data.data || []) {
+      if (pi.status !== "succeeded") continue; // filter client-side — Stripe list API has no status filter
       const d = new Date((pi.created || 0) * 1000);
       const key = d.toISOString().slice(0, 10);
       const amount =
@@ -102,6 +107,30 @@ router.get("/stripe/revenue", requireAdmin, async (req, res) => {
   } catch (e: any) {
     res.status(e.status || 500).json({ error: e.message || String(e) });
   }
+});
+
+/**
+ * GET /api/admin/stripe/diagnostics
+ * Safe admin-only endpoint — returns mode/config status, never exposes key values.
+ */
+router.get("/stripe/diagnostics", requireAdmin, (_req, res) => {
+  res.json(getStripeDiagnostics());
+});
+
+/**
+ * GET /api/admin/notifications
+ * Returns recent notification_log entries for the admin notification log UI.
+ * Secrets are never exposed — only delivery metadata.
+ */
+router.get("/notifications", requireAdmin, async (_req, res) => {
+  const { data, error } = await notifDb
+    .from("notification_log")
+    .select("id, appointment_id, recipient_email, channel, notification_type, subject, status, provider, error_message, sent_at, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ notifications: data || [] });
 });
 
 export default router;

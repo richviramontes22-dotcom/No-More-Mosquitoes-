@@ -142,8 +142,8 @@ const Billing = () => {
 
   // Load stripe status
   useEffect(() => {
-    withTimeout(fetch("/api/admin/stripe/status"), 10000, "Stripe status")
-      .then(async (r) => setStripeStatus(await r.json()))
+    adminApi("/api/admin/stripe/status")
+      .then((data) => setStripeStatus(data))
       .catch(() => setStripeStatus({ enabled: false }));
   }, []);
 
@@ -153,20 +153,11 @@ const Billing = () => {
       try {
         setIsLoading(true);
 
-        // Query payments with null-safe profile joins
+        // Query payments without PostgREST relationship join (auth.users FK ≠ profiles FK)
         const { data: paymentData, error } = await withTimeout(
           supabase
             .from("payments")
-            .select(`
-              id,
-              user_id,
-              amount_cents,
-              currency,
-              status,
-              method,
-              created_at,
-              profiles:user_id (id, name, email)
-            `)
+            .select("id, user_id, amount_cents, currency, status, method, created_at")
             .order("created_at", { ascending: false }),
           10000,
           "Admin payments"
@@ -189,18 +180,29 @@ const Billing = () => {
           return;
         }
 
+        // Batch-fetch profiles for all distinct user_ids
+        const userIds = [...new Set(paymentData.map((p: any) => p.user_id).filter(Boolean))];
+        const profileMap: Record<string, { name: string; email: string }> = {};
+        if (userIds.length > 0) {
+          const { data: profileRows } = await supabase
+            .from("profiles")
+            .select("id, name, email")
+            .in("id", userIds);
+          (profileRows || []).forEach((pr: any) => { profileMap[pr.id] = pr; });
+        }
+
         const mapped = paymentData.map((p: any) => {
           // Validate required fields
           if (!p?.id || p.user_id === null || p.amount_cents === null) {
             console.warn("[Billing] Skipping malformed payment row:", p?.id);
             return null;
           }
-
+          const prof = profileMap[p.user_id];
           return {
             id: p.id,
             user_id: p.user_id,
-            customer_name: p.profiles?.name || "Unknown Customer",
-            customer_email: p.profiles?.email || "No email",
+            customer_name: prof?.name || "Unknown Customer",
+            customer_email: prof?.email || "No email",
             amount_cents: p.amount_cents,
             currency: p.currency || "USD",
             status: p.status || "pending",

@@ -1,6 +1,7 @@
 import HeroSection from "@/components/sections/HeroSection";
 import QualityAssuranceSection from "@/components/sections/QualityAssuranceSection";
 import PlanCardsSection from "@/components/sections/PlanCardsSection";
+import QuoteWidgetSection from "@/components/sections/QuoteWidgetSection";
 import VideoProofSection from "@/components/sections/VideoProofSection";
 import ScheduleSection from "@/components/sections/ScheduleSection";
 import ContactSection from "@/components/sections/ContactSection";
@@ -23,6 +24,7 @@ const Index = () => {
       <ScheduleSection />
       <QualityAssuranceSection />
       <PlanCardsSection />
+      <QuoteWidgetSection id="quote" />
       <VideoProofSection />
       <CtaBand title={t("hero.checkPricing")} href="/pricing" />
       <ContactSection />

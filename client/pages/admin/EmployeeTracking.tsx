@@ -5,7 +5,7 @@ import EmployeeMap from "@/components/admin/EmployeeMap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MapPin, RefreshCw, Clock, AlertTriangle } from "lucide-react";
-import { withTimeout } from "@/lib/supabase";
+import { adminApi } from "@/lib/adminApi";
 import { AdminOwnershipBadge, AdminOwnershipNote } from "@/components/admin/AdminOwnershipBadge";
 
 interface Employee {
@@ -31,9 +31,7 @@ const EmployeeTracking = () => {
 
   const fetchEmployees = async () => {
     try {
-      const res = await withTimeout(fetch("/api/admin/tracking/employees"), 10000, "Employee tracking");
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const data = await adminApi("/api/admin/tracking/employees");
       setEmployees(data);
       setLastRefresh(new Date());
     } catch (error) {

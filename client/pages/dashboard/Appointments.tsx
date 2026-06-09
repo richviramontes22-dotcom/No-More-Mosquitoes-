@@ -1,5 +1,7 @@
-import { useEffect, useState, useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { format, isBefore, startOfDay, parseISO } from "date-fns";
+import { VideoRecapGrid } from "@/components/dashboard/VideoRecapGrid";
 import SectionHeading from "@/components/common/SectionHeading";
 import { Button } from "@/components/ui/button";
 import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
@@ -19,34 +21,311 @@ import {
   Loader2,
   MapPin,
   AlertCircle,
-  AlertTriangle,
+  Sun,
+  Sunset,
   ShoppingCart,
-  Package
+  Package,
+  X,
+  CalendarDays,
 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAppointments } from "@/hooks/dashboard/useAppointments";
+import { useAppointments, type Appointment } from "@/hooks/dashboard/useAppointments";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 import { stringifyError } from "@/lib/error-utils";
 import { formatPrice } from "@/hooks/dashboard/useCatalogItems";
 
-interface Appointment {
+// ── Availability types (mirrors server/routes/availability.ts) ────────────────
+
+interface WindowOption {
   id: string;
-  date: string;
-  timeWindow: string;
-  program: string;
-  technician: string;
-  status: string;
-  address: string;
+  label: string;
+  start: string;
+  end: string;
+  available: boolean;
+  remaining: number;
 }
 
+interface DayAvailability {
+  date: string;
+  is_operational: boolean;
+  is_blackout: boolean;
+  windows: WindowOption[];
+}
+
+// ── Reschedule Dialog ─────────────────────────────────────────────────────────
+
+function RescheduleDialog({
+  appointment,
+  onClose,
+  onSuccess,
+}: {
+  appointment: Appointment;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { toast } = useToast();
+  const [availabilityMap, setAvailabilityMap] = useState<Map<string, DayAvailability>>(new Map());
+  const [isLoadingAvail, setIsLoadingAvail] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedWindow, setSelectedWindow] = useState<WindowOption | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch 45 days of availability on open
+  useEffect(() => {
+    setIsLoadingAvail(true);
+    fetch(`/api/availability?days=45`)
+      .then(r => r.json())
+      .then((json: { days: DayAvailability[] }) => {
+        const map = new Map<string, DayAvailability>();
+        json.days.forEach(d => map.set(d.date, d));
+        setAvailabilityMap(map);
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingAvail(false));
+  }, []);
+
+  const isDateDisabled = (date: Date) => {
+    if (isBefore(date, startOfDay(new Date()))) return true;
+    const day = availabilityMap.get(date.toISOString().slice(0, 10));
+    if (!day) return false;
+    return !day.is_operational || day.is_blackout;
+  };
+
+  const windowsForDate = selectedDate
+    ? (availabilityMap.get(selectedDate.toISOString().slice(0, 10))?.windows ?? [])
+    : [];
+
+  const handleSubmit = async () => {
+    if (!selectedDate || !selectedWindow) return;
+    setIsSubmitting(true);
+
+    const scheduledDate = selectedDate.toISOString().slice(0, 10);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const resp = await fetch(`/api/appointments/${appointment.id}/reschedule`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          scheduledDate,
+          windowId:    selectedWindow.id,
+          windowLabel: selectedWindow.label,
+          windowStart: selectedWindow.start,
+        }),
+      });
+
+      if (resp.status === 409) {
+        const { error } = await resp.json();
+        toast({ title: "Window unavailable", description: error, variant: "destructive" });
+        setSelectedWindow(null);
+        // Refresh availability
+        fetch(`/api/availability?days=45`)
+          .then(r => r.json())
+          .then((json: { days: DayAvailability[] }) => {
+            const map = new Map<string, DayAvailability>();
+            json.days.forEach(d => map.set(d.date, d));
+            setAvailabilityMap(map);
+          })
+          .catch(() => {});
+        return;
+      }
+
+      if (!resp.ok) {
+        const { error } = await resp.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(error);
+      }
+
+      toast({
+        title: "Appointment rescheduled",
+        description: `New date: ${format(selectedDate, "MMMM d, yyyy")} · ${selectedWindow.label}`,
+      });
+      onSuccess();
+    } catch (err: any) {
+      toast({ title: "Reschedule failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent className="max-w-lg rounded-[28px] p-0 overflow-hidden border-none shadow-2xl">
+        <DialogHeader className="bg-primary/5 px-8 py-6 border-b border-border/40">
+          <DialogTitle className="text-xl font-display font-bold flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-primary" /> Reschedule Appointment
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Job #{appointment.displayId} · currently {appointment.timeWindow}
+          </p>
+        </DialogHeader>
+
+        <div className="p-6 space-y-6">
+          {/* Calendar */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              Select a new date {isLoadingAvail && <span className="text-primary/50">(loading…)</span>}
+            </p>
+            <CalendarPicker
+              mode="single"
+              selected={selectedDate}
+              onSelect={d => { setSelectedDate(d); setSelectedWindow(null); }}
+              disabled={isDateDisabled}
+              className="rounded-xl border border-border/60 p-3 w-full"
+            />
+          </div>
+
+          {/* Windows */}
+          {selectedDate && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+                Available arrival windows — {format(selectedDate, "MMMM d")}
+              </p>
+              {windowsForDate.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic">No windows available on this date.</p>
+              ) : (
+                <div className="grid gap-2">
+                  {windowsForDate.map(win => (
+                    <button
+                      key={win.id}
+                      disabled={!win.available}
+                      onClick={() => setSelectedWindow(win)}
+                      className={cn(
+                        "flex items-center justify-between p-4 rounded-xl border-2 text-left transition-all",
+                        selectedWindow?.id === win.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border/60 hover:border-primary/30",
+                        !win.available && "opacity-40 cursor-not-allowed bg-muted/50 border-transparent",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        {win.id === "morning" ? <Sun className="h-4 w-4 text-primary" /> : <Sunset className="h-4 w-4 text-primary" />}
+                        <div>
+                          <p className="font-bold text-sm">{win.label}</p>
+                          <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                            {win.available ? `${win.remaining} spot${win.remaining !== 1 ? "s" : ""} left` : "Fully booked"}
+                          </p>
+                        </div>
+                      </div>
+                      {selectedWindow?.id === win.id && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 px-6 pb-6">
+          <Button variant="ghost" className="flex-1 rounded-xl h-11" onClick={onClose}>Cancel</Button>
+          <Button
+            className="flex-1 rounded-xl h-11 shadow-brand"
+            disabled={!selectedDate || !selectedWindow || isSubmitting}
+            onClick={handleSubmit}
+          >
+            {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Rescheduling…</> : "Confirm Reschedule"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Appointment Detail Dialog ─────────────────────────────────────────────────
+
+function AppointmentDetailDialog({
+  appointment,
+  onClose,
+}: {
+  appointment: Appointment;
+  onClose: () => void;
+}) {
+  const displayDate = appointment.scheduledDate
+    ? format(parseISO(appointment.scheduledDate + "T00:00:00"), "EEEE, MMMM d, yyyy")
+    : appointment.date
+    ? new Date(appointment.date).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+    : "Date not set";
+
+  const statusColor =
+    appointment.status === "Scheduled" ? "bg-blue-100 text-blue-700" :
+    appointment.status === "Completed" ? "bg-green-100 text-green-700" :
+    appointment.status === "Canceled"  ? "bg-red-100 text-red-700"   :
+    "bg-muted text-muted-foreground";
+
+  return (
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent className="max-w-md rounded-[28px] p-0 overflow-hidden border-none shadow-2xl">
+        <DialogHeader className="bg-primary text-primary-foreground px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-1">Job #{appointment.displayId}</p>
+              <DialogTitle className="text-xl font-display font-bold">{displayDate}</DialogTitle>
+            </div>
+            <Badge className={cn("border-none text-xs font-bold", statusColor)}>{appointment.status}</Badge>
+          </div>
+        </DialogHeader>
+
+        <div className="p-8 space-y-5">
+          <DetailRow icon={<Clock className="h-4 w-4" />} label="Arrival Window" value={appointment.timeWindow} />
+          <DetailRow icon={<MapPin className="h-4 w-4" />} label="Service Address" value={appointment.address} />
+          <DetailRow icon={<Package className="h-4 w-4" />} label="Program" value={appointment.program} />
+          <DetailRow icon={<User className="h-4 w-4" />} label="Technician" value={appointment.technician} />
+
+          {appointment.window && (
+            <div className="pt-4 border-t border-border/40">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">About your arrival window</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Your technician will arrive during the <strong>{appointment.timeWindow}</strong> window.
+                You'll receive a reminder the day before and a same-day notification when your technician is on the way.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-8 pb-6">
+          <Button variant="outline" className="w-full rounded-xl h-11" onClick={onClose}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0 mt-0.5">{icon}</div>
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+        <p className="text-sm font-semibold">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 const Appointments = () => {
   const { open: openScheduleDialog } = useScheduleDialog();
   const { toast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, isHydrated } = useAuth();
+  const queryClient = useQueryClient();
+
+  const [activeTab, setActiveTab] = useState<"schedule" | "recaps">("schedule");
+  const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null);
+  const [detailAppt, setDetailAppt] = useState<Appointment | null>(null);
   const { items: cartItems, subtotalCents, taxCents, totalCents } = useCart();
   const { data: recentOrders = [] } = useMarketplaceOrders(user?.id);
 
@@ -109,33 +388,44 @@ const Appointments = () => {
     }
   }, [location.state, openScheduleDialog]);
 
-  const handleReschedule = (id: string) => {
-    toast({
-      title: "Rescheduling Request",
-      description: `Request for Job #${id} submitted. A team member will call you shortly or you can call us directly.`,
-    });
-  };
+  const handleReschedule = useCallback((visit: Appointment) => {
+    setReschedulingAppt(visit);
+  }, []);
+
+  const handleRescheduleSuccess = useCallback(() => {
+    setReschedulingAppt(null);
+    queryClient.invalidateQueries({ queryKey: ["appointments", user?.id] });
+  }, [queryClient, user?.id]);
 
   const handleScheduleNew = () => {
     openScheduleDialog({ source: "dashboard-appointments" });
   };
 
   const handleAddReminder = () => {
-    toast({
-      title: "Calendar Sync",
-      description: "Successfully added 2 upcoming visits to your device calendar.",
-    });
+    navigate("/dashboard/profile");
   };
 
-  const handleViewDetails = (id: string) => {
-    toast({
-      title: `Job Details: #${id}`,
-      description: "Detailed technician notes and route tracking are loading...",
-    });
-  };
+  const handleViewDetails = useCallback((visit: Appointment) => {
+    setDetailAppt(visit);
+  }, []);
 
   return (
     <div className="grid gap-10">
+      {/* Dialogs */}
+      {reschedulingAppt && (
+        <RescheduleDialog
+          appointment={reschedulingAppt}
+          onClose={() => setReschedulingAppt(null)}
+          onSuccess={handleRescheduleSuccess}
+        />
+      )}
+      {detailAppt && (
+        <AppointmentDetailDialog
+          appointment={detailAppt}
+          onClose={() => setDetailAppt(null)}
+        />
+      )}
+
       {/* Weather and Service Status Module */}
       <WeatherStatusModule />
 
@@ -224,7 +514,31 @@ const Appointments = () => {
         </div>
       </div>
 
-      <div className="space-y-8">
+      {/* Tab bar */}
+      <div className="flex gap-1 p-1 bg-muted/30 rounded-xl border border-border/60 w-fit">
+        {(["schedule", "recaps"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              "px-5 py-2 rounded-lg text-sm font-semibold transition-all",
+              activeTab === tab
+                ? "bg-card shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {tab === "schedule" ? "Schedule" : "Visit Recaps"}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "recaps" && (
+        <VideoRecapGrid userId={user?.id} />
+      )}
+
+      {activeTab === "schedule" && (<>
+        <div className="space-y-8">
         <div className="flex items-center gap-2">
           <CalendarCheck className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold font-display">Upcoming Visits</h3>
@@ -291,7 +605,7 @@ const Appointments = () => {
                           variant="outline"
                           size="sm"
                           className="rounded-xl"
-                          onClick={() => handleReschedule(visit.id)}
+                          onClick={() => handleReschedule(visit)}
                         >
                           Reschedule
                         </Button>
@@ -299,7 +613,7 @@ const Appointments = () => {
                           variant="ghost"
                           size="icon"
                           className="rounded-full hover:bg-primary/5 hover:text-primary transition-colors"
-                          onClick={() => handleViewDetails(visit.id)}
+                          onClick={() => handleViewDetails(visit)}
                         >
                           <ChevronRight className="h-5 w-5" />
                         </Button>
@@ -381,6 +695,7 @@ const Appointments = () => {
           </div>
         </div>
       </div>
+      </>)}
     </div>
   );
 };

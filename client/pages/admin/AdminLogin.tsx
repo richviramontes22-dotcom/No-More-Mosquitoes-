@@ -25,7 +25,7 @@ const AdminLogin = () => {
   useEffect(() => {
     if (isAuthenticated && user && !canonicalRoleResolved) {
       console.log("[AdminLogin] User authenticated, resolving canonical role for redirect");
-      fetchUserRoleForRedirect(user.id).then((role) => {
+      fetchUserRoleForRedirect(user.id).then(({ role }) => {
         setCanonicalRole(role);
         setCanonicalRoleResolved(true);
       });

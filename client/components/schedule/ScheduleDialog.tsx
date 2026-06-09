@@ -50,6 +50,8 @@ export type ScheduleFormValues = {
   preferredContactMethod: ContactMethod;
   notes: string;
   acreage?: number;
+  cadenceDays?: number;
+  program?: "subscription" | "one_time" | "annual";
 };
 
 const initialFormValues: ScheduleFormValues = {
@@ -276,6 +278,8 @@ const ScheduleDialog = ({ open, origin, preset, onOpenChange }: ScheduleDialogPr
             </DialogHeader>
             <ScheduleFlow
               onCancel={handleClose}
+              initialCadenceDays={formValues.cadenceDays}
+              initialProgram={formValues.program as "subscription" | "one_time" | undefined}
               onSuccess={async (data) => {
                 try {
                   setStatus("submitting");

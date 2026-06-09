@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { CatalogItem, CatalogItemCategory } from "@/hooks/dashboard/useCatalogItems";
 import { ProductCard } from "./ProductCard";
 import { Loader2, AlertCircle } from "lucide-react";
@@ -82,31 +81,38 @@ export const ProductGrid = ({
 
   return (
     <div className="space-y-8">
-      {/* Category Tabs */}
+      {/* Category filter chips */}
       {categoryTabs.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={selectedCategory === "all" ? "default" : "outline"}
-            onClick={() => setSelectedCategory("all")}
-            className="rounded-full"
-          >
-            All Items ({items.length})
-          </Button>
-          {categoryTabs.map((category) => (
-            <Button
-              key={category}
-              variant={selectedCategory === category ? "default" : "outline"}
-              onClick={() => setSelectedCategory(category)}
-              className="rounded-full"
-            >
-              {categoryLabels[category]} ({itemsByCategory[category].length})
-            </Button>
-          ))}
+        <div className="flex flex-wrap gap-2 pb-1">
+          {(["all", ...categoryTabs] as (CatalogItemCategory | "all")[]).map((cat) => {
+            const active = selectedCategory === cat;
+            const label = cat === "all" ? "All Items" : categoryLabels[cat as CatalogItemCategory];
+            const count = cat === "all" ? items.length : itemsByCategory[cat as CatalogItemCategory].length;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200 ${
+                  active
+                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                    : "bg-card text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                {label}
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  active ? "bg-white/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
       {/* Products Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {filteredItems.map((item) => (
           <ProductCard
             key={item.id}

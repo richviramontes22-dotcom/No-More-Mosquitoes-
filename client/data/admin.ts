@@ -28,11 +28,14 @@ export type Appointment = {
   id: string;
   customerId: string;
   propertyId: string;
-  date: string; // ISO date
-  startTime: string; // HH:mm
-  endTime: string; // HH:mm
+  date: string;                    // ISO date (resolved: scheduled_date → scheduled_at date → created_at date)
+  scheduledDate?: string | null;   // Phase 1: scheduled_date column
+  window?: string | null;          // Phase 1: 'morning' | 'afternoon'
+  windowLabel?: string | null;     // Phase 1: 'Morning (8AM–12PM)'
+  startTime: string;      // HH:mm — from windowLabel, notes, or scheduled_at
+  endTime: string;        // HH:mm
   technician: string;
-  status: "scheduled" | "completed" | "canceled" | "rescheduled";
+  status: "requested" | "scheduled" | "confirmed" | "completed" | "canceled" | "rescheduled";
   type: "subscription" | "one_time" | "inspection";
 };
 

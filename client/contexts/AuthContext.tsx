@@ -23,8 +23,10 @@ type LoginInput = {
 };
 
 type SignUpInput = {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
+  phone: string;
   password: string;
 };
 
@@ -128,6 +130,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = useCallback(async ({ email, password }: LoginInput) => {
     if (!supabase) throw new Error("Authentication service is currently unavailable.");
 
+    // Block test accounts on the live site — they only exist on localhost
+    if (import.meta.env.PROD && normalizeEmail(email).endsWith("@test.com")) {
+      throw new Error("Test accounts are for localhost only and cannot log in on the live site.");
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
       email: normalizeEmail(email),
       password,
@@ -138,17 +145,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const signUp = useCallback(async ({ name, email, password }: SignUpInput) => {
+  const signUp = useCallback(async ({ firstName, lastName, email, phone, password }: SignUpInput) => {
     if (!supabase) throw new Error("Authentication service is currently unavailable.");
     const normalizedEmail = normalizeEmail(email);
+
+    // ── Test account fast-path (localhost dev only) ───────────────────────────
+    // For @test.com emails in dev: skip supabase.auth.signUp() entirely.
+    // That call triggers Supabase to send a confirmation email, which hits
+    // the email rate limit (429). Instead, we call a server-side endpoint that
+    // uses the admin API to create the user with email_confirm:true — no email sent.
+    if (import.meta.env.DEV && normalizedEmail.endsWith("@test.com")) {
+      const res = await fetch("/api/dev/create-test-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName, lastName, email: normalizedEmail, phone, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create test account");
+      }
+      // Auto sign-in — account is already confirmed
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+      if (signInErr) throw new Error(signInErr.message);
+      return; // Done — skip the normal signUp flow below
+    }
+
+    // ── Normal signup path ────────────────────────────────────────────────────
+    const displayName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
 
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
       options: {
         data: {
-          name: name.trim(),
-          role: "customer", // Default to customer, first user logic handled in profiles
+          name:       displayName,
+          first_name: firstName.trim(),
+          last_name:  lastName.trim(),
+          role:       "customer",
         },
       },
     });
@@ -158,20 +194,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (data.user) {
-      // Try to create profile, but don't fail signup if it fails (e.g. table not created yet)
       try {
         const { data: profilesCount } = await supabase.from("profiles").select("id", { count: "exact", head: true });
         const isFirstUser = !profilesCount || profilesCount.length === 0;
 
         await supabase.from("profiles").insert({
-          id: data.user.id,
-          name: name.trim(),
-          email: normalizedEmail,
-          role: isFirstUser ? "admin" : "customer",
+          id:         data.user.id,
+          name:       displayName,
+          first_name: firstName.trim(),
+          last_name:  lastName.trim(),
+          email:      normalizedEmail,
+          phone:      phone.trim() || null,
+          role:       isFirstUser ? "admin" : "customer",
         });
 
-        // If this was the first user and we set them as admin, also update auth metadata
-        // to ensure JWT has correct role
         if (isFirstUser) {
           const { error: updateError } = await supabase.auth.updateUser({
             data: { role: "admin" }

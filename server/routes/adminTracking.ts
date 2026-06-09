@@ -1,69 +1,188 @@
 import { Router } from "express";
-import { db } from "../lib/memory";
+import { supabase } from "../lib/supabase";
+import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
+const db = supabaseAdmin ?? supabase;
 
-router.get("/tracking/employees", requireAdmin, (req, res) => {
-  const employees = db.employees.map((emp) => {
-    const assignments = db.assignments.filter(
-      (a) => a.employee_id === emp.id && (a.status === "en_route" || a.status === "in_progress")
-    );
+/**
+ * GET /api/admin/tracking/employees
+ * Returns all active employees with their current assignment status from Supabase.
+ *
+ * NOTE: location (lat/lng) is NOT real GPS — no live tracking is implemented.
+ * The location field is always null until Phase 3B wires real device coordinates.
+ */
+router.get("/tracking/employees", requireAdmin, async (_req, res) => {
+  try {
+    // Fetch all active employees with their profile names
+    const { data: employees, error: empErr } = await db
+      .from("employees")
+      .select("id, user_id, role, phone, status")
+      .eq("status", "active");
 
-    const activeAssignment = assignments[0];
-    const location = activeAssignment ? { lat: activeAssignment.lat, lng: activeAssignment.lng } : null;
+    if (empErr) {
+      console.error("[AdminTracking] Employee query error:", empErr.message);
+      return res.status(500).json({ error: "Failed to load employees" });
+    }
 
-    const lastEvent = db.time_events
-      .filter((e) => {
-        const shift = db.shifts.find((s) => s.id === e.shift_id);
-        return shift && shift.employee_id === emp.id;
-      })
-      .sort((a, b) => b.ts.localeCompare(a.ts))[0];
+    if (!employees || employees.length === 0) return res.json([]);
 
-    return {
-      id: emp.id,
-      name: emp.name,
-      role: emp.role,
-      phone: emp.phone,
-      status: activeAssignment?.status || "idle",
-      location,
-      assignment: activeAssignment
-        ? {
-            id: activeAssignment.id,
-            customer_name: activeAssignment.customer_name,
-            address: activeAssignment.address,
-          }
-        : null,
-      lastUpdate: lastEvent?.ts || null,
-    };
-  });
+    const userIds = employees.map((e: any) => e.user_id).filter(Boolean);
 
-  res.json(employees);
+    // Fetch profile names in one batch
+    const { data: profiles } = await db
+      .from("profiles")
+      .select("id, name")
+      .in("id", userIds);
+
+    const profileMap: Record<string, string> = {};
+    (profiles || []).forEach((p: any) => { profileMap[p.id] = p.name || "Employee"; });
+
+    // Fetch active assignments (en_route or in_progress) for these employees
+    const employeeIds = employees.map((e: any) => e.id);
+    const { data: activeAssignments } = await db
+      .from("assignments")
+      .select(`
+        id,
+        employee_id,
+        status,
+        en_route_at,
+        appointment_id,
+        appointments (
+          user_id,
+          property_id,
+          service_type
+        )
+      `)
+      .in("employee_id", employeeIds)
+      .in("status", ["en_route", "in_progress"]);
+
+    // Build assignment context map
+    const apptUserIds = [...new Set(
+      (activeAssignments || []).map((a: any) => a.appointments?.user_id).filter(Boolean)
+    )];
+    const apptPropIds = [...new Set(
+      (activeAssignments || []).map((a: any) => a.appointments?.property_id).filter(Boolean)
+    )];
+
+    const [custProfiles, properties] = await Promise.all([
+      apptUserIds.length > 0
+        ? db.from("profiles").select("id, name").in("id", apptUserIds)
+        : { data: [] },
+      apptPropIds.length > 0
+        ? db.from("properties").select("id, address").in("id", apptPropIds)
+        : { data: [] },
+    ]);
+
+    const custMap: Record<string, string> = {};
+    (custProfiles.data || []).forEach((p: any) => { custMap[p.id] = p.name || "Customer"; });
+
+    const propMap: Record<string, string> = {};
+    (properties.data || []).forEach((p: any) => { propMap[p.id] = p.address || ""; });
+
+    // Build a map of employeeId → active assignment
+    const activeMap: Record<string, any> = {};
+    (activeAssignments || []).forEach((a: any) => {
+      if (!activeMap[a.employee_id]) {
+        activeMap[a.employee_id] = {
+          id:            a.id,
+          customer_name: custMap[a.appointments?.user_id] ?? "Customer",
+          address:       propMap[a.appointments?.property_id] ?? "",
+          status:        a.status,
+          en_route_at:   a.en_route_at,
+        };
+      }
+    });
+
+    const result = employees.map((emp: any) => {
+      const active = activeMap[emp.id] ?? null;
+      return {
+        id:         emp.id,
+        name:       profileMap[emp.user_id] || "Employee",
+        role:       emp.role,
+        phone:      emp.phone ?? null,
+        status:     active?.status || "idle",
+        // GPS location is not implemented — no live device tracking exists yet.
+        // This will be populated in Phase 3B when technician location reporting is added.
+        location:   null,
+        assignment: active
+          ? { id: active.id, customer_name: active.customer_name, address: active.address }
+          : null,
+        lastUpdate: active?.en_route_at ?? null,
+      };
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error("[AdminTracking] Unexpected error:", err.message);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-router.get("/tracking/employees/:id", requireAdmin, (req, res) => {
+/**
+ * GET /api/admin/tracking/employees/:id
+ * Returns detailed status for a single employee.
+ */
+router.get("/tracking/employees/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const emp = db.employees.find((e) => e.id === id);
-  if (!emp) return res.status(404).json({ error: "Employee not found" });
 
-  const assignments = db.assignments.filter((a) => a.employee_id === emp.id);
-  const activeAssignment = assignments.find((a) => a.status === "en_route" || a.status === "in_progress");
-  const recentAssignments = assignments.slice(-5).reverse();
+  try {
+    const { data: emp, error: empErr } = await db
+      .from("employees")
+      .select("id, user_id, role, phone, status")
+      .eq("id", id)
+      .single();
 
-  const events = db.time_events.filter((e) => {
-    const shift = db.shifts.find((s) => s.id === e.shift_id);
-    return shift && shift.employee_id === emp.id;
-  });
+    if (empErr || !emp) return res.status(404).json({ error: "Employee not found" });
 
-  res.json({
-    id: emp.id,
-    name: emp.name,
-    role: emp.role,
-    phone: emp.phone,
-    activeAssignment,
-    recentAssignments,
-    events: events.sort((a, b) => b.ts.localeCompare(a.ts)),
-  });
+    const { data: profile } = await db
+      .from("profiles")
+      .select("name")
+      .eq("id", emp.user_id)
+      .maybeSingle();
+
+    // All assignments for this employee (recent first)
+    const { data: assignments } = await db
+      .from("assignments")
+      .select(`
+        id,
+        status,
+        en_route_at,
+        arrived_at,
+        started_at,
+        completed_at,
+        appointment_id,
+        appointments (
+          scheduled_at,
+          service_type,
+          user_id,
+          property_id
+        )
+      `)
+      .eq("employee_id", id)
+      .order("id", { ascending: false })
+      .limit(10);
+
+    const activeAssignment = (assignments || []).find(
+      (a: any) => a.status === "en_route" || a.status === "in_progress"
+    );
+
+    return res.json({
+      id:               emp.id,
+      name:             profile?.name || "Employee",
+      role:             emp.role,
+      phone:            emp.phone ?? null,
+      status:           emp.status,
+      // GPS not implemented — see GET /tracking/employees note above
+      location:         null,
+      activeAssignment: activeAssignment ?? null,
+      recentAssignments: assignments || [],
+    });
+  } catch (err: any) {
+    console.error("[AdminTracking] Unexpected error:", err.message);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 export default router;

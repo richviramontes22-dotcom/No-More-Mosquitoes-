@@ -1,0 +1,302 @@
+{
+  "project": "No More Mosquitoes — Navigation Fix Plan",
+  "audit_date": "2026-05-15",
+  "status": "APPROVED_FOR_IMPLEMENTATION",
+  "mode": "plan_only",
+
+  "files_likely_to_change": [
+    {
+      "file": "client/components/layout/SiteHeader.tsx",
+      "reason": "Add customer hamburger branch; fix end props on NavLinks; import from navigation.ts",
+      "risk": "medium",
+      "lines_of_concern": [19, 30, 32, 50, 108, 135, 391, 429]
+    },
+    {
+      "file": "client/pages/DashboardLayout.tsx",
+      "reason": "Fix end props on sidebar NavLinks from end={item.to === '/dashboard'} to end={true} for all leaf routes",
+      "risk": "low",
+      "lines_of_concern": [22, 33, 46, 62]
+    },
+    {
+      "file": "client/data/navigation.ts",
+      "reason": "New file — canonical nav config source for all roles",
+      "risk": "low",
+      "action": "CREATE"
+    },
+    {
+      "file": "client/lib/translations.ts",
+      "reason": "May need new translation keys for customer nav labels if not already present",
+      "risk": "low",
+      "action": "ADD_KEYS_ONLY"
+    }
+  ],
+
+  "files_not_to_change": [
+    "client/contexts/AuthContext.tsx",
+    "client/App.tsx",
+    "client/pages/admin/AdminLayout.tsx",
+    "client/pages/employee/EmployeeLayout.tsx",
+    "client/lib/postLoginRoleCheck.ts",
+    "client/hooks/useProfile.ts",
+    "client/components/common/HeaderWeatherWidget.tsx",
+    "server/**",
+    "client/pages/dashboard/**"
+  ],
+
+  "nav_configs_to_unify": {
+    "current_sources": [
+      {
+        "name": "NAV_LINKS",
+        "location": "SiteHeader.tsx:19-30",
+        "role": "public + customer (incorrectly shared)"
+      },
+      {
+        "name": "ADMIN_NAV_LINKS",
+        "location": "SiteHeader.tsx:32-50",
+        "role": "admin hamburger"
+      },
+      {
+        "name": "dashboard nav array",
+        "location": "DashboardLayout.tsx:22-33",
+        "role": "customer sidebar"
+      },
+      {
+        "name": "NAV_GROUPS",
+        "location": "AdminLayout.tsx:14-74",
+        "role": "admin sidebar"
+      }
+    ],
+    "target_source": "client/data/navigation.ts",
+    "strategy": "Extract NAV_LINKS and ADMIN_NAV_LINKS from SiteHeader into navigation.ts. Add CUSTOMER_NAV_LINKS and UNIVERSAL_NAV_LINKS. Import everywhere needed."
+  },
+
+  "guest_menu": {
+    "links": [
+      { "label": "Schedule Service", "path": "/schedule", "end": true },
+      { "label": "Pricing & Plans", "path": "/pricing", "end": true },
+      { "label": "Services", "path": "/services", "end": true },
+      { "label": "Our Story", "path": "/our-story", "end": true },
+      { "label": "Reviews", "path": "/reviews", "end": true },
+      { "label": "FAQ", "path": "/faq", "end": true },
+      { "label": "Blog", "path": "/blog", "end": true },
+      { "label": "Contact", "path": "/contact", "end": true },
+      { "label": "Login", "path": "/login", "end": true },
+      { "label": "Sign Up", "path": "/signup", "end": true }
+    ]
+  },
+
+  "customer_menu": {
+    "priority_cta": {
+      "label": "Customer Dashboard",
+      "path": "/dashboard",
+      "end": false,
+      "note": "end=false so it stays highlighted across all /dashboard/* routes"
+    },
+    "dashboard_links": [
+      { "label": "Overview", "path": "/dashboard", "end": true },
+      { "label": "Appointments", "path": "/dashboard/appointments", "end": true },
+      { "label": "Plan & Billing", "path": "/dashboard/billing", "end": true },
+      { "label": "Properties", "path": "/dashboard/properties", "end": true },
+      { "label": "Marketplace", "path": "/dashboard/marketplace", "end": true },
+      { "label": "Orders", "path": "/dashboard/orders", "end": true },
+      { "label": "Messages", "path": "/dashboard/messages", "end": true },
+      { "label": "Support", "path": "/dashboard/support", "end": true },
+      { "label": "Videos", "path": "/dashboard/videos", "end": true },
+      { "label": "Profile", "path": "/dashboard/profile", "end": true }
+    ],
+    "universal_links": [
+      { "label": "Our Story", "path": "/our-story", "end": true },
+      { "label": "Reviews", "path": "/reviews", "end": true },
+      { "label": "FAQ", "path": "/faq", "end": true },
+      { "label": "Blog", "path": "/blog", "end": true },
+      { "label": "Contact", "path": "/contact", "end": true }
+    ],
+    "session_action": {
+      "label": "Sign Out",
+      "action": "signOut"
+    }
+  },
+
+  "admin_menu": {
+    "priority_cta": {
+      "label": "Admin Dashboard",
+      "path": "/admin",
+      "end": false
+    },
+    "dashboard_links": [
+      { "label": "Overview", "path": "/admin", "end": true },
+      { "label": "Customers", "path": "/admin/customers", "end": false },
+      { "label": "Properties", "path": "/admin/properties", "end": false },
+      { "label": "Appointments", "path": "/admin/appointments", "end": false },
+      { "label": "Visits", "path": "/admin/visits", "end": false },
+      { "label": "Messages", "path": "/admin/messages", "end": false },
+      { "label": "Tickets", "path": "/admin/tickets", "end": false },
+      { "label": "Employees", "path": "/admin/employees", "end": false },
+      { "label": "Route Planning", "path": "/admin/route-planning", "end": false },
+      { "label": "Employee Tracking", "path": "/admin/employee-tracking", "end": false },
+      { "label": "Billing", "path": "/admin/billing", "end": false },
+      { "label": "Revenue", "path": "/admin/revenue", "end": false },
+      { "label": "Content", "path": "/admin/content", "end": false },
+      { "label": "Pricing & Plans", "path": "/admin/pricing", "end": false },
+      { "label": "Service Areas", "path": "/admin/service-areas", "end": false },
+      { "label": "Reports", "path": "/admin/reports", "end": false },
+      { "label": "Settings", "path": "/admin/settings", "end": false }
+    ],
+    "universal_links": [
+      { "label": "Our Story", "path": "/our-story", "end": true },
+      { "label": "FAQ", "path": "/faq", "end": true },
+      { "label": "Blog", "path": "/blog", "end": true },
+      { "label": "Contact", "path": "/contact", "end": true }
+    ],
+    "session_action": {
+      "label": "Sign Out",
+      "action": "signOut"
+    }
+  },
+
+  "active_matching_rules": {
+    "strategy": "end_prop_per_route",
+    "rules": [
+      {
+        "pattern": "root /",
+        "end": true,
+        "reason": "Every path starts with /, so exact match is required"
+      },
+      {
+        "pattern": "section CTA (/dashboard, /admin)",
+        "end": false,
+        "reason": "Intentionally stays highlighted across all child routes"
+      },
+      {
+        "pattern": "dashboard leaf routes (/dashboard/*)",
+        "end": true,
+        "reason": "Leaf routes must not bleed active state to sibling paths"
+      },
+      {
+        "pattern": "admin leaf routes (/admin/*)",
+        "end": false,
+        "reason": "Admin routes may have sub-routes with IDs (/admin/customers/123); prefix match is correct"
+      },
+      {
+        "pattern": "public marketing pages",
+        "end": true,
+        "reason": "Pages like /pricing should not match /pricing/enterprise"
+      }
+    ],
+    "current_bug": "end prop only set to true for '/' in hamburger and '/dashboard' in sidebar — all other links use startsWith default, causing multi-highlight",
+    "fix": "Set end={true} on all dashboard leaf NavLinks in both hamburger and sidebar"
+  },
+
+  "hamburger_branch_logic": {
+    "current": "admin ? ADMIN_NAV_LINKS : navLinks (guests + customers share navLinks)",
+    "proposed": {
+      "pseudocode": "if (isAdmin) → ADMIN_NAV_LINKS + UNIVERSAL; else if (isCustomer) → CUSTOMER_NAV_LINKS + UNIVERSAL; else → GUEST_NAV_LINKS",
+      "role_check": "userRole === 'admin' | userRole === 'customer' | !activeUser",
+      "undefined_role_fallback": "Treat undefined/null userRole as guest to prevent flicker showing wrong menu while profile loads"
+    }
+  },
+
+  "implementation_steps": [
+    {
+      "step": 1,
+      "title": "Create client/data/navigation.ts",
+      "actions": [
+        "Define GUEST_NAV_LINKS array",
+        "Define CUSTOMER_HAMBURGER_NAV array (priority CTA + 10 dashboard links + 5 universal links)",
+        "Define ADMIN_HAMBURGER_NAV array (priority CTA + 17 admin links + 4 universal links)",
+        "Define UNIVERSAL_NAV_LINKS array",
+        "Export all arrays"
+      ],
+      "files_changed": ["client/data/navigation.ts (CREATE)"]
+    },
+    {
+      "step": 2,
+      "title": "Update SiteHeader.tsx hamburger branch",
+      "actions": [
+        "Import nav arrays from navigation.ts",
+        "Remove inline NAV_LINKS and ADMIN_NAV_LINKS definitions",
+        "Replace binary branch with three-way branch (admin / customer / guest)",
+        "Add end={true} to leaf route NavLinks in hamburger",
+        "Keep end={false} on Dashboard/Admin CTA links only",
+        "Remove navLinks transformation memo (no longer needed)"
+      ],
+      "files_changed": ["client/components/layout/SiteHeader.tsx"]
+    },
+    {
+      "step": 3,
+      "title": "Fix DashboardLayout.tsx sidebar end props",
+      "actions": [
+        "Change end={item.to === '/dashboard'} to end={true} for all leaf route NavLinks",
+        "Add end={false} only to the Dashboard Overview CTA if it serves as a section root"
+      ],
+      "files_changed": ["client/pages/DashboardLayout.tsx"]
+    },
+    {
+      "step": 4,
+      "title": "Add missing translation keys if needed",
+      "actions": [
+        "Check translations.ts for nav.customerDashboard, nav.signOut",
+        "Add any missing keys with English defaults"
+      ],
+      "files_changed": ["client/lib/translations.ts (if needed)"]
+    }
+  ],
+
+  "validation_checklist": [
+    {
+      "scenario": "Guest visits /pricing",
+      "expected": "Hamburger shows guest links; Pricing is highlighted; no other item is highlighted"
+    },
+    {
+      "scenario": "Customer logs in and visits /dashboard/appointments",
+      "expected": "Hamburger shows Customer Dashboard CTA + 10 dashboard links + Universal links; Appointments is highlighted in hamburger; only Appointments is highlighted in sidebar; Dashboard CTA may also be highlighted (by design)"
+    },
+    {
+      "scenario": "Customer logs in and visits /dashboard",
+      "expected": "Hamburger shows Customer Dashboard CTA highlighted; Overview highlighted in sidebar; no public links visible in hamburger"
+    },
+    {
+      "scenario": "Customer visits /faq while logged in",
+      "expected": "Hamburger shows Universal links including FAQ; FAQ is highlighted; Dashboard CTA is NOT highlighted; no public sales links visible"
+    },
+    {
+      "scenario": "Admin logs in and visits /admin/customers",
+      "expected": "Hamburger shows Admin Dashboard CTA + admin links; Customers link is highlighted; no customer dashboard links visible"
+    },
+    {
+      "scenario": "User logs out",
+      "expected": "Hamburger reverts to guest nav immediately; no dashboard links visible"
+    },
+    {
+      "scenario": "Profile load is slow (userRole undefined briefly)",
+      "expected": "Hamburger shows guest nav until role resolves; no flash of wrong menu; no console errors"
+    },
+    {
+      "scenario": "Mobile: hamburger open on /dashboard/billing",
+      "expected": "Only Plan & Billing is highlighted; no other item is highlighted; Dashboard CTA may be highlighted (by design)"
+    }
+  ],
+
+  "regression_risks": [
+    {
+      "risk": "Customer sees no access to public pages",
+      "mitigation": "Ensure Universal links (Our Story, Reviews, FAQ, Blog, Contact) are included in CUSTOMER_HAMBURGER_NAV"
+    },
+    {
+      "risk": "Role undefined during auth hydration causes flicker",
+      "mitigation": "Default undefined/null userRole to guest view; do not show customer or admin menu until userRole is confirmed"
+    },
+    {
+      "risk": "Admin hamburger breaks from SiteHeader refactor",
+      "mitigation": "Admin branch stays isolated; only adding a new customer branch; test admin login explicitly"
+    },
+    {
+      "risk": "Translation keys missing for new customer nav",
+      "mitigation": "Add English fallbacks for all new nav labels; check translations.ts before deploying"
+    },
+    {
+      "risk": "Desktop header nav (not hamburger) affected",
+      "mitigation": "Desktop nav is rendered separately from mobile hamburger in SiteHeader; verify desktop nav unchanged in final diff"
+    }
+  ]
+}

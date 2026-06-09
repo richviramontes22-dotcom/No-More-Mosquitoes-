@@ -44,16 +44,7 @@ const Messages = () => {
         const offset = (page - 1) * ITEMS_PER_PAGE;
         const { data: threadData, error } = await supabase
           .from("message_threads")
-          .select(`
-            id,
-            assignment_id,
-            created_at,
-            last_activity_at,
-            assignments (
-              appointment_id,
-              profiles:user_id (name, email)
-            )
-          `)
+          .select("id, assignment_id, created_at, last_activity_at")
           .order("last_activity_at", { ascending: false })
           .range(offset, offset + ITEMS_PER_PAGE - 1);
 
@@ -63,18 +54,42 @@ const Messages = () => {
           return;
         }
 
-        // Map data - messages will be loaded on demand when thread is selected
-        const mapped = (threadData || []).map((t: any) => ({
-          id: t.id,
-          subject: `Conversation #${t.id.slice(0, 8)}`,
-          customer_name: t.assignments?.profiles?.name || "Unknown",
-          customer_email: t.assignments?.profiles?.email || "",
-          assignment_id: t.assignment_id,
-          created_at: t.created_at,
-          last_message_at: t.last_activity_at || t.created_at,
-          unread_count: 0, // Would need separate query if tracking unread status
-          messages: [] // Messages loaded on demand
-        }));
+        // Batch-enrich: fetch assignments then profiles separately (FK is to auth.users, not profiles)
+        const assignmentIds = (threadData || []).map((t: any) => t.assignment_id).filter(Boolean);
+        let userIdByAssignment: Record<string, string> = {};
+        if (assignmentIds.length > 0) {
+          const { data: asgns } = await supabase
+            .from("assignments")
+            .select("id, user_id")
+            .in("id", assignmentIds);
+          (asgns || []).forEach((a: any) => { if (a.user_id) userIdByAssignment[a.id] = a.user_id; });
+        }
+
+        const userIds = [...new Set(Object.values(userIdByAssignment))];
+        let profileByUserId: Record<string, { name: string; email: string }> = {};
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, name, email")
+            .in("id", userIds);
+          (profiles || []).forEach((p: any) => { profileByUserId[p.id] = { name: p.name, email: p.email }; });
+        }
+
+        const mapped = (threadData || []).map((t: any) => {
+          const userId = userIdByAssignment[t.assignment_id] ?? null;
+          const profile = userId ? profileByUserId[userId] : null;
+          return {
+            id: t.id,
+            subject: `Conversation #${t.id.slice(0, 8)}`,
+            customer_name: profile?.name || "Unknown",
+            customer_email: profile?.email || "",
+            assignment_id: t.assignment_id,
+            created_at: t.created_at,
+            last_message_at: t.last_activity_at || t.created_at,
+            unread_count: 0,
+            messages: [],
+          };
+        });
 
         setThreads(mapped);
         if (mapped.length > 0 && !activeId) {

@@ -3,6 +3,8 @@ import { NavLink, Outlet } from "react-router-dom";
 const nav = [
   { label: "Dashboard", to: "/employee" },
   { label: "Assignments", to: "/employee/assignments" },
+  { label: "Today's Route", to: "/employee/route" },
+  { label: "Onboarding", to: "/employee/onboarding" },
   { label: "Messages", to: "/employee/messages" },
   { label: "Timesheets", to: "/employee/timesheets" },
   { label: "Profile", to: "/employee/profile" },

@@ -5,6 +5,7 @@ import Seo from "@/components/seo/Seo";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import AuthTabs from "@/components/auth/AuthTabs";
 import { useAuth } from "@/contexts/AuthContext";
+import { DevQuickLogin } from "@/components/dev/DevQuickLogin";
 
 type LocationState = { from?: string };
 
@@ -35,6 +36,7 @@ const EmployeeLogin = () => {
             </CardHeader>
             <CardContent>
               <AuthTabs />
+              <DevQuickLogin />
             </CardContent>
           </Card>
           <div className="space-y-10">

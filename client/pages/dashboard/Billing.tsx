@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { clearPendingOnboarding } from "@/lib/pendingOnboarding";
 import SectionHeading from "@/components/common/SectionHeading";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +17,8 @@ import {
   MapPin,
   Building2,
   X,
-  AlertTriangle
+  AlertTriangle,
+  CalendarDays,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -34,7 +37,6 @@ import { useProfile } from "@/hooks/useProfile";
 import { supabase, withTimeout } from "@/lib/supabase";
 import { useProperties } from "@/hooks/dashboard/useProperties";
 import { useSubscriptions } from "@/hooks/dashboard/useSubscriptions";
-import { WeatherStatusModule } from "@/components/dashboard/WeatherStatusModule";
 
 import { PlanChangeDialog } from "@/components/dashboard/billing/PlanChangeDialog";
 import { CadenceChangeDialog } from "@/components/dashboard/billing/CadenceChangeDialog";
@@ -60,9 +62,17 @@ const EMPTY_PROPERTIES: Property[] = [];
 const Billing = () => {
   const { toast } = useToast();
   const { user, isHydrated } = useAuth();
+  const location = useLocation();
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    const hasSessionId = !!params.get("session_id");
+    // Clear any pending onboarding data when checkout completes successfully
+    if (hasSessionId) clearPendingOnboarding();
+    return hasSessionId;
+  });
 
   // Dialog States
   const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false);
@@ -80,20 +90,20 @@ const Billing = () => {
   // Payment card data comes from profile, not auth
   const { data: profile } = useProfile();
 
-  // Payment Method State
-  const [paymentMethod, setPaymentMethod] = useState({
-    cardLast4: profile?.card_last4 || "4242",
-    cardBrand: profile?.card_brand || "Visa",
-    cardExpiry: profile?.card_expiry || "12/2026"
+  // Payment Method State — only populated from real profile data; never fake defaults
+  const [paymentMethod, setPaymentMethod] = useState<{ cardLast4: string | null; cardBrand: string | null; cardExpiry: string | null }>({
+    cardLast4: profile?.card_last4 ?? null,
+    cardBrand: profile?.card_brand ?? null,
+    cardExpiry: profile?.card_expiry ?? null,
   });
 
   // Update payment method when profile changes
   useEffect(() => {
     if (profile) {
       setPaymentMethod({
-        cardLast4: profile.card_last4 || "4242",
-        cardBrand: profile.card_brand || "Visa",
-        cardExpiry: profile.card_expiry || "12/2026"
+        cardLast4: profile.card_last4 ?? null,
+        cardBrand: profile.card_brand ?? null,
+        cardExpiry: profile.card_expiry ?? null,
       });
     }
   }, [profile]);
@@ -114,7 +124,9 @@ const Billing = () => {
       return;
     }
 
-    const nextProperties = (subscriptionProperties.length > 0 ? subscriptionProperties : propertyRows) as Property[];
+    // Only show properties with actual paid subscription records — never fall back to
+    // the properties table, which would show unpaid properties as "Active Subscription"
+    const nextProperties = subscriptionProperties as Property[];
 
     // SECTION 8: Debug logging for validation
     console.log("[Billing] DETAILED STATE:", {
@@ -258,14 +270,10 @@ const Billing = () => {
   };
 
   const handlePaymentMethodSuccess = () => {
-    setPaymentMethod({
-      cardLast4: "5555",
-      cardBrand: "Mastercard",
-      cardExpiry: "08/2028"
-    });
+    // Refresh profile data to pick up the real card details stored by the server
     toast({
       title: "Payment Method Added",
-      description: "Your new Mastercard ending in 5555 has been securely saved.",
+      description: "Your payment method has been saved.",
     });
   };
 
@@ -379,8 +387,58 @@ const Billing = () => {
 
   return (
     <div className="grid gap-10">
-      {/* Weather and Service Status Module */}
-      <WeatherStatusModule />
+      {/* Post-checkout success card — shown when Stripe redirects back with ?session_id= */}
+      {showSuccessBanner && (
+        <div className="rounded-[24px] border border-green-200 bg-green-50 p-6 sm:p-8">
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="font-bold text-green-900 text-lg">Payment received — you're all set!</p>
+                <p className="text-sm text-green-800 mt-0.5">
+                  Your service has been activated. Here's what happens next.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowSuccessBanner(false)}
+              className="text-green-600 hover:text-green-800 transition-colors shrink-0 mt-1"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                icon: <CalendarDays className="h-4 w-4 text-green-700" />,
+                title: "Visit confirmation",
+                desc: "Our team will confirm your preferred first visit date and arrival window before the service day.",
+              },
+              {
+                icon: <Zap className="h-4 w-4 text-green-700" />,
+                title: "Appointment created",
+                desc: "Your first scheduled visit is visible in the Appointments tab. We'll notify you of any updates.",
+              },
+              {
+                icon: <ShieldCheck className="h-4 w-4 text-green-700" />,
+                title: "100% satisfaction guarantee",
+                desc: "If pest activity returns between visits, we'll re-service your property at no charge.",
+              },
+            ].map(({ icon, title, desc }) => (
+              <div key={title} className="rounded-2xl bg-white/70 border border-green-100 p-4 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  {icon}
+                  <p className="text-sm font-semibold text-green-900">{title}</p>
+                </div>
+                <p className="text-xs text-green-800 leading-snug">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <SectionHeading
@@ -388,15 +446,14 @@ const Billing = () => {
           title="Manage your subscription"
           description="Update your service tier, change payment methods, and view your billing history."
         />
-        <Button
-          variant="outline"
-          className="rounded-xl shadow-sm"
+        <button
           onClick={handleOpenPortal}
           disabled={isOpeningPortal}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors self-start md:self-auto"
         >
-          {isOpeningPortal ? "Connecting..." : "Stripe Billing Portal"}
-          <ExternalLink className="ml-2 h-4 w-4" />
-        </Button>
+          {isOpeningPortal ? "Connecting…" : "Stripe Billing Portal"}
+          <ExternalLink className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <div className="grid gap-6">
@@ -431,8 +488,14 @@ const Billing = () => {
             </div>
           </Card>
         ) : properties.length === 0 ? (
-          <Card className="rounded-[28px] border-dashed border-2 p-12 text-center bg-muted/5">
-            <p className="text-muted-foreground">No properties found. Add a property to start a subscription.</p>
+          <Card className="rounded-[28px] border-dashed border-2 p-12 text-center bg-muted/5 space-y-4">
+            <p className="font-semibold text-foreground">No active plan</p>
+            <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+              Complete your service setup to activate mosquito protection and view your plan here.
+            </p>
+            <Button className="rounded-full px-8 shadow-brand" asChild>
+              <a href="/onboarding">Complete Setup</a>
+            </Button>
           </Card>
         ) : (
           <div className="grid gap-6 lg:grid-cols-2">
@@ -452,7 +515,13 @@ const Billing = () => {
                   <CardDescription className="text-foreground/70 font-medium ml-7">
                     {property.program === "one_time"
                       ? "One-time intensive service"
-                      : `${property.cadence}-day recurring cadence`} • ${property.price}.00 {property.program === "annual" ? "/ year" : "/ visit"}
+                      : `${property.cadence ?? "?"}-day recurring cadence`}
+                    {" • "}
+                    {property.price != null && property.price > 0
+                      ? `$${property.price.toFixed(2)}`
+                      : "Custom pricing"}
+                    {" "}
+                    {property.program === "annual" ? "/ year" : "/ visit"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6 flex-1">
@@ -489,7 +558,7 @@ const Billing = () => {
                           }}
                         >
                           <Zap className="mr-2 h-4 w-4 text-primary" />
-                          Cadence
+                          Service Frequency
                         </Button>
                         <Button
                           variant="outline"
@@ -537,9 +606,15 @@ const Billing = () => {
                  'CARD'}
               </div>
             </div>
-            <CardTitle className="text-2xl mt-4 font-display">{paymentMethod.cardBrand} ending in {paymentMethod.cardLast4}</CardTitle>
+            <CardTitle className="text-2xl mt-4 font-display">
+              {paymentMethod.cardBrand && paymentMethod.cardLast4
+                ? `${paymentMethod.cardBrand} ending in ${paymentMethod.cardLast4}`
+                : "No payment method on file"}
+            </CardTitle>
             <CardDescription>
-              Expires {paymentMethod.cardExpiry} • Used for all properties
+              {paymentMethod.cardExpiry
+                ? `Expires ${paymentMethod.cardExpiry} • Used for all properties`
+                : "Add a payment method below to manage your subscription"}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6 space-y-6">

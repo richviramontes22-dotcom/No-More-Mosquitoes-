@@ -8,6 +8,22 @@
   external_node_modules = ["express"]
   node_bundler = "esbuild"
 
+# Scheduled function: send appointment reminders daily at 7:00 AM UTC
+[functions.send-reminders]
+  schedule = "0 7 * * *"
+
+# Scheduled function: generate recurring appointments daily at 8:00 AM UTC
+[functions.generate-appointments]
+  schedule = "0 8 * * *"
+
+# Scheduled function: expire annual plans whose current_period_end has passed (daily at 9:00 AM UTC)
+[functions.expire-annual-plans]
+  schedule = "0 9 * * *"
+
+# Scheduled function: send annual plan expiry warnings (30d, 7d, and expiration emails) daily at 10:00 AM UTC
+[functions.send-annual-warnings]
+  schedule = "0 10 * * *"
+
 # Force HTTPS redirect
 [[redirects]]
   from = "http://*"

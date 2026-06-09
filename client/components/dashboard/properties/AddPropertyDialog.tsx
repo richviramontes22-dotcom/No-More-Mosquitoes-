@@ -1,253 +1,132 @@
 import { useState, useEffect } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { usePropertyLookup } from "@/hooks/use-property-lookup";
-import PropertyQuestionnaire, { PropertyQuestionnaireData } from "@/components/page/PropertyQuestionnaire";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, MapPin, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface AddPropertyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: (property: any) => void;
-  property?: any; // Add this prop for editing
+  property?: any;
 }
 
-export const AddPropertyDialog = ({ open, onOpenChange, onSuccess, property }: AddPropertyDialogProps) => {
+const inputCls =
+  "w-full rounded-xl border border-border/70 bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition";
+const labelCls = "text-[11px] font-bold uppercase tracking-wider text-muted-foreground";
+
+export const AddPropertyDialog = ({
+  open, onOpenChange, onSuccess, property,
+}: AddPropertyDialogProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { lookup, isLoading: isLookupLoading, error: lookupError } = usePropertyLookup();
+  const { lookup, isLoading: isLookupLoading } = usePropertyLookup();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasLookedUp, setHasLookedUp] = useState(false);
-  const [formData, setFormData] = useState({
-    address: "",
-    city: "",
-    zip: "",
-    acreage: "",
-    notes: ""
-  });
-  const [questionnaireData, setQuestionnaireData] = useState<PropertyQuestionnaireData>({
-    hasPets: false,
-    petDetails: "",
-    childrenUseYard: false,
-    primaryConcerns: "",
-    hasStandingWater: false,
-    yardUsage: "weekly",
-    gateInstructions: ""
-  });
+  const [acreageDetected, setAcreageDetected] = useState(false);
+  const [lookupFailed, setLookupFailed] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
-  // Debug logging
+  const [address, setAddress]   = useState("");
+  const [city, setCity]         = useState("");
+  const [stateVal, setStateVal] = useState("CA");
+  const [zip, setZip]           = useState("");
+  const [acreage, setAcreage]   = useState("");
+  const [gateCode, setGateCode] = useState("");
+  const [hasPets, setHasPets]   = useState(false);
+  const [petDetails, setPetDetails] = useState("");
+  const [hasChildren, setHasChildren] = useState(false);
+  const [standingWater, setStandingWater] = useState(false);
+  const [notes, setNotes] = useState("");
+
+  // Pre-fill for edit mode
   useEffect(() => {
-    console.log("[AddPropertyDialog] open state changed:", open, "property:", property?.id);
-  }, [open, property?.id]);
-
-  // Handle property editing initialization
-  useEffect(() => {
-    if (property && open) {
-      // Split address if it contains a comma
-      const parts = property.address.split(",");
-      const address = parts[0]?.trim() || "";
-      const city = parts[1]?.trim() || "";
-
-      setFormData({
-        address,
-        city,
-        zip: property.zip || "",
-        acreage: property.acreage?.toString() || "",
-        notes: property.notes || ""
-      });
-
-      // Try to parse questionnaire data from notes
-      try {
-        if (property.notes) {
-          // Look for gateInstructions in the notes field
-          const gateMatch = property.notes.match(/Gate:\s*([^|]*)/);
-          const gateCode = gateMatch ? gateMatch[1].trim() : "";
-
-          // Parse other questionnaire fields if they exist
-          setQuestionnaireData(prev => ({
-            ...prev,
-            gateInstructions: gateCode || prev.gateInstructions
-          }));
-        }
-      } catch (e) {
-        // If parsing fails, use defaults
-        console.log("Could not parse questionnaire data from notes");
-      }
-
-      setHasLookedUp(true); // Mark as looked up since we're loading existing data
-    } else if (!property && open) {
-      // Reset form for new property
-      setFormData({ address: "", city: "", zip: "", acreage: "", notes: "" });
-      setQuestionnaireData({
-        hasPets: false,
-        petDetails: "",
-        childrenUseYard: false,
-        primaryConcerns: "",
-        hasStandingWater: false,
-        yardUsage: "weekly",
-        gateInstructions: ""
-      });
-      setHasLookedUp(false);
+    if (!open) return;
+    if (property) {
+      const parts = (property.address || "").split(",");
+      setAddress(parts[0]?.trim() || "");
+      setCity(parts[1]?.trim() || "");
+      setStateVal(parts[2]?.trim() || "CA");
+      setZip(property.zip || "");
+      setAcreage(property.acreage?.toString() || "");
+      setAcreageDetected(!!property.acreage);
+      const gateMatch = (property.notes || "").match(/Gate:\s*([^|]*)/);
+      setGateCode(gateMatch?.[1]?.trim() || "");
+      setNotes("");
+    } else {
+      setAddress(""); setCity(""); setStateVal("CA"); setZip("");
+      setAcreage(""); setAcreageDetected(false); setLookupFailed(false);
+      setGateCode(""); setHasPets(false); setPetDetails("");
+      setHasChildren(false); setStandingWater(false); setNotes("");
+      setShowDetails(false);
     }
   }, [property, open]);
 
-  // Reset lookup state when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setHasLookedUp(false);
-    }
-  }, [open]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.id]: e.target.value }));
-  };
-
   const handleLookup = async () => {
-    if (!formData.address || !formData.zip) {
-      toast({
-        title: "Missing Details",
-        description: "Please enter both street address and ZIP code.",
-        variant: "destructive"
-      });
+    if (!address || !zip) {
+      toast({ title: "Missing details", description: "Enter street address and ZIP to auto-detect lot size.", variant: "destructive" });
       return;
     }
-
-    const result = await lookup(formData.address, formData.zip, formData.city);
+    const result = await lookup(address, zip, city, stateVal);
     if (result) {
-      setFormData(prev => ({
-        ...prev,
-        acreage: result.acreage.toString()
-      }));
-      setHasLookedUp(true);
-      toast({
-        title: "Property Found",
-        description: `Acreage: ${result.acreage} acres`,
-      });
-    } else if (lookupError) {
-      toast({
-        title: "Lookup Failed",
-        description: lookupError || "Unable to find property data. You can enter acreage manually.",
-        variant: "destructive"
-      });
+      setAcreage(result.acreage.toString());
+      setAcreageDetected(true);
+      setLookupFailed(false);
+      toast({ title: "Property found", description: `Lot size: ${result.acreage} acres — pricing updated.` });
+    } else {
+      setLookupFailed(true);
     }
   };
 
   const handleSubmit = async () => {
     if (!user) return;
-    if (!formData.address || !formData.zip) {
-      toast({ title: "Validation Error", description: "Please provide an address and ZIP code.", variant: "destructive" });
+    if (!address || !zip) {
+      toast({ title: "Required fields missing", description: "Address and ZIP are required.", variant: "destructive" });
       return;
     }
+    const acreageVal = acreage ? parseFloat(acreage) : 0.25;
+    const noteParts: string[] = [];
+    if (gateCode) noteParts.push(`Gate: ${gateCode}`);
+    const prefs: string[] = [];
+    if (hasPets)       prefs.push(`Pets: ${petDetails || "Yes"}`);
+    if (hasChildren)   prefs.push("Children use yard");
+    if (standingWater) prefs.push("Standing water sources");
+    if (prefs.length)  noteParts.push(prefs.join(" | "));
+    if (notes)         noteParts.push(notes);
+    const combinedNotes = noteParts.join(" | ");
 
-    // If no acreage provided, use default of 0.25 acres
-    const acreageValue = formData.acreage ? parseFloat(formData.acreage) : 0.25;
-
-    // Build comprehensive notes from questionnaire data
-    const notesArray: string[] = [];
-
-    // Add gate instructions if present
-    if (questionnaireData.gateInstructions) {
-      notesArray.push(`Gate: ${questionnaireData.gateInstructions}`);
-    }
-
-    // Add property preferences summary
-    const preferencesArray: string[] = [];
-    if (questionnaireData.hasPets) {
-      preferencesArray.push(`Pets: ${questionnaireData.petDetails || "Yes"}`);
-    }
-    if (questionnaireData.childrenUseYard) {
-      preferencesArray.push("Children use yard");
-    }
-    if (questionnaireData.hasStandingWater) {
-      preferencesArray.push("Standing water sources present");
-    }
-    preferencesArray.push(`Yard usage: ${questionnaireData.yardUsage}`);
-    if (questionnaireData.primaryConcerns) {
-      preferencesArray.push(`Concerns: ${questionnaireData.primaryConcerns}`);
-    }
-
-    if (preferencesArray.length > 0) {
-      notesArray.push(preferencesArray.join(" | "));
-    }
-
-    // Add any additional notes
-    if (formData.notes) {
-      notesArray.push(formData.notes);
-    }
-
-    const combinedNotes = notesArray.join(" | ");
+    const fullAddress = [address, city].filter(Boolean).join(", ");
 
     setIsSubmitting(true);
     try {
       let result;
       if (property?.id && !property.isMock) {
-        // Update existing property
         const { data, error } = await supabase
           .from("properties")
-          .update({
-            address: `${formData.address}${formData.city ? `, ${formData.city}` : ""}`,
-            zip: formData.zip,
-            acreage: acreageValue,
-            notes: combinedNotes
-          })
+          .update({ address: fullAddress, zip, acreage: acreageVal, notes: combinedNotes })
           .eq("id", property.id)
-          .select()
-          .single();
-
+          .select().single();
         if (error) throw error;
         result = data;
-
-        toast({
-          title: "Property Updated",
-          description: `Changes to ${formData.address} have been saved.`,
-        });
+        toast({ title: "Property updated", description: `Changes to ${address} saved.` });
       } else {
-        // Insert new property
         const { data, error } = await supabase
           .from("properties")
-          .insert({
-            user_id: user.id,
-            address: `${formData.address}${formData.city ? `, ${formData.city}` : ""}`,
-            zip: formData.zip,
-            acreage: acreageValue,
-            notes: combinedNotes
-          })
-          .select()
-          .single();
-
+          .insert({ user_id: user.id, address: fullAddress, zip, acreage: acreageVal, notes: combinedNotes })
+          .select().single();
         if (error) throw error;
         result = data;
-
-        toast({
-          title: "Property Added Successfully",
-          description: `Property at ${formData.address} has been added${formData.acreage ? ` with ${formData.acreage} acres` : " (default 0.25 acres)"}.`,
-        });
+        toast({ title: "Property added", description: `${address} is ready for scheduling.` });
       }
-
-      console.log("[AddPropertyDialog] Calling onSuccess");
       onSuccess(result);
-      console.log("[AddPropertyDialog] Calling onOpenChange(false)");
       onOpenChange(false);
-    } catch (error: any) {
-      console.error("Error saving property:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to save property. Please try again.",
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Could not save property.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -255,122 +134,225 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess, property }: A
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>
-            {property ? "Edit Property" : "Add New Property"}
+      <DialogContent className="max-w-xl rounded-[32px] p-0 overflow-hidden border-border/60">
+        <DialogHeader className="px-6 pt-6 pb-0">
+          <DialogTitle className="font-display text-2xl font-bold">
+            {property ? "Edit Property" : "Add a New Property"}
           </DialogTitle>
-          <DialogDescription>
+          <p className="text-sm text-muted-foreground mt-1">
             {property
-              ? "Update your property details and preferences below."
-              : "Provide the address and specific property details."}
-          </DialogDescription>
+              ? "Update the address and details for this location."
+              : "We'll detect your lot size automatically for accurate pricing."}
+          </p>
         </DialogHeader>
 
-        <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
-          {/* Address Section */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-foreground">Property Address</h3>
-            <div className="space-y-2">
-              <Label htmlFor="address">Street Address</Label>
-              <Input
-                id="address"
-                placeholder="e.g., 123 Main St"
-                value={formData.address}
-                onChange={handleInputChange}
+        <div className="px-6 pb-6 pt-4 space-y-5 max-h-[72vh] overflow-y-auto">
+
+          {/* Address fields */}
+          <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/20 p-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Service Address</p>
+
+            <div className="space-y-1.5">
+              <label className={labelCls}>Street Address</label>
+              <input
+                value={address}
+                onChange={e => setAddress(e.target.value)}
+                placeholder="123 Oak Street"
+                className={inputCls}
+                autoComplete="street-address"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                placeholder="e.g., Newport Beach"
-                value={formData.city}
-                onChange={handleInputChange}
-              />
+
+            <div className="grid grid-cols-6 gap-3">
+              <div className="col-span-3 space-y-1.5">
+                <label className={labelCls}>City</label>
+                <input
+                  value={city}
+                  onChange={e => setCity(e.target.value)}
+                  placeholder="Anaheim"
+                  className={inputCls}
+                />
+              </div>
+              <div className="col-span-1 space-y-1.5">
+                <label className={labelCls}>State</label>
+                <input
+                  value={stateVal}
+                  onChange={e => setStateVal(e.target.value.toUpperCase())}
+                  placeholder="CA"
+                  maxLength={2}
+                  className={cn(inputCls, "text-center uppercase")}
+                />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <label className={labelCls}>ZIP</label>
+                <input
+                  value={zip}
+                  onChange={e => setZip(e.target.value.replace(/\D/g, ""))}
+                  placeholder="92801"
+                  maxLength={5}
+                  inputMode="numeric"
+                  className={inputCls}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="zip">ZIP Code</Label>
-              <Input
-                id="zip"
-                placeholder="e.g., 92660"
-                value={formData.zip}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div className="space-y-3">
-              <Label>Estimate Acreage</Label>
+
+            {/* Auto-detect + acreage */}
+            <div className="flex items-center gap-3">
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleLookup}
-                disabled={isLookupLoading || !formData.address || !formData.zip}
-                className="w-full"
+                disabled={isLookupLoading || !address || !zip}
+                className="flex-1 rounded-xl h-10 text-sm font-bold border-primary/30 text-primary hover:bg-primary/5"
               >
                 {isLookupLoading ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Looking up...</>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <><Search className="mr-2 h-4 w-4" /> Look Up Acreage</>
+                  <><MapPin className="h-4 w-4 mr-1.5" /> Auto-detect lot size</>
                 )}
               </Button>
-              {hasLookedUp && (
-                <p className="text-xs text-green-600 font-medium">✓ Acreage automatically populated from GIS data</p>
+              {acreageDetected && (
+                <span className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {acreage} acres
+                </span>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="acreage">Acreage</Label>
-              <Input
-                id="acreage"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.25"
-                value={formData.acreage}
-                onChange={(e) => setFormData(prev => ({ ...prev, acreage: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">If not available via lookup, you can enter manually</p>
+
+            {/* Manual acreage fallback */}
+            {!acreageDetected && (
+              lookupFailed ? (
+                <div className="rounded-2xl border border-amber-300/60 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-700/40 px-4 py-3 space-y-2 animate-in fade-in duration-300">
+                  <p className="text-xs font-bold text-amber-900 dark:text-amber-200">Address not found in parcel database</p>
+                  <p className="text-[11px] text-amber-800/70 dark:text-amber-300/70">Enter your lot size manually — or use 0.25 ac if unknown.</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={acreage}
+                      onChange={e => setAcreage(e.target.value)}
+                      placeholder="e.g. 0.25"
+                      className="flex-1 rounded-xl border border-amber-300/60 bg-white dark:bg-amber-950/50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setAcreage("0.25")}
+                      className="rounded-xl border border-amber-300/60 bg-white dark:bg-amber-950/50 px-3 py-2.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 transition whitespace-nowrap"
+                    >
+                      Use 0.25 ac
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className={labelCls}>Lot size (acres) <span className="normal-case font-normal text-muted-foreground/60">— optional, enter manually if known</span></label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={acreage}
+                    onChange={e => setAcreage(e.target.value)}
+                    placeholder="0.25"
+                    className={cn(inputCls, "w-32")}
+                  />
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Optional property details */}
+          <button
+            type="button"
+            onClick={() => setShowDetails(v => !v)}
+            className="flex w-full items-center justify-between text-xs font-bold uppercase tracking-widest text-primary hover:text-primary/80 transition"
+          >
+            Property details &amp; access info
+            {showDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+
+          {showDetails && (
+            <div className="space-y-4 rounded-2xl border border-border/50 bg-muted/20 p-5 animate-in fade-in duration-200">
+              <div className="space-y-1.5">
+                <label className={labelCls}>Gate code / access instructions</label>
+                <input
+                  value={gateCode}
+                  onChange={e => setGateCode(e.target.value)}
+                  placeholder="e.g. Code #1234, side gate on left"
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <p className={labelCls}>Property info</p>
+                {[
+                  { id: "pets", label: "Pets use this yard", checked: hasPets, set: setHasPets },
+                  { id: "children", label: "Children use this yard", checked: hasChildren, set: setHasChildren },
+                  { id: "water", label: "Standing water sources (pond, fountain, etc.)", checked: standingWater, set: setStandingWater },
+                ].map(({ id, label, checked, set }) => (
+                  <label key={id} className="flex items-center gap-3 cursor-pointer group">
+                    <div
+                      onClick={() => set(!checked)}
+                      className={cn(
+                        "h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all flex-shrink-0",
+                        checked ? "border-primary bg-primary" : "border-border/60 group-hover:border-primary/40",
+                      )}
+                    >
+                      {checked && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
+                    </div>
+                    <span className="text-sm text-foreground">{label}</span>
+                  </label>
+                ))}
+              </div>
+
+              {hasPets && (
+                <div className="space-y-1.5">
+                  <label className={labelCls}>Pet details</label>
+                  <input
+                    value={petDetails}
+                    onChange={e => setPetDetails(e.target.value)}
+                    placeholder="e.g. 2 dogs, kept inside during service"
+                    className={inputCls}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className={labelCls}>Additional notes for technicians</label>
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Anything else the technician should know..."
+                  rows={3}
+                  className={cn(inputCls, "resize-none")}
+                />
+              </div>
             </div>
-          </div>
-
-          {/* Questionnaire Section */}
-          <div className="space-y-4 border-t border-border/40 pt-6">
-            <h3 className="text-lg font-semibold text-foreground">Property Preferences</h3>
-            <PropertyQuestionnaire
-              data={questionnaireData}
-              onChange={setQuestionnaireData}
-              hideSubmit={true}
-              disabled={false}
-            />
-          </div>
-
-          {/* Additional Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes">Additional Notes</Label>
-            <Textarea
-              id="notes"
-              placeholder="Any other details technicians should know..."
-              value={formData.notes}
-              onChange={handleInputChange}
-              className="min-h-[100px]"
-            />
-          </div>
+          )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-border/40 px-6 py-4 bg-background">
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+            className="rounded-xl font-semibold text-muted-foreground"
+          >
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={isSubmitting || !formData.address || !formData.zip}
+            disabled={isSubmitting || !address || !zip}
+            className="rounded-xl px-6 h-11 font-bold shadow-brand"
           >
             {isSubmitting ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…</>
             ) : (
               property ? "Save Changes" : "Add Property"
             )}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

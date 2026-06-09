@@ -12,13 +12,15 @@ import {
   ShieldCheck,
   Save,
   Trash2,
-  Lock
+  Lock,
+  AlertCircle,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/hooks/useProfile";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
 const Profile = () => {
   const { user } = useAuth();
@@ -26,11 +28,26 @@ const Profile = () => {
   const profile = profileRaw as any;
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+
   const [formData, setFormData] = useState({
-    name: user?.name ?? "",
-    email: user?.email ?? "",
-    phone: ""
+    firstName: "",
+    lastName: "",
+    email: "",
+    confirmEmail: "",
+    phone: "",
   });
+
+  // Track what the email was on load so we know if it changed
+  const [originalEmail, setOriginalEmail] = useState("");
+
+  const emailChanged = formData.email.trim() !== originalEmail;
+  const emailMismatch =
+    emailChanged &&
+    formData.confirmEmail.length > 0 &&
+    formData.email.trim() !== formData.confirmEmail.trim();
+  const canSave =
+    !isSaving &&
+    (!emailChanged || (formData.confirmEmail.trim() === formData.email.trim()));
 
   const DEFAULT_NOTIF_PREFS = { smsReminders: true, videoAlerts: true, marketing: false };
 
@@ -74,6 +91,9 @@ const Profile = () => {
 
   // Change Password dialog state
   const [pwDialogOpen, setPwDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [isDeletionRequesting, setIsDeletionRequesting] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPw, setSavingPw] = useState(false);
@@ -97,36 +117,98 @@ const Profile = () => {
     } finally { setSavingPw(false); }
   };
 
-  // Populate phone from profile once it loads (AuthContext doesn't carry phone)
+  const handleDeleteRequest = async () => {
+    if (!user || deleteConfirmEmail.trim().toLowerCase() !== (user.email ?? "").toLowerCase()) {
+      toast({ title: "Email doesn't match", description: "Please enter your account email to confirm.", variant: "destructive" });
+      return;
+    }
+    setIsDeletionRequesting(true);
+    try {
+      await supabase.from("tickets").insert({
+        user_id:  user.id,
+        category: "account",
+        subject:  "Account Deletion Request",
+        body:     `User ${user.email} has requested permanent deletion of their account and all associated data.`,
+        status:   "new",
+        priority: "high",
+      });
+      toast({
+        title: "Deletion request received",
+        description: "We'll process your request within 3–5 business days and send a confirmation email.",
+      });
+      setDeleteDialogOpen(false);
+      setDeleteConfirmEmail("");
+    } catch (err: any) {
+      toast({ title: "Request failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsDeletionRequesting(false);
+    }
+  };
+
+  // Populate form from profile once it loads
   useEffect(() => {
+    const fullName = profile?.name ?? user?.name ?? "";
+    // Split on first space — everything after the first space is "last name"
+    const spaceIdx = fullName.indexOf(" ");
+    const firstName = spaceIdx >= 0 ? fullName.slice(0, spaceIdx) : fullName;
+    const lastName  = spaceIdx >= 0 ? fullName.slice(spaceIdx + 1) : "";
+
+    const email = profile?.email ?? user?.email ?? "";
+
     setFormData(prev => ({
-      name: profile?.name ?? user?.name ?? prev.name,
-      email: profile?.email ?? user?.email ?? prev.email,
+      firstName: firstName || prev.firstName,
+      lastName:  lastName  || prev.lastName,
+      email:     email     || prev.email,
+      confirmEmail: "",
       phone: profile?.phone ?? prev.phone,
     }));
+    setOriginalEmail(email);
   }, [profile?.phone, profile?.name, profile?.email, user?.name, user?.email]);
 
   const handleSave = async () => {
     if (!user) return;
+
+    if (emailChanged && formData.confirmEmail.trim() !== formData.email.trim()) {
+      toast({ title: "Email addresses don't match", description: "Please make sure both email fields are identical.", variant: "destructive" });
+      return;
+    }
+
     setIsSaving(true);
 
-    const { name, email, phone } = formData;
+    const name  = [formData.firstName.trim(), formData.lastName.trim()].filter(Boolean).join(" ");
+    const email = formData.email.trim();
+    const phone = formData.phone.trim();
 
     try {
-      const { error } = await supabase
+      // Update profiles table
+      const { error: profileError } = await supabase
         .from("profiles")
         .update({ name, email, phone, updated_at: new Date().toISOString() })
         .eq("id", user.id);
 
-      if (error) throw error;
+      if (profileError) throw profileError;
 
-      toast({
-        title: "Profile Updated",
-        description: "Your account changes have been saved successfully.",
-      });
+      // If email changed, update Supabase Auth (sends confirmation to new address)
+      if (emailChanged) {
+        const { error: authError } = await supabase.auth.updateUser({ email });
+        if (authError) throw authError;
+
+        setOriginalEmail(email);
+        setFormData(prev => ({ ...prev, confirmEmail: "" }));
+
+        toast({
+          title: "Profile updated — verify your new email",
+          description: "A confirmation link has been sent to your new address. Your email will update once you click it.",
+        });
+      } else {
+        toast({
+          title: "Profile updated",
+          description: "Your contact information has been saved.",
+        });
+      }
     } catch (error: any) {
       toast({
-        title: "Update Failed",
+        title: "Update failed",
         description: error.message || "Failed to save profile changes.",
         variant: "destructive",
       });
@@ -155,29 +237,75 @@ const Profile = () => {
                 <CardTitle className="text-xl font-display">Contact Information</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
+            <CardContent className="space-y-5">
+              {/* Row 1: First Name + Last Name */}
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="full-name">Full Name</Label>
+                  <Label htmlFor="first-name">First Name</Label>
                   <Input
-                    id="full-name"
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Taylor Johnson"
+                    id="first-name"
+                    value={formData.firstName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="Taylor"
                     className="rounded-xl"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last-name">Last Name</Label>
+                  <Input
+                    id="last-name"
+                    value={formData.lastName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Johnson"
+                    className="rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Email (+ Confirm Email when changed) */}
+              <div className={cn("grid gap-4", emailChanged ? "sm:grid-cols-2" : "sm:grid-cols-2")}>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
                   <Input
                     id="email"
                     type="email"
                     value={formData.email}
-                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value, confirmEmail: "" }))}
                     placeholder="taylor@example.com"
                     className="rounded-xl"
                   />
                 </div>
+                <div className={cn("space-y-2 transition-all", emailChanged ? "opacity-100" : "opacity-0 pointer-events-none")}>
+                  <Label htmlFor="confirm-email" className="flex items-center gap-1.5">
+                    Confirm Email
+                    {emailChanged && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
+                        changed
+                      </span>
+                    )}
+                  </Label>
+                  <Input
+                    id="confirm-email"
+                    type="email"
+                    value={formData.confirmEmail}
+                    onChange={(e) => setFormData(prev => ({ ...prev, confirmEmail: e.target.value }))}
+                    placeholder="Re-enter new email"
+                    className={cn(
+                      "rounded-xl transition-colors",
+                      emailMismatch && "border-destructive focus-visible:ring-destructive"
+                    )}
+                    tabIndex={emailChanged ? 0 : -1}
+                  />
+                  {emailMismatch && (
+                    <p className="flex items-center gap-1 text-xs text-destructive">
+                      <AlertCircle className="h-3 w-3" /> Addresses don't match
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 3: Phone */}
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
                   <Input
@@ -190,9 +318,17 @@ const Profile = () => {
                   />
                 </div>
               </div>
-              <Button onClick={handleSave} disabled={isSaving} className="rounded-xl">
+
+              {emailChanged && (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-xl px-4 py-3">
+                  <AlertCircle className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  Changing your email sends a confirmation link to the new address. Your login email updates once you click it.
+                </p>
+              )}
+
+              <Button onClick={handleSave} disabled={!canSave} className="rounded-xl">
                 <Save className="mr-2 h-4 w-4" />
-                {isSaving ? "Saving..." : "Update Contact Info"}
+                {isSaving ? "Saving…" : "Update Contact Info"}
               </Button>
             </CardContent>
           </Card>
@@ -268,7 +404,11 @@ const Profile = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-xs text-muted-foreground">Once you delete your account, there is no going back. Please be certain.</p>
-              <Button variant="ghost" className="w-full rounded-xl text-destructive hover:bg-destructive/10">
+              <Button
+                variant="ghost"
+                className="w-full rounded-xl text-destructive hover:bg-destructive/10"
+                onClick={() => setDeleteDialogOpen(true)}
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete Account
               </Button>
@@ -321,6 +461,49 @@ const Profile = () => {
               disabled={savingPw || !newPassword || !confirmPassword}
             >
               {savingPw ? "Updating…" : "Update Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Account Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) setDeleteConfirmEmail(""); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Delete Account
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-start gap-2 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <p>This will submit a deletion request. Your account and data will be permanently removed within 3–5 business days. This cannot be undone.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="delete-confirm">Type your email to confirm</Label>
+              <Input
+                id="delete-confirm"
+                type="email"
+                placeholder={user?.email ?? "your@email.com"}
+                value={deleteConfirmEmail}
+                onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+                className="rounded-xl"
+                onKeyDown={(e) => e.key === "Enter" && handleDeleteRequest()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl"
+              onClick={handleDeleteRequest}
+              disabled={isDeletionRequesting || !deleteConfirmEmail.trim()}
+            >
+              {isDeletionRequesting ? "Submitting…" : "Request Deletion"}
             </Button>
           </DialogFooter>
         </DialogContent>

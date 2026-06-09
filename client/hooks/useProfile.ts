@@ -13,6 +13,7 @@ export interface Profile {
   email?: string;
   role?: string;
   phone?: string;
+  is_onboarded?: boolean;
   card_brand?: string;
   card_last4?: string;
   card_expiry?: string;
@@ -28,22 +29,23 @@ const fetchProfile = async (userId: string): Promise<Profile | null> => {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, name, email, role, phone, card_brand, card_last4, card_expiry")
+      .select("id, name, email, role, phone, is_onboarded, card_brand, card_last4, card_expiry")
       .eq("id", userId)
-      .single();
+      .limit(1);
 
     if (error) {
-      if (error.code === "PGRST116") {
-        // Not found - this is expected if profile row doesn't exist
-        if (import.meta.env.DEV) console.log("[Profile] row missing");
-        return null;
-      }
       if (import.meta.env.DEV) console.log("[Profile] query error:", error.code);
       return null;
     }
 
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      if (import.meta.env.DEV) console.log("[Profile] row missing");
+      return null;
+    }
+
     if (import.meta.env.DEV) console.log("[Profile] query success");
-    return data as Profile;
+    return row as Profile;
   } catch (err) {
     if (import.meta.env.DEV) console.log("[Profile] query error:", err);
     return null;

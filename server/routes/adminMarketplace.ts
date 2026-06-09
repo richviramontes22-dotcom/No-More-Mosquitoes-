@@ -88,15 +88,10 @@ router.patch("/marketplace/orders/:id/fulfillment", requireAdmin, async (req, re
 // ── GET subscriptions needing appointment scheduling ──────────────────────
 
 router.get("/subscriptions/needs-scheduling", requireAdmin, async (_req, res) => {
-  // Fetch active subscriptions with customer and property info
+  // Step 1: fetch active subscriptions (no FK joins — do explicit lookups instead)
   const { data: subs, error } = await db
     .from("subscriptions")
-    .select(`
-      id, user_id, property_id, status, cadence_days,
-      current_period_end, last_payment_at, created_at,
-      profiles:user_id (id, name, email),
-      properties:property_id (id, address, city, zip, acreage)
-    `)
+    .select("id, user_id, property_id, status, cadence_days, current_period_end, last_payment_at")
     .eq("status", "active")
     .order("last_payment_at", { ascending: false })
     .limit(100);
@@ -104,7 +99,26 @@ router.get("/subscriptions/needs-scheduling", requireAdmin, async (_req, res) =>
   if (error) return res.status(500).json({ error: error.message });
   if (!subs?.length) return res.json({ queue: [] });
 
-  // For each subscription, check if a future non-cancelled appointment exists
+  // Step 2: bulk-fetch profiles and properties for all subscriptions
+  const userIds     = [...new Set(subs.map((s: any) => s.user_id).filter(Boolean))];
+  const propertyIds = [...new Set(subs.map((s: any) => s.property_id).filter(Boolean))];
+
+  const [profileResult, propertyResult] = await Promise.all([
+    userIds.length > 0
+      ? db.from("profiles").select("id, name, email").in("id", userIds)
+      : { data: [] },
+    propertyIds.length > 0
+      ? db.from("properties").select("id, address, city, zip").in("id", propertyIds)
+      : { data: [] },
+  ]);
+
+  const profileMap: Record<string, any> = {};
+  ((profileResult as any).data || []).forEach((p: any) => { profileMap[p.id] = p; });
+
+  const propertyMap: Record<string, any> = {};
+  ((propertyResult as any).data || []).forEach((p: any) => { propertyMap[p.id] = p; });
+
+  // Step 3: for each subscription, check if a future non-cancelled appointment exists
   const now = new Date().toISOString();
   const queue = [];
 
@@ -121,15 +135,15 @@ router.get("/subscriptions/needs-scheduling", requireAdmin, async (_req, res) =>
 
     if ((count ?? 0) === 0) {
       queue.push({
-        subscription_id: sub.id,
-        user_id: sub.user_id,
-        property_id: sub.property_id,
-        status: sub.status,
-        cadence_days: sub.cadence_days,
+        subscription_id:    sub.id,
+        user_id:            sub.user_id,
+        property_id:        sub.property_id,
+        status:             sub.status,
+        cadence_days:       sub.cadence_days,
         current_period_end: sub.current_period_end,
-        last_payment_at: sub.last_payment_at,
-        customer: (sub as any).profiles ?? null,
-        property: (sub as any).properties ?? null,
+        last_payment_at:    sub.last_payment_at,
+        customer:           profileMap[sub.user_id] ?? null,
+        property:           propertyMap[sub.property_id] ?? null,
       });
     }
   }
@@ -142,18 +156,34 @@ router.get("/subscriptions/needs-scheduling", requireAdmin, async (_req, res) =>
 router.get("/subscriptions/past-due", requireAdmin, async (_req, res) => {
   const { data, error } = await db
     .from("subscriptions")
-    .select(`
-      id, user_id, property_id, status, cadence_days,
-      current_period_end, last_payment_at, created_at,
-      profiles:user_id (id, name, email),
-      properties:property_id (id, address, city)
-    `)
+    .select("id, user_id, property_id, status, cadence_days, current_period_end, last_payment_at, created_at")
     .eq("status", "past_due")
     .order("current_period_end", { ascending: true })
     .limit(50);
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ subscriptions: data || [] });
+
+  const rows = data || [];
+  const userIds = [...new Set(rows.map((r: any) => r.user_id).filter(Boolean))];
+  const propIds = [...new Set(rows.map((r: any) => r.property_id).filter(Boolean))];
+
+  const [profileRes, propRes] = await Promise.all([
+    userIds.length > 0 ? db.from("profiles").select("id, name, email").in("id", userIds) : { data: [] },
+    propIds.length > 0 ? db.from("properties").select("id, address, city").in("id", propIds) : { data: [] },
+  ]);
+
+  const profileMap: Record<string, any> = {};
+  (profileRes.data || []).forEach((p: any) => { profileMap[p.id] = p; });
+  const propMap: Record<string, any> = {};
+  (propRes.data || []).forEach((p: any) => { propMap[p.id] = p; });
+
+  const enriched = rows.map((r: any) => ({
+    ...r,
+    profiles: profileMap[r.user_id] ?? null,
+    properties: propMap[r.property_id] ?? null,
+  }));
+
+  res.json({ subscriptions: enriched });
 });
 
 // ── POST create appointment (admin-confirmed scheduling) ──────────────────────

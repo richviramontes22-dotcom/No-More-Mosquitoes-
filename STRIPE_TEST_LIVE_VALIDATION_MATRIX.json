@@ -1,0 +1,273 @@
+{
+  "project": "stripe_test_live_validation_matrix",
+  "audit_date": "2026-05-15",
+  "integration_status": "STRUCTURALLY_CORRECT_ENV_CONFIG_REQUIRED",
+  "root_cause_summary": "Live Stripe price IDs in service_plans/stripe-prices.ts sent to Stripe API with test-mode key. Test mode cannot resolve live price IDs. Marketplace add-ons succeed because they use price_data (inline amounts), bypassing all price ID lookups.",
+
+  "environments": [
+    {
+      "name": "local_dev",
+      "file": ".env",
+      "stripe_secret_key_mode": "test",
+      "stripe_secret_key_var": "STRIPE_SECRET_KEY",
+      "stripe_publishable_key_mode": "test",
+      "stripe_publishable_key_var": "VITE_STRIPE_PUBLISHABLE_KEY",
+      "webhook_secret_var": "STRIPE_WEBHOOK_SECRET",
+      "webhook_secret_present_in_env": false,
+      "app_base_url": "https://nomoremosquitoes.us",
+      "note": "APP_BASE_URL points to production — Stripe redirects go to live site during local dev. Consider changing to localhost for local testing.",
+      "allowed_cards": "Stripe test cards only (4242, 4545, etc.)",
+      "real_charges": false,
+      "status": "CONFIGURED"
+    },
+    {
+      "name": "netlify_production",
+      "url": "https://nomoremosquitoes.us",
+      "stripe_secret_key_mode": "UNVERIFIED — must be sk_live_... in Netlify dashboard",
+      "stripe_publishable_key_mode": "UNVERIFIED — must be pk_live_... in Netlify dashboard",
+      "webhook_secret_mode": "UNVERIFIED — must be live webhook signing secret",
+      "allowed_cards": "Real cards only (live mode)",
+      "real_charges": true,
+      "status": "ACTION_REQUIRED — verify all three Stripe env vars in Netlify dashboard",
+      "action_items": [
+        "Set STRIPE_SECRET_KEY = sk_live_... in Netlify Site Settings > Environment Variables",
+        "Set VITE_STRIPE_PUBLISHABLE_KEY = pk_live_... in Netlify Site Settings > Environment Variables",
+        "Set STRIPE_WEBHOOK_SECRET = whsec_live_... from Stripe Dashboard > Developers > Webhooks"
+      ]
+    },
+    {
+      "name": "netlify_deploy_preview",
+      "stripe_secret_key_mode": "INHERITS PRODUCTION — should be overridden to test in Netlify context settings",
+      "stripe_publishable_key_mode": "INHERITS PRODUCTION",
+      "webhook_secret_mode": "INHERITS PRODUCTION",
+      "allowed_cards": "Stripe test cards (after context override applied)",
+      "real_charges": false,
+      "status": "ACTION_REQUIRED — add Netlify context override for Deploy Previews",
+      "action_items": [
+        "In Netlify dashboard: add context override for 'Deploy previews'",
+        "Override STRIPE_SECRET_KEY = sk_test_... for deploy previews",
+        "Override VITE_STRIPE_PUBLISHABLE_KEY = pk_test_... for deploy previews",
+        "Override STRIPE_WEBHOOK_SECRET = test webhook signing secret for deploy previews"
+      ]
+    }
+  ],
+
+  "key_mode_resolution": {
+    "server_key_resolution_order": [
+      "process.env.STRIPE_SECRET_KEY",
+      "process.env.STRIPE_API_KEY",
+      "process.env.STRIPE_SECRET"
+    ],
+    "frontend_key": "import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY",
+    "webhook_key": "process.env.STRIPE_WEBHOOK_SECRET",
+    "unused_variables": {
+      "LIVE_STRIPE_SECRET_KEY": "Present in .env but NEVER read by any server route — misleading naming",
+      "LIVE_VITE_STRIPE_PUBLISHABLE_KEY": "Present in .env but NEVER read by frontend build — misleading naming"
+    },
+    "warning": "LIVE_STRIPE_SECRET_KEY is NOT the same as STRIPE_SECRET_KEY. Storing live keys with a different variable name does NOT activate live mode. To use live mode, STRIPE_SECRET_KEY must be set to the live key value."
+  },
+
+  "price_id_mode_audit": {
+    "service_plans_table": "Contains live price IDs (price_1T9Ku...)",
+    "stripe_prices_ts_static_map": "Contains 49 live price IDs — all created with live Stripe keys",
+    "compatibility_with_test_mode": "INCOMPATIBLE — live price IDs cannot be used via sk_test key",
+    "compatibility_with_live_mode": "COMPATIBLE",
+    "price_id_sample": "price_1T9Ku20zUTKY2M9th6O4e94a (Tier 1, 14-day)",
+    "account_segment": "0zUTKY2M9t confirms these belong to the live Stripe account"
+  },
+
+  "checkout_flows": [
+    {
+      "name": "New recurring subscription checkout",
+      "endpoint": "POST /api/billing/create-checkout-session",
+      "route_file": "server/routes/billingStripe.ts",
+      "uses_price_id": true,
+      "price_source": "findStripePriceAsync → service_plans or stripe-prices.ts static map",
+      "stripe_object_type": "Checkout Session (mode: subscription)",
+      "test_mode_status": "FAILS — live price ID rejected by test API key",
+      "live_mode_status": "WORKS — live price ID accepted by live API key",
+      "supabase_tables_written": ["subscriptions (via webhook)", "properties (via webhook)"],
+      "webhook_dependency": "checkout.session.completed"
+    },
+    {
+      "name": "Marketplace add-on checkout (hosted)",
+      "endpoint": "POST /api/marketplace/create-checkout-session",
+      "route_file": "server/routes/marketplaceStripe.ts",
+      "uses_price_id": false,
+      "price_source": "price_data with unit_amount from cart items — no Stripe price ID lookup",
+      "stripe_object_type": "Checkout Session (mode: payment)",
+      "test_mode_status": "WORKS — no price ID lookup, test cards accepted",
+      "live_mode_status": "WORKS — no price ID lookup, real cards accepted",
+      "supabase_tables_written": ["marketplace_orders", "marketplace_order_items", "service_orders"],
+      "webhook_dependency": "checkout.session.completed",
+      "note": "This is why add-ons succeed while subscription flows fail — price_data bypasses price ID mode constraint"
+    },
+    {
+      "name": "Marketplace PaymentIntent (in-app)",
+      "endpoint": "POST /api/marketplace/create-payment-intent",
+      "route_file": "server/routes/marketplaceStripe.ts",
+      "uses_price_id": false,
+      "price_source": "Direct amount from cart totals — no Stripe price ID",
+      "stripe_object_type": "PaymentIntent",
+      "test_mode_status": "WORKS — test cards accepted via Stripe Elements",
+      "live_mode_status": "WORKS — real cards accepted via Stripe Elements",
+      "supabase_tables_written": ["marketplace_orders", "marketplace_order_items", "service_orders"],
+      "webhook_dependency": "payment_intent.succeeded",
+      "note": "This is the flow that succeeded with test card. Mode-agnostic because it uses raw amounts."
+    },
+    {
+      "name": "Billing portal",
+      "endpoint": "POST /api/billing/create-portal-session",
+      "route_file": "server/routes/billingStripe.ts",
+      "uses_price_id": false,
+      "stripe_object_type": "Billing Portal Session",
+      "test_mode_status": "WORKS — if test customer exists",
+      "live_mode_status": "WORKS — if live customer exists",
+      "supabase_tables_written": [],
+      "webhook_dependency": "none"
+    }
+  ],
+
+  "subscription_flows": [
+    {
+      "name": "Plan change",
+      "endpoint": "POST /api/billing/update-subscription-plan",
+      "route_file": "server/routes/billingStripe.ts",
+      "uses_price_id": true,
+      "price_source": "findStripePriceAsync — queries service_plans, falls back to stripe-prices.ts static map",
+      "failure_path": "Test key + live price ID → Stripe 404 'No such price' → generic 500 to client",
+      "test_mode_status": "FAILS — root cause confirmed",
+      "live_mode_status": "WORKS — requires live customer + live price ID",
+      "requires_existing_subscription": false,
+      "creates_incomplete_subscription_if_no_existing": true,
+      "supabase_tables_written": ["subscriptions"],
+      "webhook_dependency": "none (direct API update)"
+    },
+    {
+      "name": "Cadence change",
+      "endpoint": "POST /api/billing/update-subscription-cadence",
+      "route_file": "server/routes/billingStripe.ts",
+      "uses_price_id": true,
+      "price_source": "findStripePriceAsync",
+      "test_mode_status": "FAILS — same root cause as plan change",
+      "live_mode_status": "WORKS",
+      "supabase_tables_written": [],
+      "webhook_dependency": "none"
+    },
+    {
+      "name": "Cancel subscription",
+      "endpoint": "POST /api/billing/cancel-subscription",
+      "route_file": "server/routes/billingStripe.ts",
+      "uses_price_id": false,
+      "test_mode_status": "WORKS — if test subscription exists",
+      "live_mode_status": "WORKS — if live subscription exists",
+      "supabase_tables_written": ["profiles (subscription_metadata)"],
+      "webhook_dependency": "customer.subscription.deleted"
+    }
+  ],
+
+  "webhook_flows": [
+    {
+      "event": "checkout.session.completed",
+      "handler": "webhooksStripe.ts",
+      "signature_verification": "stripe.webhooks.constructEvent with STRIPE_WEBHOOK_SECRET",
+      "mode_requirement": "Webhook secret must match mode of Stripe endpoint (test secret for test events, live secret for live events)",
+      "supabase_writes": ["marketplace_orders", "marketplace_order_items", "service_orders", "subscriptions", "properties"],
+      "risk_if_secret_mismatch": "All events rejected with 400 Webhook Error — no data written to Supabase"
+    },
+    {
+      "event": "invoice.paid",
+      "handler": "webhooksStripe.ts",
+      "supabase_writes": ["payments", "subscriptions", "service_orders"],
+      "risk_if_secret_mismatch": "Subscription renewals not recorded — customers lose service history"
+    },
+    {
+      "event": "payment_intent.succeeded",
+      "handler": "webhooksStripe.ts",
+      "supabase_writes": ["marketplace_orders (status update)", "service_orders"],
+      "risk_if_secret_mismatch": "In-app marketplace orders stuck in 'pending' status"
+    },
+    {
+      "event": "charge.refunded",
+      "handler": "webhooksStripe.ts",
+      "supabase_writes": ["marketplace_orders", "payments", "service_orders"],
+      "risk_if_secret_mismatch": "Refunds not recorded in DB — financial records out of sync"
+    },
+    {
+      "event": "customer.subscription.updated",
+      "handler": "webhooksStripe.ts",
+      "supabase_writes": ["subscriptions"],
+      "risk_if_secret_mismatch": "Subscription status changes not reflected in app"
+    }
+  ],
+
+  "validation_checklist": [
+    {
+      "check": "STRIPE_SECRET_KEY in Netlify production = sk_live_...",
+      "status": "VERIFY IN NETLIFY DASHBOARD",
+      "how_to_verify": "Netlify → Site Settings → Environment Variables → STRIPE_SECRET_KEY"
+    },
+    {
+      "check": "VITE_STRIPE_PUBLISHABLE_KEY in Netlify production = pk_live_...",
+      "status": "VERIFY IN NETLIFY DASHBOARD",
+      "how_to_verify": "Netlify → Site Settings → Environment Variables → VITE_STRIPE_PUBLISHABLE_KEY"
+    },
+    {
+      "check": "STRIPE_WEBHOOK_SECRET in Netlify production = live webhook signing secret",
+      "status": "VERIFY IN NETLIFY DASHBOARD",
+      "how_to_verify": "Netlify → Site Settings → Environment Variables → STRIPE_WEBHOOK_SECRET; compare with Stripe Dashboard → Developers → Webhooks → your endpoint → Signing secret"
+    },
+    {
+      "check": "Live Stripe webhook endpoint registered for nomoremosquitoes.us/api/webhooks/stripe",
+      "status": "VERIFY IN STRIPE DASHBOARD",
+      "how_to_verify": "Stripe Dashboard → Developers → Webhooks → verify endpoint exists in Live mode"
+    },
+    {
+      "check": "After deploy: POST /api/billing/update-subscription-plan returns 200 (not 500)",
+      "status": "TEST AFTER DEPLOYMENT",
+      "how_to_test": "Attempt plan change in /dashboard/billing with a real Stripe customer on production"
+    },
+    {
+      "check": "After live payment: webhook event appears in Netlify function logs as '✓ Signature verified'",
+      "status": "TEST AFTER DEPLOYMENT",
+      "how_to_test": "Stripe Dashboard → Developers → Webhooks → view recent events → verify 200 responses"
+    },
+    {
+      "check": "Deploy previews use test keys (not live keys)",
+      "status": "ACTION REQUIRED — set context override in Netlify",
+      "how_to_verify": "Netlify → Site Settings → Environment Variables → add 'Deploy previews' scope with test key values"
+    },
+    {
+      "check": "Local dev uses test keys only",
+      "status": "CONFIRMED — .env has sk_test_ as STRIPE_SECRET_KEY",
+      "how_to_verify": "cat .env | grep STRIPE_SECRET_KEY (should start with sk_test_)"
+    },
+    {
+      "check": "LIVE_STRIPE_SECRET_KEY is documented as reference-only (not active)",
+      "status": "DOCUMENTATION NEEDED",
+      "how_to_verify": "Server code only reads STRIPE_SECRET_KEY — LIVE_STRIPE_SECRET_KEY is never consumed"
+    }
+  ],
+
+  "known_secondary_issues": [
+    {
+      "issue": "marketplaceStripe.ts uses .single() on profiles query",
+      "risk": "PGRST116 if duplicate profile rows — same bug that was fixed in billingStripe.ts",
+      "severity": "low",
+      "fix": "Change .single() to .limit(1) in getOrCreateStripeCustomer in marketplaceStripe.ts",
+      "scope": "outside this audit — file it as a separate fix"
+    },
+    {
+      "issue": "PaymentDialog.tsx creates a duplicate stripePromise via loadStripe",
+      "risk": "Two Stripe.js instances loaded — minor performance overhead",
+      "severity": "low",
+      "fix": "Import stripePromise from App.tsx or a shared lib instead of calling loadStripe again"
+    },
+    {
+      "issue": "APP_BASE_URL=https://nomoremosquitoes.us in local .env",
+      "risk": "Stripe redirect URLs point to production during local dev testing",
+      "severity": "info",
+      "fix": "Change to http://localhost:8080 (or local dev port) for local testing only"
+    }
+  ]
+}

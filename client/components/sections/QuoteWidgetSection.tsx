@@ -1,357 +1,533 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { calculatePricing, formatCurrency, ProgramType } from "@/lib/pricing";
-import { frequencyOptions } from "@/data/site";
-import { Check, ChevronRight, MapPin, Loader, Search } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { FormEvent, useState } from "react";
+import {
+  MapPin, Loader2, RotateCcw, CheckCircle2, Layers,
+  ArrowRight, Edit2, CalendarCheck,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
-import { useTranslation } from "@/hooks/use-translation";
 import { useToast } from "@/hooks/use-toast";
 import { usePropertyLookup } from "@/hooks/use-property-lookup";
 import { useAuth } from "@/contexts/AuthContext";
+import { savePendingOnboarding } from "@/lib/pendingOnboarding";
 
-// Forced Refresh: 2025-05-22 11:20:00
+type Program = "subscription" | "one_time" | "annual";
 
-type QuoteWidgetSectionProps = {
-  id?: string;
+const CADENCE_TIERS: Record<number, { min: number; max: number; cents: number }[]> = {
+  14: [
+    { min: 0.01, max: 0.13, cents:  5000 },
+    { min: 0.14, max: 0.20, cents:  7500 },
+    { min: 0.21, max: 0.30, cents:  8500 },
+    { min: 0.31, max: 0.40, cents:  9500 },
+    { min: 0.41, max: 0.50, cents: 10500 },
+    { min: 0.51, max: 0.60, cents: 12500 },
+    { min: 0.61, max: 0.70, cents: 13500 },
+    { min: 0.71, max: 0.80, cents: 15000 },
+    { min: 0.81, max: 1.15, cents: 16500 },
+    { min: 1.16, max: 1.29, cents: 18000 },
+    { min: 1.30, max: 1.50, cents: 19500 },
+    { min: 1.51, max: 2.00, cents: 22500 },
+  ],
+  21: [
+    { min: 0.01, max: 0.13, cents:  8000 },
+    { min: 0.14, max: 0.20, cents: 10000 },
+    { min: 0.21, max: 0.30, cents: 11000 },
+    { min: 0.31, max: 0.40, cents: 11900 },
+    { min: 0.41, max: 0.50, cents: 12900 },
+    { min: 0.51, max: 0.60, cents: 14900 },
+    { min: 0.61, max: 0.70, cents: 15900 },
+    { min: 0.71, max: 0.80, cents: 17900 },
+    { min: 0.81, max: 1.15, cents: 19500 },
+    { min: 1.16, max: 1.29, cents: 20900 },
+    { min: 1.30, max: 1.50, cents: 22900 },
+    { min: 1.51, max: 2.00, cents: 24900 },
+  ],
+  30: [
+    { min: 0.01, max: 0.13, cents:  9500 },
+    { min: 0.14, max: 0.20, cents: 11000 },
+    { min: 0.21, max: 0.30, cents: 12500 },
+    { min: 0.31, max: 0.40, cents: 13500 },
+    { min: 0.41, max: 0.50, cents: 14500 },
+    { min: 0.51, max: 0.60, cents: 16500 },
+    { min: 0.61, max: 0.70, cents: 17500 },
+    { min: 0.71, max: 0.80, cents: 19500 },
+    { min: 0.81, max: 1.15, cents: 21500 },
+    { min: 1.16, max: 1.29, cents: 23000 },
+    { min: 1.30, max: 1.50, cents: 25000 },
+    { min: 1.51, max: 2.00, cents: 27000 },
+  ],
+  42: [
+    { min: 0.01, max: 0.13, cents: 12500 },
+    { min: 0.14, max: 0.20, cents: 14500 },
+    { min: 0.21, max: 0.30, cents: 15500 },
+    { min: 0.31, max: 0.40, cents: 16500 },
+    { min: 0.41, max: 0.50, cents: 17500 },
+    { min: 0.51, max: 0.60, cents: 19500 },
+    { min: 0.61, max: 0.70, cents: 20500 },
+    { min: 0.71, max: 0.80, cents: 22500 },
+    { min: 0.81, max: 1.15, cents: 24500 },
+    { min: 1.16, max: 1.29, cents: 26000 },
+    { min: 1.30, max: 1.50, cents: 28000 },
+    { min: 1.51, max: 2.00, cents: 30000 },
+  ],
 };
 
-const QuoteWidgetSection = ({ id }: QuoteWidgetSectionProps) => {
-  const { t } = useTranslation();
+const ANNUAL_TIERS = [
+  { min: 0.01, max: 0.13, cents:  99900 },
+  { min: 0.14, max: 0.20, cents: 120000 },
+  { min: 0.21, max: 0.30, cents: 135000 },
+  { min: 0.31, max: 0.40, cents: 145000 },
+  { min: 0.41, max: 0.50, cents: 160000 },
+  { min: 0.51, max: 0.60, cents: 180000 },
+  { min: 0.61, max: 0.70, cents: 190000 },
+  { min: 0.71, max: 0.80, cents: 210000 },
+  { min: 0.81, max: 1.15, cents: 230000 },
+  { min: 1.16, max: 1.29, cents: 250000 },
+  { min: 1.30, max: 1.50, cents: 270000 },
+  { min: 1.51, max: 2.00, cents: 290000 },
+] as const;
+
+const ONE_TIME_CENTS = 17500;
+
+const fmtCents = (cents: number) =>
+  cents >= 100000
+    ? `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+    : `$${(cents / 100).toFixed(0)}`;
+
+const inputCls =
+  "w-full rounded-xl border border-border/70 bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition";
+
+type Props = { id?: string };
+
+const QuoteWidgetSection = ({ id }: Props) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { lookup, isLoading: isSearching, error: searchError } = usePropertyLookup();
-  const [acreage, setAcreage] = useState(0.2);
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [zip, setZip] = useState("");
-  const [program, setProgram] = useState<ProgramType>("subscription");
-  const [frequency, setFrequency] = useState<(typeof frequencyOptions)[number]>(21);
-  const [submitted, setSubmitted] = useState(false);
+  const { lookup, isLoading: isSearching, error } = usePropertyLookup();
   const { open } = useScheduleDialog();
 
-  const programLabels: Record<ProgramType, string> = {
-    subscription: t("pricing.subscription"),
-    annual: t("pricing.annual"),
-    one_time: "$179",
+  const [phase, setPhase] = useState<"address" | "plans">("address");
+
+  // Address fields
+  const [address, setAddress] = useState("");
+  const [city, setCity]       = useState("");
+  const [stateVal, setStateVal] = useState("CA");
+  const [zip, setZip]         = useState("");
+  const [acreage, setAcreage] = useState<number | null>(null);
+
+  // Lookup failure fallback
+  const [lookupFailed, setLookupFailed] = useState(false);
+  const [manualAcreage, setManualAcreage] = useState("");
+
+  // Plan selection
+  const [selectedProgram, setSelectedProgram] = useState<Program>("subscription");
+  const [selectedCadence, setSelectedCadence] = useState<number>(21);
+
+  const lookupCadenceCents = (cadence: number): number | null => {
+    if (!acreage) return null;
+    const tiers = CADENCE_TIERS[cadence] ?? CADENCE_TIERS[30];
+    return tiers.find(t => acreage >= t.min && acreage <= t.max)?.cents ?? null;
   };
 
-  const pricing = useMemo(
-    () => calculatePricing({ acreage, program, frequencyDays: frequency }),
-    [acreage, program, frequency],
-  );
+  const subPriceCents    = lookupCadenceCents(selectedCadence);
+  const annualPriceCents = acreage
+    ? (ANNUAL_TIERS.find(t => acreage! >= t.min && acreage! <= t.max)?.cents ?? null)
+    : null;
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubmitted(true);
+  const [county, setCounty] = useState<string | null>(null);
+  const [confidence, setConfidence] = useState<"high" | "medium" | "low" | null>(null);
+  const [acreageSource, setAcreageSource] = useState<string | null>(null);
+
+  const handleSearch = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    if (!address || !zip) {
+      toast({ title: "Missing details", description: "Please enter a street address and ZIP code.", variant: "destructive" });
+      return;
+    }
+    setLookupFailed(false);
+    const data = await lookup(address, zip, city, stateVal);
+    if (data) {
+      setAcreage(data.acreage);
+      setCounty(data.county ?? null);
+      setConfidence(data.confidence ?? null);
+      setAcreageSource(data.acreageSource ?? null);
+      setPhase("plans");
+    } else if (error === "manual_required") {
+      // Manual review required — show contact path rather than manual entry
+      setLookupFailed(true);
+    } else {
+      setLookupFailed(true);
+    }
+  };
+
+  const handleManualProceed = () => {
+    const val = parseFloat(manualAcreage);
+    const resolved = !isNaN(val) && val > 0 ? val : 0.25;
+    setAcreage(resolved);
+    setAcreageSource("manual");
+    setConfidence("low");
+    setManualAcreage(resolved.toString());
+    setPhase("plans");
+  };
+
+  const handleSchedule = () => {
+    const cadenceDays = selectedProgram === "annual" ? 30 : selectedCadence;
+    savePendingOnboarding({
+      address,
+      city,
+      state: stateVal,
+      zip,
+      acreage: acreage ?? 0.2,
+      program: selectedProgram,
+      cadenceDays,
+      estimatedPrice: subPriceCents != null ? subPriceCents / 100 : undefined,
+      source: "pricing-page",
+    });
 
     const preset = {
       serviceAddress: address,
-      city: city,
-      state: state,
+      city,
+      state: stateVal,
       zipCode: zip,
-      notes: `Estimated acreage: ${acreage} acres. Program: ${program}. Frequency: Every ${frequency} days.`,
+      cadenceDays,
+      program: selectedProgram,
+      notes: `Selected on pricing page. Property: ${acreage ?? "?"} acres.`,
     };
 
-    if (!user) {
-      navigate("/login", {
-        state: {
-          from: "/schedule",
-          mode: "signup",
-          preset
-        }
-      });
+    if (user) {
+      open({ source: "pricing-page", preset });
     } else {
-      open({ source: "quote-widget", preset });
-    }
-  };
-
-  const handleAddressSearch = async (e?: FormEvent) => {
-    if (e) e.preventDefault();
-
-    if (!address || !zip) {
-      toast({
-        title: "Missing details",
-        description: "Please enter at least address and ZIP code.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    toast({
-      title: "Estimating acreage...",
-      description: "Searching parcel data for your property details.",
-    });
-
-    const data = await lookup(address, zip, city, state);
-    if (data) {
-      setAcreage(data.acreage);
-      toast({
-        title: "Address Found!",
-        description: `We've estimated your property at ${data.acreage} acres. Pricing has been updated.`
-      });
-    }
-    // Note: usePropertyLookup hook already has error state and could be used for more specific feedback if needed,
-    // but the hook also returns null on failure.
-  };
-
-  // Effect to show error toast when searchError changes
-  useEffect(() => {
-    if (searchError) {
-      toast({
-        title: "Search Failed",
-        description: searchError,
-        variant: "destructive"
-      });
-    }
-  }, [searchError, toast]);
-
-  const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleAddressSearch();
+      navigate("/login", { state: { from: "/schedule", mode: "signup", preset } });
     }
   };
 
   return (
-    <section id={id} className="relative overflow-hidden bg-gradient-to-br from-background via-background to-primary/5 py-24">
-      <div className="absolute inset-0 -z-10 bg-mesh-overlay opacity-40" aria-hidden />
-      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-          <div className="space-y-6">
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
-              {t("quote.instant")}
-            </span>
-            <h2 className="font-display text-3xl font-semibold text-foreground sm:text-4xl">
-              {t("quote.calculateTitle")}
-            </h2>
-            <p className="text-base text-muted-foreground">
-              {t("quote.calculateDesc")}
-            </p>
-            <ul className="space-y-3 text-sm text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-primary" aria-hidden />
-                {t("quote.cadenceHint")}
-              </li>
-              <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-primary" aria-hidden />
-                {t("quote.frequencyHint")}
-              </li>
-              <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-primary" aria-hidden />
-                {t("quote.acreageHint")}
-              </li>
-            </ul>
-          </div>
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-[32px] border border-primary/10 bg-card/90 p-6 shadow-soft lg:p-8"
-          >
-            <div className="grid gap-8">
-              {/* Simplified Address Search - FORCED REFRESH */}
-              <div id="schedule-form" className="space-y-6 rounded-2xl bg-primary/5 p-6 border border-primary/10 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <Search className="h-5 w-5 text-primary" />
-                  <p className="text-sm font-bold text-foreground uppercase tracking-widest">Search acreage by address</p>
+    <section id={id} className="relative bg-gradient-to-b from-background to-primary/[0.03] py-20 sm:py-28">
+      <div className="mx-auto w-full max-w-2xl px-4 sm:px-6">
+
+        {/* ── Phase 1: Address Entry ── */}
+        {phase === "address" && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="text-center space-y-3">
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+                Instant Quote
+              </span>
+              <h2 className="font-display text-3xl font-semibold sm:text-4xl">Get Your Instant Price</h2>
+              <p className="text-base text-muted-foreground max-w-md mx-auto">
+                Enter your address — we'll detect your property size automatically and show you exact pricing for every plan.
+              </p>
+            </div>
+
+            <form
+              onSubmit={handleSearch}
+              className="rounded-[32px] border border-border/60 bg-card shadow-soft p-6 sm:p-8 space-y-5"
+            >
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Street Address</label>
+                <input
+                  value={address}
+                  onChange={e => { setAddress(e.target.value); setLookupFailed(false); }}
+                  placeholder="e.g. 123 Oak Street"
+                  className={inputCls}
+                  autoComplete="street-address"
+                />
+              </div>
+
+              <div className="grid grid-cols-6 gap-3">
+                <div className="col-span-3 space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">City</label>
+                  <input
+                    value={city}
+                    onChange={e => setCity(e.target.value)}
+                    placeholder="Anaheim"
+                    className={inputCls}
+                    autoComplete="address-level2"
+                  />
                 </div>
-                
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-primary/80 ml-1">Street Address</label>
-                    <input
-                      placeholder="Street Address"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      onKeyDown={handleInputKeyDown}
-                      className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-inner"
-                    />
+                <div className="col-span-1 space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">State</label>
+                  <input
+                    value={stateVal}
+                    onChange={e => setStateVal(e.target.value.toUpperCase())}
+                    placeholder="CA"
+                    maxLength={2}
+                    className={cn(inputCls, "text-center uppercase")}
+                    autoComplete="address-level1"
+                  />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">ZIP</label>
+                  <input
+                    value={zip}
+                    onChange={e => { setZip(e.target.value.replace(/\D/g, "")); setLookupFailed(false); }}
+                    placeholder="92801"
+                    maxLength={5}
+                    inputMode="numeric"
+                    className={inputCls}
+                    autoComplete="postal-code"
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isSearching}
+                className="w-full h-12 rounded-xl shadow-brand text-base font-bold gap-2"
+              >
+                {isSearching ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <MapPin className="h-5 w-5" />
+                    Get My Price
+                    <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                  </>
+                )}
+              </Button>
+
+              {lookupFailed && (
+                <div className="rounded-2xl border border-amber-300/60 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-700/40 px-5 py-4 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div>
+                    <p className="text-sm font-bold text-amber-900 dark:text-amber-200">We couldn't auto-detect this property</p>
+                    <p className="text-xs text-amber-800/70 dark:text-amber-300/70 mt-1">
+                      Our parcel database doesn't have a record for this address. Enter your lot size below and we'll calculate your exact price.
+                    </p>
                   </div>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-primary/80 ml-1">City</label>
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1 space-y-1">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-amber-900/70 dark:text-amber-300/70">
+                        Lot size (acres)
+                      </label>
                       <input
-                        placeholder="City"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        onKeyDown={handleInputKeyDown}
-                        className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-inner"
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={manualAcreage}
+                        onChange={e => setManualAcreage(e.target.value)}
+                        placeholder="e.g. 0.25"
+                        className="w-full rounded-xl border border-amber-300/60 bg-white dark:bg-amber-950/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 transition"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-primary/80 ml-1">State</label>
-                      <input
-                        placeholder="State"
-                        value={state}
-                        onChange={(e) => setState(e.target.value)}
-                        onKeyDown={handleInputKeyDown}
-                        className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-inner"
-                      />
-                    </div>
-                    <div className="space-y-1.5 col-span-2 md:col-span-1">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-primary/80 ml-1">ZIP Code</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="ZIP"
-                        value={zip}
-                        onChange={(e) => setZip(e.target.value.replace(/[^0-9]/g, ""))}
-                        onKeyDown={handleInputKeyDown}
-                        maxLength={5}
-                        className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 shadow-sm"
-                      />
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setManualAcreage("0.25")}
+                      className="flex-shrink-0 rounded-xl border border-amber-300/60 bg-white dark:bg-amber-950/50 px-3 py-3 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 transition whitespace-nowrap"
+                    >
+                      Use 0.25 ac
+                    </button>
                   </div>
-                  
                   <Button
                     type="button"
-                    onClick={() => handleAddressSearch()}
-                    disabled={isSearching}
-                    className="w-full rounded-xl h-12 shadow-brand bg-primary hover:bg-primary/90 transition-all font-bold text-base"
+                    onClick={handleManualProceed}
+                    className="w-full h-11 rounded-xl gap-2 bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm"
                   >
-                    {isSearching ? (
-                      <Loader className="h-6 w-6 animate-spin" />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-5 w-5" />
-                        <span>Search Property Acreage</span>
-                      </div>
-                    )}
+                    See Pricing
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
-                
-                <p className="text-[11px] text-muted-foreground leading-tight italic">
-                  Searching your address automatically sets the acreage slider for exact pricing.
-                </p>
-              </div>
-
-              <label className="flex flex-col gap-2 text-sm font-semibold text-foreground">
-                {t("quote.acreage")}
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min={0.05}
-                    max={2.0}
-                    step={0.01}
-                    value={acreage}
-                    onChange={(event) => setAcreage(Number(event.target.value))}
-                    className="flex-1 accent-primary"
-                    aria-label={t("quote.acreageLabel")}
-                  />
-                  <input
-                    type="number"
-                    min={0.05}
-                    max={5}
-                    step={0.01}
-                    value={Number.isNaN(acreage) ? "" : acreage}
-                    onChange={(event) => setAcreage(Number(event.target.value))}
-                    className="w-28 rounded-2xl border border-border/70 bg-white px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/80"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("quote.needHelp")}
-                </p>
-              </label>
-
-              <fieldset className="grid gap-3">
-                <legend className="text-sm font-semibold text-foreground">{t("quote.program")}</legend>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {(Object.keys(programLabels) as ProgramType[]).map((value) => {
-                    const isActive = program === value;
-                    return (
-                      <Button
-                        key={value}
-                        type="button"
-                        variant={isActive ? "default" : "outline"}
-                        onClick={() => setProgram(value)}
-                        className={`rounded-2xl px-4 py-3 text-sm font-semibold h-auto ${
-                          isActive ? "shadow-brand" : "bg-white text-muted-foreground hover:text-foreground hover:border-primary/50"
-                        }`}
-                      >
-                        {programLabels[value]}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </fieldset>
-
-              <fieldset className="grid gap-3">
-                <legend className="text-sm font-semibold text-foreground">{t("quote.frequency")}</legend>
-                <div className="grid grid-cols-4 gap-3 text-sm">
-                  {frequencyOptions.map((option) => {
-                    const isActive = frequency === option;
-                    return (
-                      <Button
-                        key={option}
-                        type="button"
-                        variant={isActive ? "default" : "outline"}
-                        onClick={() => setFrequency(option)}
-                        className={`rounded-2xl px-4 py-3 font-semibold h-auto ${
-                          isActive ? "shadow-brand bg-primary/90" : "bg-white text-muted-foreground hover:text-foreground hover:border-primary/50"
-                        }`}
-                        aria-pressed={isActive}
-                      >
-                        {option}
-                      </Button>
-                    );
-                  })}
-                </div>
-              </fieldset>
-
-              <div className="grid gap-3 rounded-3xl bg-muted/50 p-6">
-                <div className="flex items-center justify-between text-sm font-semibold text-muted-foreground">
-                  <span>{t("quote.perVisit")}</span>
-                  <span className="text-xl font-semibold text-foreground">{formatCurrency(pricing.perVisit)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm font-semibold text-muted-foreground">
-                  <span>{t("quote.monthlyEq")}</span>
-                  <span className="text-xl font-semibold text-foreground">{formatCurrency(pricing.perMonth)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm font-semibold text-muted-foreground">
-                  <span>{t("quote.annualTotal")}</span>
-                  <span className="text-xl font-semibold text-foreground">{formatCurrency(pricing.annualTotal)}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("quote.visitsPerYear")}{pricing.visitsPerYear ?? "—"}
-                </p>
-                {pricing.message ? (
-                  <p className="rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-3 text-xs text-primary">
-                    {pricing.message}
-                  </p>
-                ) : null}
-              </div>
-
-              {pricing.isCustom ? (
-                <Button
-                  asChild
-                  variant="outline"
-                  className="rounded-full px-6 py-3 h-auto"
-                >
-                  <Link to="/contact">
-                    {t("quote.customWalkthrough")}
-                    <ChevronRight className="h-4 w-4" aria-hidden />
-                  </Link>
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  className="rounded-full px-6 py-3 h-auto shadow-brand"
-                >
-                  {t("quote.saveQuote")}
-                  <ChevronRight className="h-4 w-4" aria-hidden />
-                </Button>
               )}
+            </form>
 
-              {submitted && !pricing.isCustom ? (
-                <div className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-sm text-primary">
-                  {t("quote.quoteSaved")}
+            <p className="text-center text-xs text-muted-foreground">
+              No account required&nbsp;·&nbsp;Your quote is saved when you sign up
+            </p>
+          </div>
+        )}
+
+        {/* ── Phase 2: Plan Selection ── */}
+        {phase === "plans" && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+            {/* Address pill */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-2xl border border-border/50 bg-muted/40 px-4 py-3 gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span className="text-sm font-medium text-foreground truncate">
+                    {address}{city ? `, ${city}` : ""}{stateVal ? `, ${stateVal}` : ""}
+                  </span>
+                  {acreage !== null && (
+                    <span className="flex-shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+                      {acreage} acres
+                    </span>
+                  )}
+                  {confidence === "low" && (
+                    <span className="flex-shrink-0 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                      Est.
+                    </span>
+                  )}
                 </div>
-              ) : null}
+                <button
+                  type="button"
+                  onClick={() => setPhase("address")}
+                  className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary transition"
+                >
+                  <Edit2 className="h-3.5 w-3.5" /> Edit
+                </button>
+              </div>
+              {confidence === "low" && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 text-center px-2">
+                  Lot size estimated — actual pricing may vary slightly. Our team will confirm before your first visit.
+                </p>
+              )}
             </div>
-          </form>
-        </div>
+
+            {/* Plan tiles */}
+            <div className="space-y-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground text-center">Choose your service plan</p>
+              <div className="grid sm:grid-cols-3 gap-4">
+                {([
+                  {
+                    value: "subscription" as Program,
+                    label: "Recurring Service",
+                    description: "Regular treatments keep mosquito populations under control all season.",
+                    badge: "Most popular",
+                    icon: <RotateCcw className="h-5 w-5" />,
+                    priceDisplay: subPriceCents ? `${fmtCents(subPriceCents)} / visit` : null,
+                    priceSub: "per scheduled treatment + tax",
+                  },
+                  {
+                    value: "one_time" as Program,
+                    label: "One-Time Treatment",
+                    description: "Single knockdown + barrier visit. Great for events or trying us out.",
+                    badge: null,
+                    icon: <CheckCircle2 className="h-5 w-5" />,
+                    priceDisplay: `Starting at ${fmtCents(ONE_TIME_CENTS)}`,
+                    priceSub: "flat rate, one visit + tax",
+                  },
+                  {
+                    value: "annual" as Program,
+                    label: "Annual Plan",
+                    description: "Full-season coverage billed once — no per-visit charges ever.",
+                    badge: "Best value",
+                    icon: <Layers className="h-5 w-5" />,
+                    priceDisplay: annualPriceCents ? fmtCents(annualPriceCents) : null,
+                    priceSub: "per year, all visits included + tax",
+                  },
+                ]).map(({ value, label, description, badge, icon, priceDisplay, priceSub }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setSelectedProgram(value)}
+                    className={cn(
+                      "relative flex flex-col items-start gap-2 p-5 rounded-[24px] border-2 text-left transition-all",
+                      selectedProgram === value
+                        ? "border-primary bg-primary/5 shadow-md ring-4 ring-primary/5"
+                        : "border-border/60 bg-card hover:border-primary/40",
+                    )}
+                  >
+                    {badge && (
+                      <span className="absolute -top-3 left-4 rounded-full bg-primary px-3 py-0.5 text-[9px] font-bold uppercase tracking-widest text-primary-foreground">
+                        {badge}
+                      </span>
+                    )}
+                    <div className={cn(
+                      "h-10 w-10 rounded-2xl flex items-center justify-center transition-colors",
+                      selectedProgram === value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                    )}>
+                      {icon}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-foreground">{label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{description}</p>
+                    </div>
+                    {priceDisplay && (
+                      <div className="mt-auto pt-2">
+                        <span className={cn(
+                          "text-xl font-black tracking-tight",
+                          selectedProgram === value ? "text-primary" : "text-foreground",
+                        )}>
+                          {priceDisplay}
+                        </span>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{priceSub}</p>
+                      </div>
+                    )}
+                    {selectedProgram === value && (
+                      <CheckCircle2 className="absolute bottom-4 right-4 h-5 w-5 text-primary" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Annual callout */}
+            {selectedProgram === "annual" && annualPriceCents && (
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4 space-y-1 animate-in fade-in duration-300">
+                <p className="text-sm font-bold text-primary">Full season, one payment</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Your annual plan covers all monthly (30-day) treatments for 12 months at {fmtCents(annualPriceCents)} + tax — billed once upfront.
+                </p>
+              </div>
+            )}
+
+            {/* Frequency picker — subscription only */}
+            {selectedProgram === "subscription" && (
+              <div className="space-y-4 animate-in fade-in duration-300">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground text-center">Treatment frequency</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {([
+                    { days: 14, label: "Every 2 wks", note: "High density / event prep" },
+                    { days: 21, label: "Every 3 wks",  note: "Most popular" },
+                    { days: 30, label: "Monthly",       note: "Standard protection" },
+                    { days: 42, label: "Every 6 wks",  note: "Low exposure areas" },
+                  ]).map(({ days, label, note }) => {
+                    const p = lookupCadenceCents(days);
+                    return (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => setSelectedCadence(days)}
+                        className={cn(
+                          "flex flex-col items-center gap-1 p-4 rounded-[20px] border-2 text-center transition-all",
+                          selectedCadence === days
+                            ? "border-primary bg-primary/5 shadow-sm ring-2 ring-primary/10"
+                            : "border-border/60 bg-card hover:border-primary/40",
+                        )}
+                      >
+                        {p ? (
+                          <>
+                            <span className={cn("text-base font-black", selectedCadence === days ? "text-primary" : "text-foreground")}>
+                              {fmtCents(p)}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground">+ tax</span>
+                          </>
+                        ) : null}
+                        <span className="text-[10px] font-bold leading-tight">{label}</span>
+                        <span className="text-[9px] text-muted-foreground leading-tight">{note}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Grandfathering callout */}
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4">
+              <p className="text-sm font-bold text-foreground">Lock in today's rate</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Prices may increase for new customers over time — active subscribers keep their current rate for as long as their service remains active. No lapses, no rate increases.
+              </p>
+            </div>
+
+            {/* CTA */}
+            <div className="space-y-3">
+              <Button
+                onClick={handleSchedule}
+                className="w-full h-14 rounded-[20px] shadow-brand text-base font-bold gap-2"
+              >
+                <CalendarCheck className="h-5 w-5" />
+                Schedule Service
+                <ArrowRight className="h-5 w-5" />
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                {user
+                  ? "Opens the scheduling flow with your address and plan pre-selected."
+                  : "We'll create your account and pre-fill your address — no re-entering details."}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

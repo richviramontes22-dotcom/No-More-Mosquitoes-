@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { assertStripeKeyNotTestInProduction } from "./lib/stripeMode";
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
@@ -8,12 +9,13 @@ import employeeShifts from "./routes/employeeShifts";
 import employeeAssignments from "./routes/employeeAssignments";
 import employeeMessages from "./routes/employeeMessages";
 import smsWebhook from "./routes/webhooks.sms";
-import { seedIfEmpty } from "./lib/memory";
+// memory.ts seedIfEmpty removed — employee assignments now persist to Supabase (Phase 3A)
 import adminStripe from "./routes/adminStripe";
 import billingStripe from "./routes/billingStripe";
 import marketplaceStripe from "./routes/marketplaceStripe";
 import adminTracking from "./routes/adminTracking";
 import regridRoutes from "./routes/regrid";
+import parcelQuoteRouter from "./routes/parcelQuote";
 import stripeWebhooks from "./routes/webhooksStripe";
 import waitlistRouter from "./routes/waitlist";
 import adminSettingsRouter from "./routes/adminSettings";
@@ -26,12 +28,30 @@ import adminPromosRouter from "./routes/adminPromos";
 import adminCmsRouter from "./routes/adminCms";
 import adminServiceAreasRouter from "./routes/adminServiceAreas";
 import adminMarketplaceRouter from "./routes/adminMarketplace";
+import availabilityRouter from "./routes/availability";
+import adminBlackoutDatesRouter from "./routes/adminBlackoutDates";
+import customerAppointmentsRouter from "./routes/customerAppointments";
+import adminAppointmentsRouter from "./routes/adminAppointments";
+import devAuthRouter from "./routes/devAuth";
+import adminBusinessHoursRouter from "./routes/adminBusinessHours";
+import adminAlertsRouter from "./routes/adminAlerts";
+import unsubscribeRouter from "./routes/unsubscribe";
+import adminOnboardingRouter from "./routes/adminOnboarding";
+import employeeOnboardingRouter from "./routes/employeeOnboarding";
+import adminWorkforceRouter from "./routes/adminWorkforce";
+import adminDebugRouter from "./routes/adminDebug";
+import adminMetricsRouter from "./routes/adminMetrics";
+import healthRouter from "./routes/health";
+import { requestIdMiddleware } from "./middleware/requestId";
 
 export function createServer() {
+  // Guard: hard-fail before any route is registered if a test key is used in production.
+  assertStripeKeyNotTestInProduction();
   const app = express();
 
   // Middleware
   app.use(cors());
+  app.use(requestIdMiddleware); // attaches req.requestId + x-request-id response header
 
   // Webhook needs raw body before express.json()
   app.use("/api/webhooks", express.raw({ type: "application/json" }), stripeWebhooks);
@@ -82,11 +102,13 @@ export function createServer() {
     }
   });
 
-  // Employee API (stubs)
+  // Employee API
   app.use("/api/employee", employeeAuth);
   app.use("/api/employee", employeeShifts);
   app.use("/api/employee", employeeAssignments);
   app.use("/api/employee", employeeMessages);
+  app.use("/api/employee", employeeOnboardingRouter);
+  app.use("/api/employee", adminRoutesRouter); // employee/routes/today endpoint
 
   // Webhooks
   app.use("/api/webhooks", smsWebhook);
@@ -102,6 +124,21 @@ export function createServer() {
 
   // Admin Employees API (invite, list, edit, deactivate)
   app.use("/api/admin", adminEmployeesRouter);
+
+  // Admin Onboarding API (forms, versions, employee progress)
+  app.use("/api/admin", adminOnboardingRouter);
+
+  // Admin Workforce API (schedules, capacity, availability, overrides)
+  app.use("/api/admin", adminWorkforceRouter);
+
+  // Admin Debug API (system status, feature flags — no secrets exposed)
+  app.use("/api/admin", adminDebugRouter);
+
+  // Admin Metrics API (operational counts)
+  app.use("/api/admin", adminMetricsRouter);
+
+  // Health endpoints (public lightweight + provider status)
+  app.use("/api", healthRouter);
 
   // Admin Customers API (invite)
   app.use("/api/admin", adminCustomersRouter);
@@ -126,6 +163,27 @@ export function createServer() {
   app.use("/api/admin", adminServiceAreasRouter);
   app.use("/api", adminServiceAreasRouter); // /api/service-areas/check is public
 
+  // Availability API (public — customer booking)
+  app.use("/api", availabilityRouter);
+
+  // Customer Appointments API (authenticated — reschedule, etc.)
+  app.use("/api", customerAppointmentsRouter);
+
+  // Blackout Dates API (admin only)
+  app.use("/api/admin", adminBlackoutDatesRouter);
+
+  // Admin Appointments API (dispatch, cancel)
+  app.use("/api/admin", adminAppointmentsRouter);
+
+  // Business Hours API (admin CRUD)
+  app.use("/api/admin", adminBusinessHoursRouter);
+
+  // Admin Alerts API (internal owner notifications)
+  app.use("/api/admin", adminAlertsRouter);
+
+  // Email unsubscribe (one-click CAN-SPAM compliance — unauthenticated)
+  app.use("/api", unsubscribeRouter);
+
   // Billing Stripe API
   app.use("/api/billing", billingStripe);
 
@@ -135,14 +193,19 @@ export function createServer() {
   // Admin Tracking API
   app.use("/api/admin", adminTracking);
 
-  // Regrid API
+  // Regrid API (legacy — kept for backward compat; new flow uses /api/parcel)
   app.use("/api/regrid", regridRoutes);
+
+  // Parcel acreage quote API (county GIS adapters + permanent cache)
+  app.use("/api/parcel", parcelQuoteRouter);
 
   // Waitlist API
   app.use("/api/waitlist", waitlistRouter);
 
-  // Seed demo data (in-memory) so employee API works without DB
-  seedIfEmpty();
+  // Dev-only: test account auto-confirmation (never active in production)
+  if (process.env.NODE_ENV !== "production") {
+    app.use("/api/dev", devAuthRouter);
+  }
 
   return app;
 }

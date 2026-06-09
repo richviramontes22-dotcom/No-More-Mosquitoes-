@@ -26,6 +26,7 @@ export const translations = {
       signedInAs: "Signed in as {name}",
       more: "More",
       brandName: "No More Mosquitoes",
+      customerDashboard: "Customer Dashboard",
     },
     chat: {
       title: "Customer Support",
@@ -42,8 +43,8 @@ export const translations = {
       title: "Enjoy the comfort of your yard all season",
       description:
         "Premium mosquito and insect control for those who expect more from their outdoor space. Precision treatments, proven results, and a 100% satisfaction guarantee—so you can enjoy your yard in total comfort.",
-      scheduleService: "Schedule Service",
-      checkPricing: "Check Pricing by Address",
+      scheduleService: "Get My Free Quote",
+      checkPricing: "See Pricing",
       callOrText: "Call or Text (949) 297-6225",
       everyVisit: "Every visit includes",
       completionVideo: "HD completion video + technician notes",
@@ -359,7 +360,7 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
       plansDesc: "Pick the program that fits your lifestyle. Every option includes mosquito knockdown, barrier treatments, and pest prevention insights in your customer portal.",
       compareFull: "Compare full pricing",
       oneTime: "One-Time Application",
-      onePricing: "$179",
+      onePricing: "Starting at $175",
       oneCadence: "Knockdown + barrier",
       oneFeatures: [
         "Full-property mosquito treatment",
@@ -625,6 +626,7 @@ From that backyard in 2016 to the homes we serve today, No More Mosquitoes has b
       signedInAs: "Conectado como {name}",
       more: "Más",
       brandName: "No More Mosquitoes",
+      customerDashboard: "Panel del Cliente",
     },
     chat: {
       title: "Soporte al Cliente",
@@ -956,7 +958,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       plansDesc: "Elige el programa que se adapte a tu estilo de vida. Cada opción incluye reducción de mosquitos, tratamientos de barrera y conocimientos de prevención de plagas en tu portal del cliente.",
       compareFull: "Comparar precios completos",
       oneTime: "Aplicación Única",
-      onePricing: "$179",
+      onePricing: "Starting at $175",
       oneCadence: "Reducción + barrera",
       oneFeatures: [
         "Tratamiento de mosquitos de propiedad completa",
@@ -1214,6 +1216,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       signedInAs: "{name} としてサインイン中",
       more: "その他",
       brandName: "ノーモアモスキート",
+      customerDashboard: "カスタマーダッシュボード",
     },
     chat: {
       title: "カスタマーサポート",
@@ -1542,7 +1545,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       plansDesc: "ライフスタイルに合ったプログラムをお選びください。すべてのオプションに蚊の駆除、バリア処理、カスタマーポータルでの害虫予防インサイトが含まれています。",
       compareFull: "全料金を比較",
       oneTime: "1回限りの散布",
-      onePricing: "$179",
+      onePricing: "Starting at $175",
       oneCadence: "ノックダウン + バリア",
       oneFeatures: [
         "全敷地の蚊の駆除",
@@ -1789,6 +1792,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       signedInAs: "已登录为 {name}",
       more: "更多",
       brandName: "No More Mosquitoes",
+      customerDashboard: "客户仪表板",
     },
     chat: {
       title: "客户支持",
@@ -2117,7 +2121,7 @@ Desde ese patio en 2016 hasta los hogares que servimos hoy, No More Mosquitoes s
       plansDesc: "选择适合您生活方式的项目。每个选项都包含蚊虫消杀、屏障处理以及客户门户中的害虫预防见解。",
       compareFull: "比较全部价格",
       oneTime: "单次施药",
-      onePricing: "$179",
+      onePricing: "Starting at $175",
       oneCadence: "即时消杀 + 屏障",
       oneFeatures: [
         "全物业蚊虫处理",

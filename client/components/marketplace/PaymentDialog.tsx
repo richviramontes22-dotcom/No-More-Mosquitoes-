@@ -5,7 +5,7 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-import { loadStripe } from "@stripe/stripe-js";
+import { stripePromise } from "@/lib/stripe";
 import {
   Dialog,
   DialogContent,
@@ -28,8 +28,6 @@ import {
 import { CartItemEntry } from "@/contexts/CartContext";
 import { Appointment } from "@/hooks/dashboard/useAppointments";
 import { formatPrice } from "@/hooks/dashboard/useCatalogItems";
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
 
 // ─── Inner form (must be inside Elements) ────────────────────────────────────
 interface PaymentFormProps {

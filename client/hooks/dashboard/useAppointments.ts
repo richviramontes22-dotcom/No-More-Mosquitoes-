@@ -7,6 +7,9 @@ interface AppointmentRow {
   id: string;
   status: string;
   scheduled_at: string;
+  scheduled_date?: string | null;
+  window?: string | null;
+  window_label?: string | null;
   notes?: string;
   property_id: string;
   service_type: string;
@@ -21,10 +24,13 @@ interface AppointmentRow {
  * React keys MUST use raw id, never displayId.
  */
 export interface Appointment {
-  id: string; // Real database ID - NEVER overwrite this
-  displayId: string; // Shortened ID for human display (e.g., first 8 chars)
+  id: string;
+  displayId: string;
   date: string;
-  timeWindow: string;
+  scheduledDate: string | null; // YYYY-MM-DD from Phase 1 window model
+  window: string | null;        // 'morning' | 'afternoon'
+  windowLabel: string | null;   // human-readable label
+  timeWindow: string;           // resolved display string (windowLabel or legacy)
   program: string;
   technician: string;
   status: string;
@@ -36,7 +42,7 @@ const fetchAppointments = async (userId: string): Promise<Appointment[]> => {
     () =>
       supabase
         .from("appointments")
-        .select("id, status, scheduled_at, notes, property_id, service_type, frequency")
+        .select("id, status, scheduled_at, scheduled_date, window, window_label, notes, property_id, service_type, frequency")
         .eq("user_id", userId)
         .order("scheduled_at", { ascending: true }),
     "Appointments"
@@ -49,22 +55,27 @@ const fetchAppointments = async (userId: string): Promise<Appointment[]> => {
   // Transform database rows to renderable Appointments
   // CRITICAL: Preserve real database ID, add separate displayId for UI
   const appointments = (data as AppointmentRow[]).map((app) => {
-    const timeWindow = app.notes?.includes("Slot:")
-      ? (app.notes.split("Slot:")[1] || "").split("|")[0]?.trim() || "TBD"
-      : "TBD";
+    // Phase 1: prefer window_label; fall back to notes-based parsing; fall back to TBD
+    const windowLabel = app.window_label ?? null;
+    const legacySlot  = app.notes?.includes("Slot:")
+      ? (app.notes.split("Slot:")[1] || "").split("|")[0]?.trim() || null
+      : null;
+    const timeWindow = windowLabel || legacySlot || "TBD";
 
-    // Extract shortened display ID from real ID (e.g., first 8 chars, uppercase)
     const displayId = String(app.id || "").substring(0, 8).toUpperCase() || "N/A";
 
     return {
-      id: app.id, // IMPORTANT: Real database ID unchanged
-      displayId: displayId, // Shortened version for UI text only
-      date: app.scheduled_at,
+      id:            app.id,
+      displayId,
+      date:          app.scheduled_at,
+      scheduledDate: app.scheduled_date ?? null,
+      window:        app.window ?? null,
+      windowLabel,
       timeWindow,
-      program: app.service_type || "Mosquito Service",
-      technician: "Assigning...", // Don't wait for assignments
-      status: (app.status || "requested").charAt(0).toUpperCase() + (app.status || "requested").slice(1),
-      address: "Primary Property", // Don't wait for properties
+      program:       app.service_type || "Mosquito Service",
+      technician:    "Assigning...",
+      status:        (app.status || "requested").charAt(0).toUpperCase() + (app.status || "requested").slice(1),
+      address:       "Primary Property",
     };
   });
 

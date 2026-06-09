@@ -1,17 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import SectionHeading from "@/components/common/SectionHeading";
 import MiniMap from "@/components/employee/MiniMap";
 import { navUrl } from "@/lib/employee/deepLinks";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, MapPin } from "lucide-react";
+import { Loader2, Phone, MapPin, Camera, Video, X, Navigation } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useEmployee } from "@/hooks/employee/useEmployee";
 import { useToast } from "@/hooks/use-toast";
 
+const JOB_MEDIA_BUCKET = "job-media";
+
 interface AssignmentDetail {
   id: string;
   status: string;
+  en_route_at: string | null;
+  arrived_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   address: string | null;
@@ -31,6 +37,34 @@ interface Message {
   created_at: string;
 }
 
+interface JobMedia {
+  id: string;
+  url: string;
+  media_type: "photo" | "video" | "doc";
+  caption: string | null;
+  created_at: string;
+}
+
+const CHECKLIST_LABELS = [
+  "PPE on",
+  "Pets accounted for",
+  "Hazards cleared",
+  "Products loaded",
+  "Customer notified",
+  "Safety zones marked",
+];
+
+async function capturePosition(): Promise<{ latitude: number; longitude: number; accuracy: number } | null> {
+  if (!navigator.geolocation) return null;
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      () => resolve(null),
+      { timeout: 6000, enableHighAccuracy: true }
+    );
+  });
+}
+
 const AssignmentDetail = () => {
   const { id = "" } = useParams();
   const { data: employee } = useEmployee();
@@ -40,14 +74,37 @@ const AssignmentDetail = () => {
   const [body, setBody] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [media, setMedia] = useState<JobMedia[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [checklist, setChecklist] = useState<boolean[]>(CHECKLIST_LABELS.map(() => false));
+  const [checklistSaving, setChecklistSaving] = useState(false);
+  const [blockingForms, setBlockingForms] = useState<string[] | null>(null);
 
   const loadAssignment = async () => {
     if (!id) return;
     setIsLoading(true);
     try {
+      // Check authorization + blocking forms via API first
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (token) {
+        const authCheck = await fetch(`/api/employee/assignments/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (authCheck.status === 403) {
+          const body = await authCheck.json().catch(() => ({}));
+          if (body.blocking_forms) {
+            setBlockingForms(body.blocking_forms);
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
       const { data: row, error } = await supabase
         .from("assignments")
-        .select("id, status, appointment_id")
+        .select("id, status, en_route_at, arrived_at, started_at, completed_at, appointment_id")
         .eq("id", id)
         .single();
 
@@ -55,7 +112,7 @@ const AssignmentDetail = () => {
 
       const apptId = row.appointment_id;
       if (!apptId) {
-        setAssignment({ id: row.id, status: row.status, customer_name: null, customer_phone: null, address: null, city: null, zip: null, lat: null, lng: null, service_type: null, notes: null, appointment_id: null });
+        setAssignment({ id: row.id, status: row.status, en_route_at: row.en_route_at ?? null, arrived_at: row.arrived_at ?? null, started_at: row.started_at ?? null, completed_at: row.completed_at ?? null, customer_name: null, customer_phone: null, address: null, city: null, zip: null, lat: null, lng: null, service_type: null, notes: null, appointment_id: null });
         return;
       }
 
@@ -67,20 +124,24 @@ const AssignmentDetail = () => {
 
       const [profileRes, propRes] = await Promise.all([
         appt?.user_id ? supabase.from("profiles").select("name, phone").eq("id", appt.user_id).single() : Promise.resolve({ data: null }),
-        appt?.property_id ? supabase.from("properties").select("address, city, zip").eq("id", appt.property_id).single() : Promise.resolve({ data: null }),
+        appt?.property_id ? supabase.from("properties").select("address, city, zip, lat, lng").eq("id", appt.property_id).single() : Promise.resolve({ data: null }),
       ]);
 
       setAssignment({
         id: row.id,
         status: row.status,
+        en_route_at:    row.en_route_at ?? null,
+        arrived_at:     row.arrived_at ?? null,
+        started_at:     row.started_at ?? null,
+        completed_at:   row.completed_at ?? null,
         appointment_id: apptId,
         customer_name: profileRes.data?.name ?? null,
         customer_phone: profileRes.data?.phone ?? null,
         address: propRes.data?.address ?? null,
         city: propRes.data?.city ?? null,
         zip: propRes.data?.zip ?? null,
-        lat: null,
-        lng: null,
+        lat: typeof propRes.data?.lat === "number" ? propRes.data.lat : null,
+        lng: typeof propRes.data?.lng === "number" ? propRes.data.lng : null,
         service_type: appt?.service_type ?? null,
         notes: appt?.notes ?? null,
       });
@@ -108,23 +169,146 @@ const AssignmentDetail = () => {
     setMsgs((messages as Message[]) || []);
   };
 
+  const loadMedia = async () => {
+    if (!id) return;
+    const { data } = await supabase
+      .from("job_media")
+      .select("id, url, media_type, caption, created_at")
+      .eq("assignment_id", id)
+      .order("created_at", { ascending: false });
+    setMedia((data as JobMedia[]) || []);
+  };
+
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !assignment) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
+      toast({ title: "Session expired — please sign in again", variant: "destructive" });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `assignments/${assignment.id}/${Date.now()}.${ext}`;
+      const { error: storageErr } = await supabase.storage
+        .from(JOB_MEDIA_BUCKET)
+        .upload(path, file, { upsert: false });
+
+      if (storageErr) throw storageErr;
+
+      const { data: urlData } = supabase.storage.from(JOB_MEDIA_BUCKET).getPublicUrl(path);
+      const mediaType: "photo" | "video" = file.type.startsWith("video/") ? "video" : "photo";
+
+      const res = await fetch(`/api/employee/assignments/${assignment.id}/media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ url: urlData.publicUrl, media_type: mediaType }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(err.error);
+      }
+
+      toast({ title: `${mediaType === "video" ? "Video" : "Photo"} uploaded` });
+      await loadMedia();
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const loadChecklist = async () => {
+    if (!id) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/employee/assignments/${id}/checklist`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const { items } = await res.json();
+        if (Array.isArray(items)) {
+          setChecklist(CHECKLIST_LABELS.map((_, i) => Boolean(items[i]?.checked)));
+        }
+      }
+    } catch {
+      // Non-fatal — checklist defaults to all unchecked
+    }
+  };
+
+  const saveChecklist = async (next: boolean[]) => {
+    if (!id) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+    setChecklistSaving(true);
+    try {
+      const items = CHECKLIST_LABELS.map((label, i) => ({ label, checked: next[i] }));
+      await fetch(`/api/employee/assignments/${id}/checklist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ items }),
+      });
+    } catch {
+      // Non-fatal — UI state is still correct
+    } finally {
+      setChecklistSaving(false);
+    }
+  };
+
+  const toggleChecklist = (i: number) => {
+    const next = [...checklist];
+    next[i] = !next[i];
+    setChecklist(next);
+    saveChecklist(next);
+  };
+
   useEffect(() => {
     loadAssignment();
     loadMessages();
+    loadMedia();
+    loadChecklist();
   }, [id]);
 
   const updateStatus = async (newStatus: string) => {
     if (!assignment) return;
-    const updateData: Record<string, string> = { status: newStatus };
-    if (newStatus === "in_progress") updateData.started_at = new Date().toISOString();
-    if (newStatus === "completed") updateData.completed_at = new Date().toISOString();
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
+      toast({ title: "Session expired — please sign in again", variant: "destructive" });
+      return;
+    }
 
-    const { error } = await supabase
-      .from("assignments")
-      .update(updateData)
-      .eq("id", assignment.id);
+    // Capture GPS snapshot (non-blocking — GPS denied does not prevent status update)
+    const geo = await capturePosition();
 
-    if (!error) setAssignment((prev) => prev ? { ...prev, status: newStatus } : prev);
+    try {
+      const res = await fetch(`/api/employee/assignments/${assignment.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: newStatus, ...geo }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        toast({ title: "Status update failed", description: err.error, variant: "destructive" });
+        return;
+      }
+      const { assignment: updated } = await res.json();
+      setAssignment((prev) => prev ? { ...prev, ...updated } : prev);
+      if (newStatus === "completed") {
+        toast({ title: "Job completed", description: "Appointment marked complete." });
+      }
+    } catch {
+      toast({ title: "Status update failed", variant: "destructive" });
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -171,6 +355,41 @@ const AssignmentDetail = () => {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (blockingForms) {
+    return (
+      <div className="grid gap-6 max-w-lg">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center space-y-4">
+          <div className="flex justify-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100">
+              <X className="h-6 w-6 text-red-600" />
+            </div>
+          </div>
+          <div>
+            <p className="text-lg font-bold text-red-900">Onboarding Required</p>
+            <p className="text-sm text-red-700 mt-1">
+              You must complete required onboarding documents before accessing assignment details.
+            </p>
+          </div>
+          <div className="text-left rounded-xl bg-white border border-red-200 p-4 space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-widest text-red-600 mb-2">Required Forms</p>
+            {blockingForms.map((form, i) => (
+              <p key={i} className="text-sm text-red-800 flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
+                {form}
+              </p>
+            ))}
+          </div>
+          <a
+            href="/employee/onboarding"
+            className="inline-flex items-center justify-center w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition"
+          >
+            Complete Onboarding
+          </a>
+        </div>
       </div>
     );
   }
@@ -259,19 +478,150 @@ const AssignmentDetail = () => {
         </form>
       </div>
 
+      {/* Recent Updates / Status Timeline */}
+      {assignment && (
+        <div className="rounded-2xl border border-border/70 bg-card/95 p-5 space-y-3">
+          <p className="text-sm font-semibold">Recent Updates</p>
+          <div className="space-y-2">
+            {[
+              { label: "Completed",    timestamp: assignment.completed_at,  color: "bg-green-500" },
+              { label: "In Progress",  timestamp: assignment.started_at,    color: "bg-blue-500" },
+              { label: "En Route",     timestamp: assignment.en_route_at,   color: "bg-amber-500" },
+              { label: "Arrived",      timestamp: assignment.arrived_at,    color: "bg-purple-500" },
+            ]
+              .filter((s) => !!s.timestamp)
+              .map((s) => (
+                <div key={s.label} className="flex items-center gap-3 text-sm">
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${s.color}`} />
+                  <span className="font-medium text-foreground">{s.label}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {(() => {
+                      try {
+                        return new Date(s.timestamp!).toLocaleString("en-US", {
+                          month: "short", day: "numeric",
+                          hour: "numeric", minute: "2-digit",
+                        });
+                      } catch { return s.timestamp; }
+                    })()}
+                  </span>
+                </div>
+              ))}
+            {/* Current status if no timestamps yet */}
+            {!assignment.en_route_at && !assignment.started_at && !assignment.completed_at && (
+              <div className="flex items-center gap-3 text-sm">
+                <span className="h-2 w-2 rounded-full shrink-0 bg-muted-foreground/50" />
+                <span className="text-muted-foreground">
+                  Status: <span className="capitalize font-medium text-foreground">{assignment.status}</span>
+                </span>
+              </div>
+            )}
+            {/* Show if cancelled/skipped */}
+            {(assignment.status === "no_show" || assignment.status === "skipped") && (
+              <div className="flex items-center gap-3 text-sm">
+                <span className="h-2 w-2 rounded-full shrink-0 bg-red-400" />
+                <span className="font-medium text-red-600 capitalize">{assignment.status.replace("_", " ")}</span>
+              </div>
+            )}
+          </div>
+          {assignment.notes && (
+            <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Notes</p>
+              <p className="text-sm text-foreground">{assignment.notes}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Checklist */}
       <div className="rounded-2xl border border-border/70 bg-card/95 p-5 space-y-3">
-        <p className="text-sm font-semibold">Pre-service checklist</p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">Pre-service checklist</p>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {checklistSaving && <Loader2 className="h-3 w-3 animate-spin" />}
+            <span>{checklist.filter(Boolean).length}/{CHECKLIST_LABELS.length} complete</span>
+          </div>
+        </div>
         <ul className="grid gap-2 sm:grid-cols-3 text-sm">
-          {["PPE on", "Pets accounted for", "Hazards cleared", "Products loaded", "Customer notified", "Safety zones marked"].map((item) => (
-            <li key={item}>
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="h-4 w-4 rounded" />
-                {item}
+          {CHECKLIST_LABELS.map((label, i) => (
+            <li key={label}>
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded"
+                  checked={checklist[i]}
+                  onChange={() => toggleChecklist(i)}
+                />
+                <span className={checklist[i] ? "line-through text-muted-foreground" : ""}>{label}</span>
               </label>
             </li>
           ))}
         </ul>
+      </div>
+
+      {/* Job Media */}
+      <div className="rounded-2xl border border-border/70 bg-card/95 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold">Job Photos & Videos</p>
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              id="media-photo"
+              onChange={handleMediaUpload}
+              disabled={isUploading}
+            />
+            <input
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              id="media-file"
+              onChange={handleMediaUpload}
+              disabled={isUploading}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isUploading}
+              onClick={() => document.getElementById("media-photo")?.click()}
+            >
+              {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              <span className="ml-1.5">Photo</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isUploading}
+              onClick={() => document.getElementById("media-file")?.click()}
+            >
+              <Video className="h-4 w-4" />
+              <span className="ml-1.5">File</span>
+            </Button>
+          </div>
+        </div>
+
+        {media.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No photos or videos yet. Add documentation for this job.</p>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {media.map((m) => (
+              <div key={m.id} className="relative aspect-square rounded-xl overflow-hidden border border-border/60 bg-muted/30">
+                {m.media_type === "video" ? (
+                  <video src={m.url} className="w-full h-full object-cover" controls={false} />
+                ) : (
+                  <img src={m.url} alt="Job photo" className="w-full h-full object-cover" />
+                )}
+                {m.media_type === "video" && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <Video className="h-6 w-6 text-white drop-shadow" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,28 +1,21 @@
 import { useState, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
 import SectionHeading from "@/components/common/SectionHeading";
 import { ProductGrid } from "@/components/marketplace/ProductGrid";
 import { CartPanel } from "@/components/marketplace/CartPanel";
 import CheckoutReview from "@/components/marketplace/CheckoutReview";
 import type { AppliedPromo } from "@/components/marketplace/CheckoutReview";
 import { PaymentDialog } from "@/components/marketplace/PaymentDialog";
-import { useCatalogItems, CatalogItem, formatPrice } from "@/hooks/dashboard/useCatalogItems";
+import { useCatalogItems, CatalogItem } from "@/hooks/dashboard/useCatalogItems";
 import { useCart } from "@/contexts/CartContext";
 import { useAppointments } from "@/hooks/dashboard/useAppointments";
 import { useMarketplaceOrders } from "@/hooks/dashboard/useMarketplaceOrders";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
-import {
-  ShoppingCart,
-  ChevronRight,
-  Package,
-  CheckCircle2,
-  Clock,
-  ArrowRight,
-} from "lucide-react";
+import { ShoppingCart, ChevronRight, RefreshCw, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import Orders from "@/pages/dashboard/Orders";
 
 interface PaymentState {
   clientSecret: string;
@@ -34,13 +27,13 @@ interface PaymentState {
 const Marketplace = () => {
   const { toast } = useToast();
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const { data: catalogItems = [], isLoading: catalogLoading, error: catalogError } = useCatalogItems();
   const { addItem, itemCount, items: cartItems, subtotalCents, taxCents, totalCents, clearCart } = useCart();
   const { data: allAppointments = [] } = useAppointments(user?.id);
-  const { data: recentOrders = [], refetch: refetchOrders } = useMarketplaceOrders(user?.id);
+  const { data: orders = [], isLoading: ordersLoading, refetch: refetchOrders } = useMarketplaceOrders(user?.id);
 
+  const [activeTab, setActiveTab] = useState<"browse" | "orders">("browse");
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -63,7 +56,6 @@ const Marketplace = () => {
   const handleConfirmOrder = async () => {
     if (!user) return;
     setIsCreatingPayment(true);
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -117,12 +109,9 @@ const Marketplace = () => {
     setIsPaymentOpen(false);
     setPaymentState(null);
     await refetchOrders();
-    // Navigate to orders page so customer sees their order immediately
-    navigate("/dashboard/orders");
-    toast({
-      title: "Order confirmed!",
-      description: `Confirmation: ${confirmationId}`,
-    });
+    // Switch to My Orders tab to show the new order
+    setActiveTab("orders");
+    toast({ title: "Order confirmed!", description: `Confirmation: ${confirmationId}` });
   };
 
   const handleAddToCart = (item: CatalogItem) => {
@@ -135,23 +124,17 @@ const Marketplace = () => {
   };
 
   const handleRequestConsultation = (item: CatalogItem) => {
-    toast({
-      title: "Consultation request",
-      description: `We'll reach out about ${item.name} within 24 hours.`,
-    });
+    toast({ title: "Consultation request", description: `We'll reach out about ${item.name} within 24 hours.` });
   };
 
-  // Show the 2 most recent non-failed orders as a preview
-  const previewOrders = recentOrders.filter((o) => o.status !== "failed").slice(0, 2);
-
   return (
-    <div className="grid gap-12">
+    <div className="grid gap-8">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <SectionHeading
-          eyebrow="Marketplace"
-          title="Browse & Add Services"
-          description="Add products and services to your cart and pay securely — no redirects."
+          eyebrow="Shop"
+          title="Browse & Manage Orders"
+          description="Add products and services to your cart and view your order history."
         />
         {itemCount > 0 && (
           <Button onClick={() => setIsCartOpen(true)} className="rounded-full shadow-brand h-11 self-start md:self-auto">
@@ -162,68 +145,42 @@ const Marketplace = () => {
         )}
       </div>
 
-      {/* Product Grid */}
-      <ProductGrid
-        items={catalogItems}
-        isLoading={catalogLoading}
-        error={catalogError}
-        onAddToCart={handleAddToCart}
-        onRequestConsultation={handleRequestConsultation}
-      />
+      {/* Tab bar */}
+      <div className="flex gap-1 p-1 bg-muted/30 rounded-xl border border-border/60 w-fit">
+        {(["browse", "orders"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              "px-5 py-2 rounded-lg text-sm font-semibold transition-all",
+              activeTab === tab
+                ? "bg-card shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {tab === "browse" ? "Browse" : "My Orders"}
+          </button>
+        ))}
+      </div>
 
-      {/* ── Recent Orders Preview ─────────────────────────────────────────── */}
-      {previewOrders.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-display font-bold text-foreground">Recent Orders</h3>
-            <Button variant="ghost" size="sm" asChild className="text-primary hover:text-primary/80">
-              <Link to="/dashboard/orders" className="flex items-center gap-1.5">
-                View all orders <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-          <div className="grid gap-3">
-            {previewOrders.map((order) => (
-              <Link
-                key={order.id}
-                to="/dashboard/orders"
-                className="flex items-center justify-between gap-4 rounded-2xl border border-border/60 bg-card/95 p-4 shadow-soft transition hover:border-primary/30 hover:bg-muted/20"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Package className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="font-semibold text-sm text-foreground truncate">
-                      {order.confirmation_id || `ORD-${order.id.slice(0, 8).toUpperCase()}`}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(order.created_at).toLocaleDateString(undefined, {
-                        month: "short", day: "numeric", year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {order.status === "completed" ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100 gap-1">
-                      <CheckCircle2 className="h-3 w-3" /> Paid
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 gap-1">
-                      <Clock className="h-3 w-3" /> Pending
-                    </Badge>
-                  )}
-                  <span className="font-bold text-sm text-primary">{formatPrice(order.total_cents)}</span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
+      {/* Browse tab */}
+      {activeTab === "browse" && (
+        <ProductGrid
+          items={catalogItems}
+          isLoading={catalogLoading}
+          error={catalogError}
+          onAddToCart={handleAddToCart}
+          onRequestConsultation={handleRequestConsultation}
+        />
       )}
 
-      {/* ── Panels ───────────────────────────────────────────────────────── */}
+      {/* My Orders tab — renders the Orders page component inline */}
+      {activeTab === "orders" && (
+        <Orders />
+      )}
+
+      {/* Panels */}
       <CartPanel open={isCartOpen} onOpenChange={setIsCartOpen} onCheckout={handleCheckout} />
 
       <CheckoutReview
@@ -240,9 +197,7 @@ const Marketplace = () => {
       {paymentState && (
         <PaymentDialog
           open={isPaymentOpen}
-          onOpenChange={(open) => {
-            if (!open) { setIsPaymentOpen(false); setPaymentState(null); }
-          }}
+          onOpenChange={(open) => { if (!open) { setIsPaymentOpen(false); setPaymentState(null); } }}
           clientSecret={paymentState.clientSecret}
           confirmationId={paymentState.confirmationId}
           amount={paymentState.amount}

@@ -68,36 +68,49 @@ const Customers = () => {
 
       if (data && data.length > 0) {
         console.log(`[Admin Customers] Fetched ${data.length} customer profiles`);
-        // Fetch property counts for each customer
         const customerIds = data.map(p => p.id);
-        const { data: propertyData, error: propError } = await supabase
-          .from("properties")
-          .select("user_id, id")
-          .in("user_id", customerIds);
 
-        if (propError) {
-          console.error("[Admin Customers] Property fetch error:", propError);
-        } else {
-          console.log(`[Admin Customers] Fetched ${propertyData?.length || 0} properties for customers`);
-        }
+        // Batch fetch properties, subscriptions in parallel
+        const [{ data: propertyData, error: propError }, { data: subData }] = await Promise.all([
+          supabase.from("properties").select("user_id, id").in("user_id", customerIds),
+          supabase.from("subscriptions").select("user_id, status").in("user_id", customerIds),
+        ]);
 
-        // Build property count map
+        if (propError) console.error("[Admin Customers] Property fetch error:", propError);
+
+        // Property count map
         const propertyCountMap: Record<string, number> = {};
-        if (!propError && propertyData) {
-          propertyData.forEach(prop => {
-            propertyCountMap[prop.user_id] = (propertyCountMap[prop.user_id] || 0) + 1;
-          });
-        }
+        (propertyData || []).forEach(prop => {
+          propertyCountMap[prop.user_id] = (propertyCountMap[prop.user_id] || 0) + 1;
+        });
+
+        // Subscription status map — per-customer best status:
+        //   active > past_due > canceled > none
+        const subStatusMap: Record<string, string> = {};
+        const priority: Record<string, number> = { active: 3, past_due: 2, canceled: 1 };
+        (subData || []).forEach(sub => {
+          const cur = subStatusMap[sub.user_id];
+          if (!cur || (priority[sub.status] ?? 0) > (priority[cur] ?? 0)) {
+            subStatusMap[sub.user_id] = sub.status;
+          }
+        });
+
+        const resolveStatus = (userId: string): CustomerStatus => {
+          const s = subStatusMap[userId];
+          if (s === "canceled") return "canceled";
+          if (s === "past_due") return "paused";
+          return "active"; // active subscription or no subscription (lead)
+        };
 
         const mapped: Customer[] = data.map(p => ({
           id: p.id,
           name: p.name || "Unknown",
           email: p.email || "",
           phone: p.phone || "",
-          status: (p.role === "admin" ? "active" : "active") as any, // Placeholder status mapping
+          status: resolveStatus(p.id),
           createdAt: p.created_at,
-          propertyCount: propertyCountMap[p.id] || 0
-        }));
+          propertyCount: propertyCountMap[p.id] || 0,
+        } as any));
         setCustomers(mapped);
         console.log(`[Admin Customers] Mapped ${mapped.length} customers with property counts`);
       } else {
@@ -296,12 +309,25 @@ const CustomerDetailsSheet = ({ customerId }: { customerId: string }) => {
           return;
         }
 
+        // Fetch subscription status for this customer
+        const { data: subRows } = await supabase
+          .from("subscriptions")
+          .select("status")
+          .eq("user_id", customerId);
+
+        const subStatusPriority: Record<string, number> = { active: 3, past_due: 2, canceled: 1 };
+        const bestSub = (subRows ?? []).reduce<string | null>((best, s) => {
+          if (!best || (subStatusPriority[s.status] ?? 0) > (subStatusPriority[best] ?? 0)) return s.status;
+          return best;
+        }, null);
+        const resolvedStatus: CustomerStatus = bestSub === "canceled" ? "canceled" : bestSub === "past_due" ? "paused" : "active";
+
         setCustomerData({
           id: profileData.id,
           name: profileData.name || "Unknown",
           email: profileData.email || "",
           phone: profileData.phone || "",
-          status: "active" as CustomerStatus,
+          status: resolvedStatus,
           createdAt: profileData.created_at
         });
 

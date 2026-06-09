@@ -1,11 +1,52 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { DayPicker } from "react-day-picker";
+import { DayPicker, useDayPicker } from "react-day-picker";
+import { format } from "date-fns";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
+
+// Renders ← Month Year → in a single centered row, replacing the default
+// nav (which placed arrows at absolute left-1 / right-1, far from the label).
+function MonthCaptionInline({
+  calendarMonth,
+}: {
+  calendarMonth: { date: Date };
+  displayIndex?: number;
+}) {
+  const { goToMonth, previousMonth, nextMonth } = useDayPicker();
+  return (
+    <div className="flex items-center justify-center gap-1 py-1 w-full">
+      <button
+        onClick={() => previousMonth && goToMonth(previousMonth)}
+        disabled={!previousMonth}
+        aria-label="Go to previous month"
+        className={cn(
+          buttonVariants({ variant: "outline" }),
+          "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100 disabled:opacity-30 disabled:pointer-events-none",
+        )}
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span className="text-sm font-medium min-w-[120px] text-center">
+        {format(calendarMonth.date, "MMMM yyyy")}
+      </span>
+      <button
+        onClick={() => nextMonth && goToMonth(nextMonth)}
+        disabled={!nextMonth}
+        aria-label="Go to next month"
+        className={cn(
+          buttonVariants({ variant: "outline" }),
+          "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100 disabled:opacity-30 disabled:pointer-events-none",
+        )}
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 function Calendar({
   className,
@@ -54,12 +95,11 @@ function Calendar({
         ...classNames,
       }}
       components={{
-        Chevron: (props) => {
-          if (props.orientation === "left") {
-            return <ChevronLeft className="h-4 w-4" />;
-          }
-          return <ChevronRight className="h-4 w-4" />;
-        },
+        // MonthCaption override renders ← Month Year → inline.
+        // The default nav (button_previous / button_next) is not rendered
+        // when MonthCaption is overridden, so the classNames above for
+        // button_previous / button_next are intentionally unused fallbacks.
+        MonthCaption: MonthCaptionInline as any,
       }}
       {...props}
     />

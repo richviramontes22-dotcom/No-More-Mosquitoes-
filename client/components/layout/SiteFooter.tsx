@@ -186,64 +186,74 @@ export const SiteFooter = () => {
           Licensed&nbsp;•&nbsp;Insured&nbsp;•&nbsp;100% Satisfaction Guarantee&nbsp;•&nbsp;Employee/Community Based Company
         </p>
 
-        {/* Compliance Section - Simple logos */}
-        <div className="flex flex-wrap items-center justify-center gap-8 border-t border-border/40 pt-10">
-          <a
-            href="https://www.cdpr.ca.gov/wp-content/uploads/2024/08/what_we_do_at_dpr.pdf"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition hover:opacity-80 inline-block"
-            aria-label="Visit California Department of Pesticide Regulation Licensing"
-          >
-            <img
-              src={img_dpr_logo_state_of_ca_dpr.src}
-              alt={img_dpr_logo_state_of_ca_dpr.alt}
-              className="h-16 sm:h-20 w-auto grayscale-0"
-            />
-          </a>
+        {/* Compliance Section */}
+        <div className="flex flex-col items-center gap-10 border-t border-border/40 pt-10">
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground/50">
+            Licensed &amp; Regulated
+          </p>
 
-          <a
-            href="https://www.ca.gov"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition hover:opacity-80 inline-block"
-            aria-label="Visit State of California"
-          >
-            <img
-              src={img_state_of_ca_bear_logo.src}
-              alt={img_state_of_ca_bear_logo.alt}
-              className="h-16 sm:h-20 w-auto grayscale-0"
-            />
-          </a>
+          {/* Row 1 — circular seals, large */}
+          <div className="flex flex-wrap items-center justify-center gap-12 sm:gap-20">
+            <a
+              href="https://www.anaheim.net/830/Business-License"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group transition-opacity hover:opacity-80 inline-block"
+              aria-label="Visit City of Anaheim Business License"
+            >
+              <img
+                src={img_anaheim_seal.src}
+                alt={img_anaheim_seal.alt}
+                className="h-48 w-48 sm:h-64 sm:w-64 rounded-full object-cover shadow-md ring-2 ring-border/30 group-hover:ring-primary/30 transition-all"
+              />
+            </a>
 
-          <a
-            href="https://www.anaheim.net/830/Business-License"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition hover:opacity-80 inline-block"
-            aria-label="Visit City of Anaheim Business License"
-          >
-            <img
-              src={img_anaheim_seal.src}
-              alt={img_anaheim_seal.alt}
-              className="h-32 sm:h-44 w-auto grayscale-0"
-            />
-          </a>
+            <a
+              href="https://www.ca.gov"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group transition-opacity hover:opacity-80 inline-block"
+              aria-label="State of California Seal"
+            >
+              <img
+                src="/ca-state-seal.jpg"
+                alt="State of California Seal"
+                className="h-48 w-48 sm:h-64 sm:w-64 rounded-full object-cover shadow-md ring-2 ring-border/30 group-hover:ring-primary/30 transition-all"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+            </a>
+          </div>
 
-          <a
-            href="https://www.ca.gov"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition hover:opacity-80 inline-block"
-            aria-label="State of California Seal"
-          >
-            <img
-              src="/ca-state-seal.jpg"
-              alt="State of California Seal"
-              className="h-32 sm:h-44 w-auto grayscale-0 object-contain"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-            />
-          </a>
+          {/* Row 2 — horizontal banner logos */}
+          <div className="flex flex-wrap items-center justify-center gap-10 sm:gap-16">
+            <a
+              href="https://www.cdpr.ca.gov/wp-content/uploads/2024/08/what_we_do_at_dpr.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition hover:opacity-80 inline-block"
+              aria-label="Visit California Department of Pesticide Regulation Licensing"
+            >
+              <img
+                src={img_dpr_logo_state_of_ca_dpr.src}
+                alt={img_dpr_logo_state_of_ca_dpr.alt}
+                className="h-24 sm:h-32 w-auto"
+              />
+            </a>
+
+            <a
+              href="https://www.ca.gov"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition hover:opacity-80 inline-block"
+              aria-label="Visit State of California"
+            >
+              <img
+                src={img_state_of_ca_bear_logo.src}
+                alt={img_state_of_ca_bear_logo.alt}
+                className="h-24 sm:h-32 w-auto"
+              />
+            </a>
+          </div>
         </div>
 
         <div className="flex flex-col gap-4 border-t border-border/70 pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">

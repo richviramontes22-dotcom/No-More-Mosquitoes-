@@ -119,6 +119,14 @@ const PlanCardsSection = () => {
             </div>
           ))}
         </div>
+        <div className="mt-8 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4">
+          <div>
+            <p className="text-sm font-bold text-foreground">Lock in today's rate</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Prices may increase for new customers over time — but active subscribers keep their current rate for as long as their service remains active. No rate increases, ever, as long as there's no lapse in payments or service.
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );

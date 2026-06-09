@@ -10,7 +10,7 @@ const MainLayout = () => {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground overflow-x-hidden">
       <SiteHeader />
-      <main id="main-content" className={`flex-1 ${!isHomePage ? "pt-[136px] sm:pt-[152px]" : ""}`}>
+      <main id="main-content" className={`flex-1 ${!isHomePage ? "pt-[96px] sm:pt-[110px] md:pt-[126px]" : ""}`}>
         <Outlet />
       </main>
       <SiteFooter />

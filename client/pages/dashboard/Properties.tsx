@@ -20,8 +20,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { AddPropertyDialog } from "@/components/dashboard/properties/AddPropertyDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProperties } from "@/hooks/dashboard/useProperties";
 import { supabase } from "@/lib/supabase";
@@ -38,6 +41,9 @@ type PropertyRow = {
   displayNotes?: string;
   isDefault?: boolean;
   isMock?: boolean;
+  plan?: string;
+  program?: string;
+  cadence?: number;
 };
 
 const Properties = () => {
@@ -45,6 +51,8 @@ const Properties = () => {
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<any>(null);
+  const [gateCodeEdit, setGateCodeEdit] = useState<{ prop: PropertyRow; code: string } | null>(null);
+  const [savingGateCode, setSavingGateCode] = useState(false);
   const { data: propertyRows = [], isLoading, error: propertiesError, refetch, status } = useProperties(user?.id);
 
   // SECTION 5: Guarantee page loader terminates
@@ -81,6 +89,9 @@ const Properties = () => {
       gateCode,
       displayNotes,
       isDefault: Boolean(property.isDefault ?? property.is_default),
+      plan: property.plan ?? undefined,
+      program: property.program ?? undefined,
+      cadence: property.cadence ?? undefined,
     };
   }
 
@@ -100,46 +111,34 @@ const Properties = () => {
     setIsAddDialogOpen(true);
   };
 
-  const handleUpdateGateCode = async (prop: any) => {
+  const handleUpdateGateCode = (prop: any) => {
     if (prop.isMock) {
-      toast({
-        title: "Demo Property",
-        description: "Gate codes for system demo properties cannot be modified.",
-      });
+      toast({ title: "Demo Property", description: "Gate codes for demo properties cannot be modified." });
       return;
     }
+    setGateCodeEdit({ prop, code: prop.gateCode || "" });
+  };
 
-    const newCode = prompt("Enter new gate code:", prop.gateCode || "");
-    if (newCode === null) return;
-
+  const handleSaveGateCode = async () => {
+    if (!gateCodeEdit) return;
+    setSavingGateCode(true);
     try {
-      // Update the gate code within the combined notes field
+      const { prop, code } = gateCodeEdit;
       let newNotes = prop.notes || "";
       if (newNotes.includes("Gate:")) {
-        newNotes = newNotes.replace(/Gate:\s*([^|]*)/, `Gate: ${newCode}`);
+        newNotes = newNotes.replace(/Gate:\s*([^|]*)/, `Gate: ${code}`);
       } else {
-        // If not found, prepend it
-        newNotes = `Gate: ${newCode} | ${newNotes}`;
+        newNotes = `Gate: ${code} | ${newNotes}`;
       }
-
-      const { error } = await supabase
-        .from("properties")
-        .update({ notes: newNotes })
-        .eq("id", prop.id);
-
+      const { error } = await supabase.from("properties").update({ notes: newNotes }).eq("id", prop.id);
       if (error) throw error;
-
-      toast({
-        title: "Gate Code Updated",
-        description: `Access code for ${prop.address.split(",")[0]} has been updated.`,
-      });
+      toast({ title: "Gate Code Updated", description: `Access code for ${prop.address.split(",")[0]} updated.` });
+      setGateCodeEdit(null);
       void refetch();
     } catch (error: any) {
-      toast({
-        title: "Update Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+    } finally {
+      setSavingGateCode(false);
     }
   };
 
@@ -233,11 +232,21 @@ const Properties = () => {
                   <Home className="h-6 w-6" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <CardTitle className="text-xl font-bold font-display">{prop.address.split(",")[0]}</CardTitle>
                     {prop.isDefault && (
                       <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 text-[10px]">
                         Primary
+                      </Badge>
+                    )}
+                    {prop.plan && (
+                      <Badge variant="outline" className="bg-green-500/5 text-green-700 border-green-500/20 text-[10px]">
+                        {prop.plan}
+                      </Badge>
+                    )}
+                    {prop.cadence && (
+                      <Badge variant="outline" className="bg-muted/60 text-muted-foreground border-border/60 text-[10px]">
+                        Every {prop.cadence}d
                       </Badge>
                     )}
                   </div>
@@ -314,12 +323,6 @@ const Properties = () => {
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-8 text-center">
-        <p className="text-sm text-muted-foreground italic">
-          Need to add a commercial location or HOA common area? <Button variant="link" className="p-0 h-auto text-primary" onClick={handleAddProperty}>Click here</Button>
-        </p>
-      </div>
-
       {/* Add/Edit Property Dialog */}
       <AddPropertyDialog
         open={isAddDialogOpen}
@@ -330,6 +333,44 @@ const Properties = () => {
         onSuccess={handleOnSuccess}
         property={editingProperty}
       />
+
+      {/* Gate Code Dialog */}
+      <Dialog open={!!gateCodeEdit} onOpenChange={(open) => { if (!open) setGateCodeEdit(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5 text-primary" />
+              Update Gate Code
+            </DialogTitle>
+          </DialogHeader>
+          {gateCodeEdit && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                Access code for <span className="font-semibold text-foreground">{gateCodeEdit.prop.address.split(",")[0]}</span>
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="gate-code">Gate Code</Label>
+                <Input
+                  id="gate-code"
+                  value={gateCodeEdit.code}
+                  onChange={(e) => setGateCodeEdit((prev) => prev ? { ...prev, code: e.target.value } : null)}
+                  placeholder="e.g. 1234#"
+                  className="rounded-xl"
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveGateCode()}
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" className="rounded-xl" onClick={() => setGateCodeEdit(null)}>
+              Cancel
+            </Button>
+            <Button className="rounded-xl" onClick={handleSaveGateCode} disabled={savingGateCode}>
+              {savingGateCode ? "Saving…" : "Save Code"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

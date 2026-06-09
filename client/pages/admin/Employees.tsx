@@ -44,10 +44,15 @@ interface EmployeeRow {
   name: string;
   email: string;
   role: "technician" | "dispatcher" | "admin";
+  worker_type: "employee" | "contractor" | "vendor" | "test";
+  is_test: boolean;
   phone: string | null;
   vehicle: string | null;
   default_nav: "google" | "apple";
   status: "active" | "inactive";
+  gps_consent_at: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
   created_at: string;
 }
 
@@ -66,8 +71,11 @@ const Employees = () => {
   const [showInvite, setShowInvite] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [invite, setInvite] = useState({
-    name: "", email: "", role: "technician", phone: "", vehicle: "", default_nav: "google",
+    firstName: "", lastName: "", email: "", role: "technician", phone: "", vehicle: "", default_nav: "google",
+    worker_type: "employee", is_test: false, generate_temp_password: false,
   });
+  const [tempPasswordDisplay, setTempPasswordDisplay] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
   // Edit dialog state
   const [editTarget, setEditTarget] = useState<EmployeeRow | null>(null);
@@ -95,24 +103,31 @@ const Employees = () => {
   // ── Invite ────────────────────────────────────────────────────────────────
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!invite.name.trim() || !invite.email.trim()) {
-      toast({ title: "Name and email are required.", variant: "destructive" });
+    if (!invite.firstName.trim() || !invite.lastName.trim() || !invite.email.trim()) {
+      toast({ title: "First name, last name, and email are required.", variant: "destructive" });
       return;
     }
 
     setIsInviting(true);
     try {
       const data = await adminApi("/api/admin/employees/invite", "POST", {
-        name: invite.name.trim(),
+        name: `${invite.firstName.trim()} ${invite.lastName.trim()}`,
         email: invite.email.trim(),
         role: invite.role,
         phone: invite.phone.trim() || null,
         vehicle: invite.vehicle.trim() || null,
         default_nav: invite.default_nav,
+        worker_type: invite.worker_type,
+        is_test: invite.is_test,
+        generate_temp_password: invite.generate_temp_password,
       });
-      toast({ title: "Invitation sent!", description: data.message });
+      if (data.temp_password) {
+        setTempPasswordDisplay(data.temp_password);
+      } else {
+        toast({ title: invite.is_test ? "Test employee created!" : "Invitation sent!", description: data.message });
+      }
       setShowInvite(false);
-      setInvite({ name: "", email: "", role: "technician", phone: "", vehicle: "", default_nav: "google" });
+      setInvite({ firstName: "", lastName: "", email: "", role: "technician", phone: "", vehicle: "", default_nav: "google", worker_type: "employee", is_test: false, generate_temp_password: false });
       fetchEmployees();
     } catch (err: any) {
       toast({ title: "Invite failed", description: err.message, variant: "destructive" });
@@ -169,6 +184,22 @@ const Employees = () => {
       );
     } catch (err: any) {
       toast({ title: "Status update failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  // ── Hard delete (test employees only) ────────────────────────────────────
+  const handleDeleteTestEmployee = async (emp: EmployeeRow) => {
+    if (!emp.is_test) return;
+    if (!window.confirm(`Permanently delete test employee "${emp.name}"? This cannot be undone.`)) return;
+    setIsDeletingId(emp.id);
+    try {
+      await adminApi(`/api/admin/employees/${emp.id}`, "DELETE");
+      toast({ title: "Test employee deleted." });
+      fetchEmployees();
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsDeletingId(null);
     }
   };
 
@@ -244,7 +275,14 @@ const Employees = () => {
             <TableBody>
               {employees.map((emp) => (
                 <TableRow key={emp.id}>
-                  <TableCell className="font-semibold">{emp.name}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{emp.name}</span>
+                      {emp.is_test && (
+                        <Badge className="text-[10px] bg-amber-100 text-amber-700 border-amber-300 border rounded px-1.5 py-0">TEST</Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <a href={`mailto:${emp.email}`} className="text-primary hover:underline flex items-center gap-1.5">
                       <Mail className="h-3.5 w-3.5 shrink-0" />
@@ -252,9 +290,16 @@ const Employees = () => {
                     </a>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {ROLE_LABELS[emp.role] ?? emp.role}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="capitalize w-fit">
+                        {ROLE_LABELS[emp.role] ?? emp.role}
+                      </Badge>
+                      {emp.worker_type && emp.worker_type !== "employee" && (
+                        <Badge variant="outline" className="capitalize w-fit text-[10px] text-muted-foreground">
+                          {emp.worker_type}
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {emp.phone ? (
@@ -311,6 +356,22 @@ const Employees = () => {
                           <><Power className="h-3.5 w-3.5 mr-1.5" />Activate</>
                         )}
                       </Button>
+                      {emp.is_test && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-lg h-8 text-destructive hover:bg-destructive/10 border-destructive/30"
+                          disabled={isDeletingId === emp.id}
+                          onClick={() => handleDeleteTestEmployee(emp)}
+                        >
+                          {isDeletingId === emp.id ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <PowerOff className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          Delete
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -340,28 +401,40 @@ const Employees = () => {
           <form onSubmit={handleInvite} className="space-y-4 mt-2">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="inv-name">Full Name *</Label>
+                <Label htmlFor="inv-firstname">First Name *</Label>
                 <Input
-                  id="inv-name"
-                  value={invite.name}
-                  onChange={(e) => setInvite((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Luis Martinez"
+                  id="inv-firstname"
+                  value={invite.firstName}
+                  onChange={(e) => setInvite((p) => ({ ...p, firstName: e.target.value }))}
+                  placeholder="Luis"
                   className="rounded-xl"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="inv-email">Email Address *</Label>
+                <Label htmlFor="inv-lastname">Last Name *</Label>
                 <Input
-                  id="inv-email"
-                  type="email"
-                  value={invite.email}
-                  onChange={(e) => setInvite((p) => ({ ...p, email: e.target.value }))}
-                  placeholder="luis@example.com"
+                  id="inv-lastname"
+                  value={invite.lastName}
+                  onChange={(e) => setInvite((p) => ({ ...p, lastName: e.target.value }))}
+                  placeholder="Martinez"
                   className="rounded-xl"
                   required
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="inv-email">Email Address *</Label>
+              <Input
+                id="inv-email"
+                type="email"
+                value={invite.email}
+                onChange={(e) => setInvite((p) => ({ ...p, email: e.target.value }))}
+                placeholder="luis@example.com"
+                className="rounded-xl"
+                required
+              />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -415,19 +488,83 @@ const Employees = () => {
               </div>
             </div>
 
+            {/* Worker type + test options */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Worker Type</Label>
+                <Select value={invite.worker_type} onValueChange={(v) => setInvite((p) => ({ ...p, worker_type: v, is_test: v === "test" ? true : p.is_test }))}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="employee">Employee (W2)</SelectItem>
+                    <SelectItem value="contractor">Contractor (1099)</SelectItem>
+                    <SelectItem value="vendor">Vendor / Partner</SelectItem>
+                    <SelectItem value="test">Test Account</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 flex flex-col justify-end">
+                <label className="inline-flex items-center gap-2 cursor-pointer text-sm pb-1">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded"
+                    checked={invite.is_test}
+                    onChange={(e) => setInvite((p) => ({ ...p, is_test: e.target.checked }))}
+                  />
+                  Mark as test account
+                </label>
+                {invite.is_test && (
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded"
+                      checked={invite.generate_temp_password}
+                      onChange={(e) => setInvite((p) => ({ ...p, generate_temp_password: e.target.checked }))}
+                    />
+                    Generate temp password (no email sent)
+                  </label>
+                )}
+              </div>
+            </div>
+
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" className="rounded-xl" onClick={() => setShowInvite(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isInviting} className="rounded-xl shadow-brand">
                 {isInviting ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Sending…</>
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating…</>
                 ) : (
-                  <><Mail className="h-4 w-4 mr-2" />Send Invite</>
+                  <><Mail className="h-4 w-4 mr-2" />{invite.generate_temp_password ? "Create Test Account" : "Send Invite"}</>
                 )}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Temp Password Display Dialog ─────────────────────────────────── */}
+      <Dialog open={!!tempPasswordDisplay} onOpenChange={() => setTempPasswordDisplay(null)}>
+        <DialogContent className="rounded-[28px] sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Test Employee Created</DialogTitle>
+            <DialogDescription>
+              Save this temporary password now — it will not be shown again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+            <p className="text-xs text-amber-700 mb-2 font-semibold uppercase tracking-wide">Temporary Password</p>
+            <p className="font-mono text-xl font-bold text-amber-900 tracking-widest">{tempPasswordDisplay}</p>
+          </div>
+          <p className="text-xs text-muted-foreground text-center">
+            Share this securely. The employee uses it to log in at /employee/login.
+          </p>
+          <DialogFooter>
+            <Button className="rounded-xl w-full" onClick={() => { setTempPasswordDisplay(null); fetchEmployees(); }}>
+              I've saved this password
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

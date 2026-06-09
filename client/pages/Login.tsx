@@ -7,6 +7,8 @@ import AuthTabs from "@/components/auth/AuthTabs";
 import { ChevronLeft, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchUserRoleForRedirect } from "@/lib/postLoginRoleCheck";
+import { loadPendingOnboarding, hasPendingOnboarding } from "@/lib/pendingOnboarding";
+import { DevQuickLogin } from "@/components/dev/DevQuickLogin";
 
 type LocationState = {
   from?: string;
@@ -19,14 +21,54 @@ const Login = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const { from, mode, preset } = (location.state as LocationState) ?? {};
+  const { from, mode, preset: locationPreset } = (location.state as LocationState) ?? {};
+
+  // Merge location.state preset with any pending onboarding from sessionStorage.
+  const pending = loadPendingOnboarding();
+  const preset = locationPreset ?? (pending
+    ? {
+        serviceAddress: pending.address,
+        city:           pending.city,
+        state:          pending.state,
+        zipCode:        pending.zip,
+        cadenceDays:    pending.cadenceDays,
+        program:        pending.program,
+      }
+    : undefined);
+
   const [roleResolved, setRoleResolved] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated && user && !roleResolved) {
-      fetchUserRoleForRedirect(user.id).then((role) => {
+      fetchUserRoleForRedirect(user.id).then(({ role, isOnboarded }) => {
         setRoleResolved(true);
-        const target = from ?? (role === "admin" ? "/admin" : "/dashboard");
+
+        // Admin/support always go to their own panel
+        if (role === "admin" || role === "support") {
+          navigate(role === "admin" ? "/admin" : "/dashboard", { replace: true });
+          return;
+        }
+
+        // Employees always go to the employee portal
+        if (role === "employee") {
+          navigate("/employee", { replace: true });
+          return;
+        }
+
+        // Path A: quote data is waiting — send customer to onboarding with preset
+        if (hasPendingOnboarding()) {
+          navigate("/onboarding", { replace: true });
+          return;
+        }
+
+        // Path B: direct signup, first time — send customer to onboarding (blank)
+        if (!isOnboarded) {
+          navigate("/onboarding", { replace: true });
+          return;
+        }
+
+        // Returning authenticated customer — respect the original `from` target or go to dashboard
+        const target = from ?? "/dashboard";
         if (target === "/schedule" && preset) {
           navigate(target, { state: { preset }, replace: true });
         } else {
@@ -59,13 +101,11 @@ const Login = () => {
         canonicalUrl="https://nomoremosquitoes.us/login"
       />
 
-      {/* Subtle depth layers */}
       <div className="absolute inset-0 -z-10 bg-mesh-overlay opacity-20" aria-hidden="true" />
       <div className="absolute left-1/2 top-1/3 -z-10 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/4 blur-[140px]" aria-hidden="true" />
 
       <div className="container relative flex min-h-[calc(100dvh-80px)] flex-col items-center justify-center px-4 py-10 sm:py-12">
 
-        {/* Back to site — accessible, not intrusive */}
         <div className="absolute left-4 top-6 sm:left-6 sm:top-8">
           <Link
             to="/"
@@ -79,7 +119,6 @@ const Login = () => {
 
         <div className="w-full max-w-[420px] space-y-6">
 
-          {/* Page heading */}
           <div className="text-center space-y-1.5">
             <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-primary/10 text-primary mb-2" aria-hidden="true">
               <ShieldCheck className="h-6 w-6" />
@@ -92,7 +131,6 @@ const Login = () => {
             </p>
           </div>
 
-          {/* Auth card — unified login + signup */}
           <Card className="border-border/60 bg-card/90 shadow-2xl backdrop-blur-sm rounded-[20px] sm:rounded-[24px]">
             <CardContent className="px-6 pt-6 pb-6 sm:px-8 sm:pt-7 sm:pb-7">
               <AuthTabs
@@ -103,7 +141,6 @@ const Login = () => {
             </CardContent>
           </Card>
 
-          {/* Footer links */}
           <div className="text-center text-xs text-muted-foreground space-y-1.5">
             <p>
               Need help?{" "}
@@ -115,6 +152,8 @@ const Login = () => {
               </Link>
             </p>
           </div>
+
+          <DevQuickLogin />
         </div>
       </div>
     </div>

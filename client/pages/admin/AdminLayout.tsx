@@ -5,7 +5,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import {
   LayoutDashboard, Users, Home, Calendar, Truck, MessageSquare,
   Ticket, Map, Navigation, CreditCard, BarChart3, FileText,
-  Settings, ShieldCheck, Zap, Globe, Tag, Layers, UserCog, ChevronRight,
+  Settings, ShieldCheck, Zap, Globe, Tag, Layers, UserCog, ChevronRight, Bell, Scale, CalendarDays,
 } from "lucide-react";
 
 type NavItem = { label: string; to: string; icon: React.ElementType };
@@ -35,7 +35,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Workforce",
     items: [
       { label: "Employees", to: "/admin/employees", icon: UserCog },
+      { label: "Workforce", to: "/admin/workforce", icon: CalendarDays },
       { label: "Live Tracking", to: "/admin/employee-tracking", icon: Map },
+      { label: "Legal & Compliance", to: "/admin/legal-compliance", icon: Scale },
     ],
   },
   {
@@ -44,6 +46,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Messages", to: "/admin/messages", icon: MessageSquare },
       { label: "Tickets", to: "/admin/tickets", icon: Ticket },
+      { label: "Email Management", to: "/admin/email-management", icon: MessageSquare },
     ],
   },
   {
@@ -69,6 +72,16 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Analytics",
     items: [
       { label: "Reports", to: "/admin/reports", icon: BarChart3 },
+    ],
+  },
+  {
+    key: "system",
+    label: "System",
+    items: [
+      { label: "Alerts", to: "/admin/alerts", icon: Bell },
+      { label: "Notifications Log", to: "/admin/notifications", icon: Bell },
+      { label: "Business Hours", to: "/admin/business-hours", icon: Settings },
+      { label: "Debug", to: "/admin/debug", icon: ShieldCheck },
     ],
   },
 ];

@@ -3,7 +3,7 @@ import SectionHeading from "@/components/common/SectionHeading";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/pricing";
-import { withTimeout } from "@/lib/supabase";
+import { adminApi } from "@/lib/adminApi";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,14 +27,14 @@ const Revenue = () => {
   const [invoices, setInvoices] = useState<Array<any>>([]);
 
   useEffect(() => {
-    withTimeout(fetch("/api/admin/stripe/status"), 10000, "Stripe status")
-      .then(async (r) => setStatus(await r.json()))
+    adminApi("/api/admin/stripe/status")
+      .then((data) => setStatus(data))
       .catch(() => setStatus({ enabled: false }));
-    withTimeout(fetch("/api/admin/stripe/revenue?days=30"), 10000, "Revenue series")
-      .then(async (r) => setSeries(((await r.json()).series || []) as any))
+    adminApi("/api/admin/stripe/revenue?days=30")
+      .then((data) => setSeries((data.series || []) as any))
       .catch(() => setSeries([]));
-    withTimeout(fetch("/api/admin/stripe/invoices?limit=20"), 10000, "Stripe invoices")
-      .then(async (r) => setInvoices(((await r.json()).invoices || []) as any))
+    adminApi("/api/admin/stripe/invoices?limit=20")
+      .then((data) => setInvoices((data.invoices || []) as any))
       .catch(() => setInvoices([]));
   }, []);
 

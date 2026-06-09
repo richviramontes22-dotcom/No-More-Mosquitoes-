@@ -14,11 +14,6 @@ import { Key, Shield, CreditCard, Mail, MessageSquare, Map, Activity, Globe, Zap
 export type TeamRole = "admin" | "support";
 export type TeamMember = { id: string; name: string; email: string; role: TeamRole };
 
-const seedTeam: TeamMember[] = [
-  { id: "u_1", name: "Elijah Noble", email: "owner@example.com", role: "admin" },
-  { id: "u_2", name: "Ana Ramirez", email: "support@example.com", role: "support" },
-];
-
 const Settings = () => {
   const { toast } = useToast();
   const { settings: persistedSettings, loading, saving, saveSettings } = useAdminSettings();
@@ -27,8 +22,8 @@ const Settings = () => {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<TeamRole>("support");
 
-  // Local state for the settings being edited
-  const [team, setTeam] = useState<TeamMember[]>(seedTeam.slice());
+  // Start with an empty team — populated from persisted settings when loaded
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [flags, setFlags] = useState({
     autoAssignTickets: true,
     requireCompletionVideo: true,
@@ -56,7 +51,7 @@ const Settings = () => {
   // Load persisted settings when they become available
   useEffect(() => {
     if (persistedSettings && !loading) {
-      setTeam(persistedSettings.team || seedTeam.slice());
+      setTeam(persistedSettings.team || []);
       setFlags(persistedSettings.flags || {
         autoAssignTickets: true,
         requireCompletionVideo: true,

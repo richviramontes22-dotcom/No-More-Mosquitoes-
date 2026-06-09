@@ -7,8 +7,8 @@ import { testimonials, services, benefits } from "@/data/site";
 export const CONTENT_DEFAULTS: Record<string, string> = {
   hero_title:          "Enjoy the comfort of your yard all season",
   hero_subtitle:       "Premium mosquito and insect control for those who expect more from their outdoor space. Precision treatments, proven results, and a 100% satisfaction guarantee.",
-  hero_cta_text:       "Schedule Service",
-  hero_cta_secondary:  "Check Pricing by Address",
+  hero_cta_text:       "Get My Free Quote",
+  hero_cta_secondary:  "See Pricing",
   services_intro:      "Premium protection that is family- and pet-safe — California-approved, non-toxic insecticides that eliminate mosquitoes while keeping your home protected.",
   about_tagline:       "A California Employee/Community Based Company",
   about_mission:       "At No More Mosquitoes, we provide premium insecticide application services designed for those who expect the highest standard of outdoor comfort. Our mission is to eliminate mosquitoes and other insects that overrun communal areas. Through advanced treatments, precision application, safe & effective insecticides, and exceptional care we guarantee 100% satisfaction in all our treatments. As we commit to protecting the health and comfort of our community, you will undoubtedly trust and enjoy your mosquito-free environment.",

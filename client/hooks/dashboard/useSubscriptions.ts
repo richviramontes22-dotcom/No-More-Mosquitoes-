@@ -56,6 +56,9 @@ const fetchSubscriptions = async (userId: string): Promise<SubscriptionProperty[
           created_at
         `)
         .eq("user_id", userId)
+        // Exclude subscriptions that were created speculatively before payment
+        // was confirmed — these don't represent a paying customer relationship.
+        .not("status", "in", '("incomplete","incomplete_expired")')
         .order("created_at", { ascending: false }),
     "Subscriptions"
   );

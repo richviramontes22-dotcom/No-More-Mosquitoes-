@@ -26,7 +26,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
 interface KPI {
@@ -135,11 +134,11 @@ const Overview = () => {
           paymentsResult,
           messagesResult
         ] = await withTimeout(Promise.all([
-          // 1. Load active customers count
+          // 1. Active customers = users with an active subscription (works in both test and live mode)
           supabase
-            .from("profiles")
+            .from("subscriptions")
             .select("id", { count: "exact", head: true })
-            .eq("role", "customer"),
+            .eq("status", "active"),
 
           // 2. Load appointments for today
           (async () => {
@@ -151,22 +150,27 @@ const Overview = () => {
               .lt("scheduled_at", `${today}T23:59:59`);
           })(),
 
-          // 3. Load upcoming appointments with details
-          supabase
-            .from("appointments")
-            .select(`
-              id,
-              user_id,
-              property_id,
-              scheduled_at,
-              status,
-              profiles:user_id (id, name, email),
-              properties:property_id (id, address, city)
-            `)
-            .eq("status", "scheduled")
-            .gte("scheduled_at", new Date().toISOString())
-            .order("scheduled_at", { ascending: true })
-            .limit(5),
+          // 3. Load upcoming appointments with separate profile/property enrichment
+          // (PostgREST relationship join omitted — appointments.user_id FK points to auth.users not profiles)
+          (async () => {
+            const { data: appts, error } = await supabase
+              .from("appointments")
+              .select("id, user_id, property_id, scheduled_at, status")
+              .eq("status", "scheduled")
+              .gte("scheduled_at", new Date().toISOString())
+              .order("scheduled_at", { ascending: true })
+              .limit(5);
+            if (error || !appts) return { data: null };
+            const userIds = [...new Set(appts.map((a: any) => a.user_id).filter(Boolean))];
+            const propIds = [...new Set(appts.map((a: any) => a.property_id).filter(Boolean))];
+            const [profileRes, propRes] = await Promise.all([
+              userIds.length ? supabase.from("profiles").select("id, name, email").in("id", userIds) : { data: [] },
+              propIds.length ? supabase.from("properties").select("id, address, city").in("id", propIds) : { data: [] },
+            ]);
+            const profileMap = Object.fromEntries((profileRes.data || []).map((p: any) => [p.id, p]));
+            const propMap = Object.fromEntries((propRes.data || []).map((p: any) => [p.id, p]));
+            return { data: appts.map((a: any) => ({ ...a, profiles: profileMap[a.user_id] || null, properties: propMap[a.property_id] || null })) };
+          })(),
 
           // 4. Load support tickets
           supabase
@@ -195,15 +199,16 @@ const Overview = () => {
               .gte("created_at", monthStart.toISOString());
           })(),
 
-          // 7. Load unread messages count
+          // 7. Recent message threads (last 7 days) — no is_read column exists, so we surface
+          // active conversations as a proxy for "needs attention".
           supabase
-            .from("messages")
+            .from("message_threads")
             .select("id", { count: "exact", head: true })
-            .eq("is_read", false)
+            .gte("last_activity_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         ]), 10000, "Admin overview");
 
         // Extract data with fallbacks
-        const activeCustomers = profilesResult?.data?.length || 0;
+        const activeCustomers = (profilesResult as any)?.count ?? 0;
         const appointmentsToday = todayApptsResult?.data?.length || 0;
 
         const upcomingAppts = upcomingApptsResult?.data?.map((apt: any) => ({
@@ -217,21 +222,13 @@ const Overview = () => {
 
         setUpcomingAppointments(upcomingAppts);
 
-        // Fallback dummy tickets if load fails
-        const dummyTickets = [
-          { id: "t1", subject: "Water pressure issue", priority: "high", status: "open", createdAt: new Date().toISOString() },
-          { id: "t2", subject: "Billing inquiry", priority: "medium", status: "in_progress", createdAt: new Date(Date.now() - 86400000).toISOString() },
-        ];
-
-        const tickets = ticketsResult?.data && ticketsResult.data.length > 0
-          ? (ticketsResult.data as any[]).map((ticket) => ({
-              id: ticket.id,
-              subject: ticket.subject,
-              priority: ticket.priority || "medium",
-              status: ticket.status || "open",
-              createdAt: ticket.created_at,
-            }))
-          : dummyTickets;
+        const tickets = (ticketsResult?.data ?? []).map((ticket: any) => ({
+          id: ticket.id,
+          subject: ticket.subject,
+          priority: ticket.priority || "medium",
+          status: ticket.status || "open",
+          createdAt: ticket.created_at,
+        }));
         setRecentTickets(tickets.slice(0, 5));
 
         const customers = newProfilesResult?.data?.map((p: any) => ({
@@ -246,8 +243,8 @@ const Overview = () => {
         setNewCustomers(customers);
 
         const mtdRevenue = (paymentsResult?.data || []).reduce((sum: number, p: any) => sum + (p.amount_cents || 0), 0) / 100;
-        const openTickets = tickets?.filter((t: any) => t.status === "open").length || 2;
-        const unreadCount = messagesResult?.data?.length || 0;
+        const openTickets = tickets.filter((t: any) => t.status === "open").length;
+        const unreadCount = (messagesResult as any)?.count ?? 0;
 
         // ── Real trend calculations: compare current 30d vs previous 30d ────────
         const now = new Date();
@@ -261,18 +258,20 @@ const Overview = () => {
           return pct > 0 ? `+${pct}%` : `${pct}%`;
         };
 
-        const [prevRevenueRes, prevCustomersRes, currNewCustomersRes] = await Promise.all([
+        const [prevRevenueRes, prevNewSubsRes, currNewSubsRes] = await Promise.all([
           supabase.from("payments").select("amount_cents")
             .gte("created_at", prev30Start).lt("created_at", curr30Start),
-          supabase.from("profiles").select("id", { count: "exact", head: true })
-            .eq("role", "customer").gte("created_at", prev30Start).lt("created_at", curr30Start),
-          supabase.from("profiles").select("id", { count: "exact", head: true })
-            .eq("role", "customer").gte("created_at", curr30Start),
+          // New active subscriptions in prior 30d window
+          supabase.from("subscriptions").select("id", { count: "exact", head: true })
+            .eq("status", "active").gte("created_at", prev30Start).lt("created_at", curr30Start),
+          // New active subscriptions in current 30d window
+          supabase.from("subscriptions").select("id", { count: "exact", head: true })
+            .eq("status", "active").gte("created_at", curr30Start),
         ]).catch(() => [null, null, null]);
 
         const prevRevenue = (prevRevenueRes?.data || []).reduce((s: number, p: any) => s + (p.amount_cents || 0), 0) / 100;
-        const prevNewCustomers = prevCustomersRes?.count ?? 0;
-        const currNewCustomers = currNewCustomersRes?.count ?? 0;
+        const prevNewCustomers = (prevNewSubsRes as any)?.count ?? 0;
+        const currNewCustomers = (currNewSubsRes as any)?.count ?? 0;
 
         const revenueTrend = calcTrend(mtdRevenue, prevRevenue);
         const customerTrend = calcTrend(currNewCustomers, prevNewCustomers);

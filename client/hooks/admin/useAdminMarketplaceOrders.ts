@@ -27,23 +27,11 @@ export const useAdminMarketplaceOrders = () => {
       try {
         setIsLoading(true);
 
-        // Query marketplace orders with profile joins
+        // Query marketplace orders without PostgREST relationship join (auth.users FK ≠ profiles FK)
         const { data: orderData, error } = await withTimeout(
           supabase
             .from("marketplace_orders")
-            .select(`
-              id,
-              user_id,
-              appointment_id,
-              stripe_session_id,
-              total_cents,
-              currency,
-              status,
-              fulfillment_status,
-              confirmation_id,
-              created_at,
-              profiles:user_id (id, name, email)
-            `)
+            .select("id, user_id, appointment_id, stripe_session_id, total_cents, currency, status, fulfillment_status, confirmation_id, created_at")
             .order("created_at", { ascending: false })
             .limit(50),
           10000,
@@ -64,6 +52,17 @@ export const useAdminMarketplaceOrders = () => {
           return;
         }
 
+        // Batch-fetch profiles for all distinct user_ids
+        const userIds = [...new Set((orderData as any[]).map((o: any) => o.user_id).filter(Boolean))];
+        const profileMap: Record<string, { name: string; email: string }> = {};
+        if (userIds.length > 0) {
+          const { data: profileRows } = await supabase
+            .from("profiles")
+            .select("id, name, email")
+            .in("id", userIds);
+          (profileRows || []).forEach((pr: any) => { profileMap[pr.id] = pr; });
+        }
+
         // Get item counts for each order
         const ordersWithCounts = await Promise.all(
           (orderData as any[]).map(async (order) => {
@@ -71,7 +70,7 @@ export const useAdminMarketplaceOrders = () => {
               .from("marketplace_order_items")
               .select("*", { count: "exact", head: true })
               .eq("order_id", order.id);
-
+            const prof = profileMap[order.user_id];
             return {
               id: order.id,
               user_id: order.user_id,
@@ -83,8 +82,8 @@ export const useAdminMarketplaceOrders = () => {
               fulfillment_status: order.fulfillment_status || "pending",
               confirmation_id: order.confirmation_id,
               created_at: order.created_at,
-              customer_name: order.profiles?.name || "Unknown",
-              customer_email: order.profiles?.email || "No email",
+              customer_name: prof?.name || "Unknown",
+              customer_email: prof?.email || "No email",
               item_count: count || 0,
             };
           })
