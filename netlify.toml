@@ -1,6 +1,6 @@
 [build]
-  command = "npm run build:client"
-  functions = "netlify/functions"
+  command = "npm run build:client && npm run bundle:functions"
+  functions = "dist/netlify-functions"
   publish = "dist/spa"
 
 

@@ -19,7 +19,8 @@
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc",
-    "seed:dev": "npx tsx scripts/seed-dev.ts"
+    "seed:dev": "npx tsx scripts/seed-dev.ts",
+    "bundle:functions": "node scripts/bundle-netlify-functions.mjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^5.6.1",
@@ -83,6 +84,7 @@
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+    "esbuild": "^0.25.8",
     "framer-motion": "^12.23.12",
     "globals": "^16.3.0",
     "input-otp": "^1.4.2",
