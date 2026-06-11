@@ -5,7 +5,6 @@
 
 
 [functions]
-  external_node_modules = ["express"]
   node_bundler = "esbuild"
 
 # Scheduled function: send appointment reminders daily at 7:00 AM UTC
