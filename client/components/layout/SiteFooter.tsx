@@ -187,13 +187,13 @@ export const SiteFooter = () => {
         </p>
 
         {/* Compliance Section */}
-        <div className="flex flex-col items-center gap-10 border-t border-border/40 pt-10">
+        <div className="flex flex-col items-center gap-6 border-t border-border/40 pt-10">
           <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground/50">
             Licensed &amp; Regulated
           </p>
 
-          {/* Row 1 — circular seals, large */}
-          <div className="flex flex-wrap items-center justify-center gap-12 sm:gap-20">
+          {/* Seals + banners — single responsive row, wraps on small screens */}
+          <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-12">
             <a
               href="https://www.anaheim.net/830/Business-License"
               target="_blank"
@@ -204,7 +204,7 @@ export const SiteFooter = () => {
               <img
                 src={img_anaheim_seal.src}
                 alt={img_anaheim_seal.alt}
-                className="h-48 w-48 sm:h-64 sm:w-64 rounded-full object-cover shadow-md ring-2 ring-border/30 group-hover:ring-primary/30 transition-all"
+                className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover shadow-md ring-2 ring-border/30 group-hover:ring-primary/30 transition-all"
               />
             </a>
 
@@ -218,14 +218,11 @@ export const SiteFooter = () => {
               <img
                 src="/ca-state-seal.jpg"
                 alt="State of California Seal"
-                className="h-48 w-48 sm:h-64 sm:w-64 rounded-full object-cover shadow-md ring-2 ring-border/30 group-hover:ring-primary/30 transition-all"
+                className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover shadow-md ring-2 ring-border/30 group-hover:ring-primary/30 transition-all"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
               />
             </a>
-          </div>
 
-          {/* Row 2 — horizontal banner logos */}
-          <div className="flex flex-wrap items-center justify-center gap-10 sm:gap-16">
             <a
               href="https://www.cdpr.ca.gov/wp-content/uploads/2024/08/what_we_do_at_dpr.pdf"
               target="_blank"
@@ -236,7 +233,7 @@ export const SiteFooter = () => {
               <img
                 src={img_dpr_logo_state_of_ca_dpr.src}
                 alt={img_dpr_logo_state_of_ca_dpr.alt}
-                className="h-24 sm:h-32 w-auto"
+                className="h-14 sm:h-16 w-auto"
               />
             </a>
 
@@ -250,7 +247,7 @@ export const SiteFooter = () => {
               <img
                 src={img_state_of_ca_bear_logo.src}
                 alt={img_state_of_ca_bear_logo.alt}
-                className="h-24 sm:h-32 w-auto"
+                className="h-14 sm:h-16 w-auto"
               />
             </a>
           </div>
@@ -263,9 +260,6 @@ export const SiteFooter = () => {
               Pest Control Business-Main License: 57621
             </p>
           </div>
-          <p className="flex flex-wrap gap-3">
-            <span>{t("footer.attributes")}</span>
-          </p>
         </div>
       </div>
     </footer>

@@ -18,6 +18,7 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 import { LogoProvider } from "@/contexts/LogoContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ScheduleDialogProvider } from "@/components/schedule/ScheduleDialogProvider";
+import { ScrollToTop } from "@/components/common/ScrollToTop";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Licenses from "./pages/Licenses";
@@ -121,6 +122,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ErrorBoundary context="app-root">
     <BrowserRouter>
+      <ScrollToTop />
       <AuthProvider>
         <Elements stripe={stripePromise}>
           <LanguageProvider>

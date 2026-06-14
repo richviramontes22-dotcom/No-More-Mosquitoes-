@@ -250,9 +250,9 @@ export const translations = {
     story: {
       title: "Our Story",
       subtitle: "A California Employee/Community Based Company",
-      content: `At No More Mosquitoes, we provide premium insecticide application services designed for those who expect the highest standard of outdoor comfort. Our mission is to eliminate mosquitoes and other insects that overrun communal areas. Through advanced treatments, precision application, safe & effective insecticides, and exceptional care we guarantee 100% satisfaction in all our treatments. As we commit to protecting the health and comfort of our community, you will undoubtedly trust and enjoy your mosquito-free environment.
+      content: `At No More Mosquitoes, we provide premium insecticide application services designed for those who demand the highest standard of outdoor comfort. Our mission is to eliminate mosquitoes and other insects that overrun communal areas. Through advanced treatments, precision application, safe & effective insecticides, and exceptional care we guarantee 100% satisfaction in all our treatments. As we commit to protecting the health and comfort of our community, you will undoubtedly trust and enjoy your mosquito-free environment.
 
-No More Mosquitoes began back in 2016, in the comfort of Grandma's backyard — or so we thought. What started as a relaxing evening quickly turned into a battlefield. Within minutes of stepping outside, we were being eaten alive by mosquitoes. Laughter turned to slaps as we armed ourselves with sprays, lit candles, and tried every gadget we could find. Before long, our conversation turned into the never-ending goodbye from Grandma's home.
+No More Mosquitoes began back in 2016, in the comfort of Grandma's backyard — or so we thought. What started as a relaxing evening quickly turned into a battlefield. Within minutes of stepping outside, we were being eaten alive by mosquitoes. Laughter turned into slaps, we armed ourselves with sprays, lit candles, and tried every gadget we could find. Before long, our conversation turned into the never-ending goodbye from Grandma's home.
 
 Our time together was cut short, and those itchy bites were a reminder of a simple problem that deserved a better solution. We promised ourselves to find a safe and dependable way to protect our community from those relentless pests.
 
