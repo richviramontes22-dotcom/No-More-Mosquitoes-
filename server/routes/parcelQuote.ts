@@ -54,6 +54,12 @@ router.post("/quote", async (req: Request, res: Response) => {
 
   const quote = result.acreage != null ? buildPricingQuote(result.acreage) : null;
 
+  // Properties whose parcel acreage exceeds the priced range (e.g. a condo/HOA
+  // shared parcel, or any large lot) can't be quoted from raw GIS acreage —
+  // the frontend should ask the customer for their unit's/treatment area size
+  // instead of rendering subscription/annual tiles with no price.
+  const oversized = result.acreage != null && result.acreage > 2.0;
+
   // Persist coordinates to property if propertyId was provided and lat/lng are known.
   // The client passes lat/lng from Google Places autocomplete when available.
   // Non-fatal: a coordinate write failure never blocks the quote response.
@@ -71,6 +77,7 @@ router.post("/quote", async (req: Request, res: Response) => {
     acreageSource: result.acreageSource,
     confidence: result.confidence,
     quote,
+    oversized,
     cached: result.cached,
   });
 });

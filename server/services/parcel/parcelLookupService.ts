@@ -1,5 +1,5 @@
 import type { ParcelLookupResult, SupportedCounty, NormalizedAddressInput, ParcelErrorCode } from "./types";
-import { geocodeAddress } from "./googleAddressService";
+import { geocodeAddress, stripUnitSuffix } from "./googleAddressService";
 import { detectCountyFromZip } from "./countyDetector";
 import { logger } from "../../lib/logger";
 import { checkpoint, CP } from "../../lib/checkpoint";
@@ -102,19 +102,44 @@ async function runLookup(
   let lat = input.lat;
   let lng = input.lng;
   let normalizedAddress = normalizedForHash;
+  let resolvedPlaceId = input.placeId;
 
   if (lat == null || lng == null) {
-    const geo = await geocodeAddress(
+    let geo = await geocodeAddress(
       input.address,
       input.zip,
       input.city,
       input.state,
       5000,
     );
+    let strippedUnitSuffix = false;
+
+    // Free geocoders generally can't resolve unit/apt/suite-level US
+    // addresses and return zero results. Retry with that suffix stripped so
+    // the underlying building/parcel can still be located — the customer's
+    // full entered address is preserved separately for their record.
+    if (!geo) {
+      const { stripped, hadUnit } = stripUnitSuffix(input.address);
+      if (hadUnit) {
+        geo = await geocodeAddress(stripped, input.zip, input.city, input.state, 5000);
+        strippedUnitSuffix = !!geo;
+      }
+    }
+
     if (geo) {
       lat = geo.lat;
       lng = geo.lng;
       normalizedAddress = geo.normalizedAddress;
+      resolvedPlaceId = resolvedPlaceId ?? geo.placeId;
+      checkpoint(requestId, CP.PARCEL_GEOCODE_SUCCESS, {
+        source: geo.source,
+        strippedUnitSuffix,
+        locationType: geo.locationType,
+      });
+      logger.info("parcel.geocode.success", { requestId, source: geo.source, strippedUnitSuffix });
+    } else {
+      checkpoint(requestId, CP.PARCEL_GEOCODE_FAILED, { zip: input.zip });
+      logger.info("parcel.geocode.failed", { requestId, zip: input.zip });
     }
   }
 
@@ -162,7 +187,7 @@ async function runLookup(
   await saveParcelToCache({
     normalizedAddress,
     addressHash,
-    placeId: input.placeId ?? null,
+    placeId: resolvedPlaceId ?? null,
     county,
     lat: lat ?? null,
     lng: lng ?? null,

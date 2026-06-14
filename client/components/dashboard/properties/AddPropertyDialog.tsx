@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePropertyLookup } from "@/hooks/use-property-lookup";
 import { Loader2, MapPin, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { GoogleAddressAutocomplete, type GoogleAddressAutocompleteResult } from "@/components/common/GoogleAddressAutocomplete";
 
 interface AddPropertyDialogProps {
   open: boolean;
@@ -37,6 +38,13 @@ export const AddPropertyDialog = ({
   const [stateVal, setStateVal] = useState("CA");
   const [zip, setZip]           = useState("");
   const [acreage, setAcreage]   = useState("");
+
+  // Coordinates/place ID from Google Places Autocomplete — when present, the
+  // backend skips re-geocoding and goes straight to county parcel lookup.
+  const [lat, setLat] = useState<number | undefined>(undefined);
+  const [lng, setLng] = useState<number | undefined>(undefined);
+  const [placeId, setPlaceId] = useState<string | undefined>(undefined);
+
   const [gateCode, setGateCode] = useState("");
   const [hasPets, setHasPets]   = useState(false);
   const [petDetails, setPetDetails] = useState("");
@@ -47,6 +55,9 @@ export const AddPropertyDialog = ({
   // Pre-fill for edit mode
   useEffect(() => {
     if (!open) return;
+    setLat(undefined);
+    setLng(undefined);
+    setPlaceId(undefined);
     if (property) {
       const parts = (property.address || "").split(",");
       setAddress(parts[0]?.trim() || "");
@@ -67,12 +78,22 @@ export const AddPropertyDialog = ({
     }
   }, [property, open]);
 
+  const handlePlaceSelect = (place: GoogleAddressAutocompleteResult) => {
+    setAddress(place.streetAddress);
+    if (place.city) setCity(place.city);
+    if (place.state) setStateVal(place.state);
+    if (place.zip) setZip(place.zip);
+    setLat(place.lat);
+    setLng(place.lng);
+    setPlaceId(place.placeId);
+  };
+
   const handleLookup = async () => {
     if (!address || !zip) {
       toast({ title: "Missing details", description: "Enter street address and ZIP to auto-detect lot size.", variant: "destructive" });
       return;
     }
-    const result = await lookup(address, zip, city, stateVal);
+    const result = await lookup(address, zip, city, stateVal, lat, lng, placeId);
     if (result) {
       setAcreage(result.acreage.toString());
       setAcreageDetected(true);
@@ -154,11 +175,17 @@ export const AddPropertyDialog = ({
 
             <div className="space-y-1.5">
               <label className={labelCls}>Street Address</label>
-              <input
+              <GoogleAddressAutocomplete
                 value={address}
-                onChange={e => setAddress(e.target.value)}
+                onChange={value => {
+                  setAddress(value);
+                  setLat(undefined);
+                  setLng(undefined);
+                  setPlaceId(undefined);
+                }}
+                onPlaceSelect={handlePlaceSelect}
                 placeholder="123 Oak Street"
-                className={inputCls}
+                className={`${inputCls} h-auto`}
                 autoComplete="street-address"
               />
             </div>

@@ -46,6 +46,8 @@ export type NormalizedAddressInput = {
   placeId?: string;
 };
 
+export type GeocodeSource = "google" | "nominatim";
+
 export type GeocodeResult = {
   lat: number;
   lng: number;
@@ -54,6 +56,9 @@ export type GeocodeResult = {
   state?: string;
   zip?: string;
   county?: string;
+  placeId?: string;
+  locationType?: string;
+  source: GeocodeSource;
 };
 
 export type CountyParcelResult = {

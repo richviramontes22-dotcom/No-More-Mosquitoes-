@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePropertyLookup } from "@/hooks/use-property-lookup";
 import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
 import { Button } from "@/components/ui/button";
+import { GoogleAddressAutocomplete, type GoogleAddressAutocompleteResult } from "@/components/common/GoogleAddressAutocomplete";
 
 const convertSqftToAcres = (squareFeet: number) => {
   if (!Number.isFinite(squareFeet) || squareFeet <= 0) {
@@ -41,6 +42,12 @@ const AddressCheckerSection = () => {
   const [state, setState] = useState("");
   const [zip, setZip] = useState("");
   const [squareFeet, setSquareFeet] = useState("");
+
+  // Coordinates/place ID from Google Places Autocomplete — when present, the
+  // backend skips re-geocoding and goes straight to county parcel lookup.
+  const [lat, setLat] = useState<number | undefined>(undefined);
+  const [lng, setLng] = useState<number | undefined>(undefined);
+  const [placeId, setPlaceId] = useState<string | undefined>(undefined);
   const [result, setResult] = useState<ResultState>({ status: "idle" });
   const [checkingServiceArea, setCheckingServiceArea] = useState(false);
   const [waitlistEmail, setWaitlistEmail] = useState("");
@@ -102,7 +109,7 @@ const AddressCheckerSection = () => {
       setCheckingServiceArea(false);
     }
 
-    const data = await lookup(address, normalizedZip, city, state);
+    const data = await lookup(address, normalizedZip, city, state, lat, lng, placeId);
 
     if (data) {
       const fetchedAcreage = data.acreage;
@@ -131,6 +138,16 @@ const AddressCheckerSection = () => {
         }
       }
     }
+  };
+
+  const handlePlaceSelect = (place: GoogleAddressAutocompleteResult) => {
+    setAddress(place.streetAddress);
+    if (place.city) setCity(place.city);
+    if (place.state) setState(place.state);
+    if (place.zip) setZip(place.zip);
+    setLat(place.lat);
+    setLng(place.lng);
+    setPlaceId(place.placeId);
   };
 
   const handleReserve = () => {
@@ -190,12 +207,18 @@ const AddressCheckerSection = () => {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1fr_1fr]">
                   <label className="flex flex-col gap-2 text-sm font-semibold text-foreground">
                     {t("address.propertyAddress")}
-                    <input
+                    <GoogleAddressAutocomplete
                       value={address}
-                      onChange={(event) => setAddress(event.target.value)}
+                      onChange={(value) => {
+                        setAddress(value);
+                        setLat(undefined);
+                        setLng(undefined);
+                        setPlaceId(undefined);
+                      }}
+                      onPlaceSelect={handlePlaceSelect}
                       placeholder={t("address.addressPlaceholder")}
                       autoComplete="street-address"
-                      className="w-full rounded-2xl border border-border/70 bg-white px-4 py-3 text-sm font-normal text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/80"
+                      className="w-full rounded-2xl border border-border/70 bg-white px-4 py-3 text-sm font-normal text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/80 h-auto"
                       required
                     />
                   </label>

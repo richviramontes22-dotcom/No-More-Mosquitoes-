@@ -49,6 +49,8 @@ export const CP = {
 
   // Parcel lookup
   PARCEL_START:                     "parcel.lookup.start",
+  PARCEL_GEOCODE_SUCCESS:           "parcel.geocode.success",
+  PARCEL_GEOCODE_FAILED:            "parcel.geocode.failed",
   PARCEL_CACHE_CHECKED:             "parcel.cache.checked",
   PARCEL_CACHE_HIT:                 "parcel.cache.hit",
   PARCEL_CACHE_MISS:                "parcel.cache.miss",

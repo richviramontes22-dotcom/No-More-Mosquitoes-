@@ -144,4 +144,4 @@ DO $$ BEGIN
         EXISTS (SELECT 1 FROM public.employees WHERE id = technician_capacity_profiles.employee_id AND user_id = auth.uid())
       );
   END IF;
-END $$;
+  END $$;

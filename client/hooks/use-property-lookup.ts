@@ -25,6 +25,10 @@ export type ParcelQuoteResult = PropertyData & {
       annual: { cents: number | null };
     };
   };
+  // True when the resolved parcel's acreage exceeds the priced range (e.g. a
+  // condo/HOA shared parcel) — the caller should ask for a manual
+  // unit/treatment-area size instead of rendering the quote tiles directly.
+  oversized?: boolean;
 };
 
 export const usePropertyLookup = () => {
@@ -79,6 +83,7 @@ export const usePropertyLookup = () => {
         acreageSource: body.acreageSource,
         cached: body.cached,
         quote: body.quote,
+        oversized: body.oversized,
         // legacy compat
         address,
         city,

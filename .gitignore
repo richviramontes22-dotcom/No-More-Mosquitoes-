@@ -93,3 +93,6 @@ seed_admin_data.sql
 update_admin_schema.sql
 DASHBOARD_TABLES.sql
 DASHBOARD_TABLES_SIMPLE.sql
+
+# Local Netlify folder
+.netlify

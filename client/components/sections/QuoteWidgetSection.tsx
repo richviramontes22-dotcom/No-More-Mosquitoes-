@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePropertyLookup } from "@/hooks/use-property-lookup";
 import { useAuth } from "@/contexts/AuthContext";
 import { savePendingOnboarding } from "@/lib/pendingOnboarding";
+import { GoogleAddressAutocomplete, type GoogleAddressAutocompleteResult } from "@/components/common/GoogleAddressAutocomplete";
 
 type Program = "subscription" | "one_time" | "annual";
 
@@ -116,6 +117,12 @@ const QuoteWidgetSection = ({ id }: Props) => {
   const [zip, setZip]         = useState("");
   const [acreage, setAcreage] = useState<number | null>(null);
 
+  // Coordinates/place ID from Google Places Autocomplete — when present, the
+  // backend skips re-geocoding and goes straight to county parcel lookup.
+  const [lat, setLat] = useState<number | undefined>(undefined);
+  const [lng, setLng] = useState<number | undefined>(undefined);
+  const [placeId, setPlaceId] = useState<string | undefined>(undefined);
+
   // Lookup failure fallback
   const [lookupFailed, setLookupFailed] = useState(false);
   const [manualAcreage, setManualAcreage] = useState("");
@@ -139,6 +146,11 @@ const QuoteWidgetSection = ({ id }: Props) => {
   const [confidence, setConfidence] = useState<"high" | "medium" | "low" | null>(null);
   const [acreageSource, setAcreageSource] = useState<string | null>(null);
 
+  // True when the resolved parcel is larger than our priced range (e.g. a
+  // condo/HOA shared parcel) — shows a manual unit-size panel instead of
+  // pricing tiles until the customer picks/enters a treatment-area size.
+  const [oversized, setOversized] = useState(false);
+
   const handleSearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!address || !zip) {
@@ -146,12 +158,13 @@ const QuoteWidgetSection = ({ id }: Props) => {
       return;
     }
     setLookupFailed(false);
-    const data = await lookup(address, zip, city, stateVal);
+    const data = await lookup(address, zip, city, stateVal, lat, lng, placeId);
     if (data) {
       setAcreage(data.acreage);
       setCounty(data.county ?? null);
       setConfidence(data.confidence ?? null);
       setAcreageSource(data.acreageSource ?? null);
+      setOversized(!!data.oversized);
       setPhase("plans");
     } else if (error === "manual_required") {
       // Manual review required — show contact path rather than manual entry
@@ -159,6 +172,18 @@ const QuoteWidgetSection = ({ id }: Props) => {
     } else {
       setLookupFailed(true);
     }
+  };
+
+  const handlePlaceSelect = (result: GoogleAddressAutocompleteResult) => {
+    setAddress(result.streetAddress);
+    if (result.city) setCity(result.city);
+    if (result.state) setStateVal(result.state);
+    if (result.zip) setZip(result.zip);
+    setLat(result.lat);
+    setLng(result.lng);
+    setPlaceId(result.placeId);
+    setLookupFailed(false);
+    setOversized(false);
   };
 
   const handleManualProceed = () => {
@@ -169,6 +194,25 @@ const QuoteWidgetSection = ({ id }: Props) => {
     setConfidence("low");
     setManualAcreage(resolved.toString());
     setPhase("plans");
+  };
+
+  // Oversized/shared-parcel panel — customer picks (or enters) their unit's
+  // approximate treatment area so we can show real pricing tiles.
+  const handleOversizedPreset = (value: number) => {
+    setAcreage(value);
+    setAcreageSource("manual");
+    setConfidence("low");
+    setOversized(false);
+  };
+
+  const handleOversizedProceed = () => {
+    const val = parseFloat(manualAcreage);
+    const resolved = !isNaN(val) && val > 0 ? Math.min(val, 2) : 0.25;
+    setAcreage(resolved);
+    setAcreageSource("manual");
+    setConfidence("low");
+    setManualAcreage(resolved.toString());
+    setOversized(false);
   };
 
   const handleSchedule = () => {
@@ -225,11 +269,19 @@ const QuoteWidgetSection = ({ id }: Props) => {
             >
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Street Address</label>
-                <input
+                <GoogleAddressAutocomplete
                   value={address}
-                  onChange={e => { setAddress(e.target.value); setLookupFailed(false); }}
+                  onChange={value => {
+                    setAddress(value);
+                    setLookupFailed(false);
+                    setOversized(false);
+                    setLat(undefined);
+                    setLng(undefined);
+                    setPlaceId(undefined);
+                  }}
+                  onPlaceSelect={handlePlaceSelect}
                   placeholder="e.g. 123 Oak Street"
-                  className={inputCls}
+                  className={`${inputCls} h-auto`}
                   autoComplete="street-address"
                 />
               </div>
@@ -260,7 +312,7 @@ const QuoteWidgetSection = ({ id }: Props) => {
                   <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">ZIP</label>
                   <input
                     value={zip}
-                    onChange={e => { setZip(e.target.value.replace(/\D/g, "")); setLookupFailed(false); }}
+                    onChange={e => { setZip(e.target.value.replace(/\D/g, "")); setLookupFailed(false); setOversized(false); }}
                     placeholder="92801"
                     maxLength={5}
                     inputMode="numeric"
@@ -373,6 +425,8 @@ const QuoteWidgetSection = ({ id }: Props) => {
               )}
             </div>
 
+            {!oversized ? (
+              <>
             {/* Plan tiles */}
             <div className="space-y-4">
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground text-center">Choose your service plan</p>
@@ -526,6 +580,64 @@ const QuoteWidgetSection = ({ id }: Props) => {
                   : "We'll create your account and pre-fill your address — no re-entering details."}
               </p>
             </div>
+              </>
+            ) : (
+              /* Oversized/shared-parcel result — the matched property record is
+                 larger than our priced range (e.g. a condo/HOA shared parcel).
+                 Ask for the customer's unit/treatment-area size instead of
+                 rendering tiles with no price. */
+              <div className="rounded-[32px] border border-primary/20 bg-primary/5 p-6 sm:p-8 space-y-5 animate-in fade-in duration-300">
+                <div>
+                  <p className="text-sm font-bold text-foreground">This looks like a shared or multi-unit property</p>
+                  <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                    The property record we found covers {acreage} acres — likely a shared building, HOA common area, or larger parcel rather than a single unit's yard. Tell us roughly how much area we'll be treating and we'll show your exact price.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { value: 0.05, label: "Small", note: "~2,200 sq ft" },
+                    { value: 0.10, label: "Medium", note: "~4,400 sq ft" },
+                    { value: 0.25, label: "Large", note: "~10,900 sq ft" },
+                  ]).map(({ value, label, note }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => handleOversizedPreset(value)}
+                      className="flex flex-col items-center gap-1 p-4 rounded-[20px] border-2 border-border/60 bg-card hover:border-primary/40 text-center transition-all"
+                    >
+                      <span className="text-base font-black text-foreground">{value} ac</span>
+                      <span className="text-[10px] font-bold">{label}</span>
+                      <span className="text-[9px] text-muted-foreground leading-tight">{note}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1 space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Or enter your own (acres)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max="2"
+                      value={manualAcreage}
+                      onChange={e => setManualAcreage(e.target.value)}
+                      placeholder="e.g. 0.15"
+                      className={inputCls}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleOversizedProceed}
+                    className="h-12 rounded-xl gap-2 font-bold"
+                  >
+                    See Pricing
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
