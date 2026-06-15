@@ -1,4 +1,5 @@
 import { frequencyOptions, pricingTiers } from "@/data/site";
+import { lookupOneTimeCents } from "@shared/pricing";
 
 export type ProgramType = "subscription" | "annual" | "one_time";
 
@@ -18,7 +19,6 @@ export type PricingComputation = {
   message?: string;
 };
 
-const ONE_TIME_APPLICATION_PRICE = 270;
 const CUSTOM_THRESHOLD = 2;
 
 const roundCurrency = (value: number | null) => {
@@ -74,10 +74,13 @@ export const calculatePricing = ({ acreage, program, frequencyDays }: PricingInp
   const visitsPerYear = visitsPerYearFromFrequency(frequencyDays);
 
   if (program === "one_time") {
+    const oneTimeCents = lookupOneTimeCents(acreage);
+    const oneTimePrice = oneTimeCents != null ? oneTimeCents / 100 : null;
+
     return {
-      perVisit: ONE_TIME_APPLICATION_PRICE,
+      perVisit: oneTimePrice,
       perMonth: null,
-      annualTotal: ONE_TIME_APPLICATION_PRICE,
+      annualTotal: oneTimePrice,
       visitsPerYear: 1,
       tierLabel: tier.label,
       isCustom: false,

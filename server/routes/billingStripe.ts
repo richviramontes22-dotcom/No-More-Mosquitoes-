@@ -7,29 +7,13 @@ import { checkpoint, CP } from "../lib/checkpoint";
 import { safeErrorMessage, ERROR_CODES } from "../lib/apiErrors";
 import { captureException } from "../lib/sentry";
 import { sendConfirmationForAppointment } from "../services/notifications/sendAppointmentConfirmation";
+// Relative import (not the "@shared" alias): this module is reachable from
+// vite.config.ts's dynamic `import("./server")`, and Vite's config-bundler
+// externalizes bare/aliased specifiers, which Node then can't resolve.
+import { lookupAnnualCents, lookupOneTimeCents } from "../../shared/pricing";
 
 const router = Router();
 const STRIPE_API = "https://api.stripe.com/v1";
-
-// Annual pricing tiers (mirrors client ANNUAL_TIERS in ScheduleFlow.tsx)
-const ANNUAL_TIERS_SERVER = [
-  { min: 0.01, max: 0.13, cents:  99900 },
-  { min: 0.14, max: 0.20, cents: 120000 },
-  { min: 0.21, max: 0.30, cents: 135000 },
-  { min: 0.31, max: 0.40, cents: 145000 },
-  { min: 0.41, max: 0.50, cents: 160000 },
-  { min: 0.51, max: 0.60, cents: 180000 },
-  { min: 0.61, max: 0.70, cents: 190000 },
-  { min: 0.71, max: 0.80, cents: 210000 },
-  { min: 0.81, max: 1.15, cents: 230000 },
-  { min: 1.16, max: 1.29, cents: 250000 },
-  { min: 1.30, max: 1.50, cents: 270000 },
-  { min: 1.51, max: 2.00, cents: 290000 },
-] as const;
-
-function lookupAnnualCents(acreage: number): number | null {
-  return ANNUAL_TIERS_SERVER.find(t => acreage >= t.min && acreage <= t.max)?.cents ?? null;
-}
 
 // When STRIPE_AUTO_TAX=true in env, automatic Stripe Tax is requested on all charges.
 // Requires Stripe Tax to be configured in the Stripe Dashboard.
@@ -245,6 +229,16 @@ router.post("/create-checkout-session", async (req, res) => {
       preferredDays, preferredWindows, flexibilityDays,
     } = req.body;
 
+    // Annual plans are prepaid one-time PaymentIntents, not recurring Stripe
+    // Subscriptions — `mode` below would otherwise resolve to 'subscription'
+    // for any program other than "one_time" and create a recurring charge.
+    // Use /api/billing/create-payment-intent for annual plans instead.
+    if (program === "annual") {
+      return res.status(400).json({
+        error: "Annual plans must use /api/billing/create-payment-intent, not create-checkout-session.",
+      });
+    }
+
     const user = await getAuthenticatedUser(req);
     const customerId = await getOrCreateStripeCustomer(user);
 
@@ -417,27 +411,28 @@ router.post("/create-payment-intent", async (req, res) => {
     }
 
     if (program === "one_time") {
-      // Resolve price amount — fall back to static priceCents if price ID is missing in this mode.
-      let amount: number | null = null;
-      try {
-        const priceObj = await stripeFetch(`/prices/${plan.stripePriceId}`);
-        amount = (priceObj as any).unit_amount as number | null;
-      } catch {
-        console.warn(`[create-payment-intent] one_time price ${plan.stripePriceId} not found — using priceCents fallback`);
-        amount = plan.priceCents || null;
+      // One-time treatment: flat per-acreage-tier charge as a one-time PaymentIntent.
+      // Priced from the same acreage tier table as subscriptions/annual — no Stripe
+      // Price object lookup needed (mirrors the annual branch above).
+      const oneTimeCents = lookupOneTimeCents(acreageNum);
+      if (!oneTimeCents) {
+        return res.status(400).json({
+          error: `No one-time pricing tier found for acreage=${acreageNum}. Property must be 0.01–2.00 acres.`,
+        });
       }
-      if (!amount) throw new Error("Price amount unavailable");
-
       const body = new URLSearchParams({
-        amount:   String(amount),
-        currency: "usd",
-        customer: customerId,
+        amount:      String(oneTimeCents),
+        currency:    "usd",
+        customer:    customerId,
+        description: "One-Time Mosquito Treatment",
         "automatic_payment_methods[enabled]": "true",
       });
       if (autoTaxEnabled()) body.append("automatic_tax[enabled]", "true");
       for (const [k, v] of Object.entries(meta)) body.append(`metadata[${k}]`, v);
+      body.append("metadata[program]", "one_time");
 
       const pi = await stripeFetch("/payment_intents", { method: "POST", body: body.toString() });
+      console.log(`[create-payment-intent] one_time plan resolved — acreage=${acreageNum} amount=${oneTimeCents}`);
       return res.json({ clientSecret: pi.client_secret, intentId: pi.id, type: "payment_intent" });
     }
 
@@ -688,12 +683,33 @@ router.post("/confirm-booking", async (req, res) => {
         property_id:          propertyId,
         status:               "active",
         program:              "annual",
-        cadence_days:         parseInt(String(cadenceDays ?? "21"), 10),
+        cadence_days:         30, // Annual service runs on a monthly internal cadence
+        amount_cents:         (pi as any).amount ?? null,
         current_period_end:   periodEnd.toISOString(),
         last_payment_at:      new Date().toISOString(),
         updated_at:           new Date().toISOString(),
       }, { onConflict: "stripe_subscription_id" });
       console.log(`[Billing] Annual plan subscription row created: user=${user.id} expires=${periodEnd.toISOString().slice(0, 10)}`);
+    }
+
+    // For one-time treatments: record a bookkeeping subscription row so the
+    // dashboard can show the purchase. status="completed" (not "active") marks
+    // this as a single completed treatment, not an ongoing plan — cadence_days
+    // and current_period_end are intentionally null (no recurrence).
+    if (program === "one_time" && paymentIntentId) {
+      await supabaseAdmin.from("subscriptions").upsert({
+        stripe_subscription_id: paymentIntentId,
+        user_id:              user.id,
+        property_id:          propertyId,
+        status:               "completed",
+        program:              "one_time",
+        cadence_days:         null,
+        amount_cents:         (pi as any).amount ?? null,
+        current_period_end:   null,
+        last_payment_at:      new Date().toISOString(),
+        updated_at:           new Date().toISOString(),
+      }, { onConflict: "stripe_subscription_id" });
+      console.log(`[Billing] One-time treatment subscription row created: user=${user.id} amount=${(pi as any).amount}`);
     }
 
     // Create first appointment (idempotent — skip if one already exists for same date)
@@ -748,7 +764,8 @@ router.post("/confirm-booking", async (req, res) => {
     if (propertyId) {
       const updates: Record<string, any> = {
         program:  program === "one_time" ? "one_time" : program === "annual" ? "annual" : "subscription",
-        cadence:  parseInt(String(cadenceDays ?? "21"), 10),
+        // One-time treatments don't recur — no cadence to record.
+        cadence:  program === "one_time" ? null : parseInt(String(cadenceDays ?? "21"), 10),
       };
       if (Array.isArray(preferredDays) || Array.isArray(preferredWindows)) {
         updates.service_preferences = {
@@ -847,6 +864,16 @@ router.post("/update-subscription-plan", async (req, res) => {
     if (program === "one_time") {
       return res.status(400).json({
         error: "One-time treatments must be purchased through the marketplace — not via subscription management."
+      });
+    }
+
+    // Guard: annual plans are prepaid PaymentIntents, not Stripe Subscriptions —
+    // there is no recurring subscription object here to update. Without this
+    // guard, the "no existing subscription found" path below would create a
+    // brand-new recurring Stripe Subscription for an annual-only customer.
+    if (program === "annual") {
+      return res.status(400).json({
+        error: "Annual plans don't support in-place plan changes — purchase a new annual plan via create-payment-intent."
       });
     }
 

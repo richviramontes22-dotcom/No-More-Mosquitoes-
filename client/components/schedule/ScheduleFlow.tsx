@@ -49,6 +49,11 @@ import {
 } from "@/lib/flowProgress";
 import { useCatalogItems } from "@/hooks/dashboard/useCatalogItems";
 import { useCart } from "@/contexts/CartContext";
+import {
+  lookupAnnualCents,
+  lookupCadenceCents as lookupCadenceCentsShared,
+  lookupOneTimeCents,
+} from "@shared/pricing";
 
 // ── Availability types ─────────────────────────────────────────────────────────
 
@@ -507,91 +512,13 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
     }
   };
 
-  // ── Plan pricing (client-side, sourced from No_More_Mosquitoes_Pricing.xlsx) ──
-  // Per-cadence prices differ — more frequent = lower per-visit cost (route efficiency).
-  const CADENCE_TIERS: Record<number, { min: number; max: number; cents: number }[]> = {
-    14: [
-      { min: 0.01, max: 0.13, cents:  5000 },
-      { min: 0.14, max: 0.20, cents:  7500 },
-      { min: 0.21, max: 0.30, cents:  8500 },
-      { min: 0.31, max: 0.40, cents:  9500 },
-      { min: 0.41, max: 0.50, cents: 10500 },
-      { min: 0.51, max: 0.60, cents: 12500 },
-      { min: 0.61, max: 0.70, cents: 13500 },
-      { min: 0.71, max: 0.80, cents: 15000 },
-      { min: 0.81, max: 1.15, cents: 16500 },
-      { min: 1.16, max: 1.29, cents: 18000 },
-      { min: 1.30, max: 1.50, cents: 19500 },
-      { min: 1.51, max: 2.00, cents: 22500 },
-    ],
-    21: [
-      { min: 0.01, max: 0.13, cents:  8000 },
-      { min: 0.14, max: 0.20, cents: 10000 },
-      { min: 0.21, max: 0.30, cents: 11000 },
-      { min: 0.31, max: 0.40, cents: 11900 },
-      { min: 0.41, max: 0.50, cents: 12900 },
-      { min: 0.51, max: 0.60, cents: 14900 },
-      { min: 0.61, max: 0.70, cents: 15900 },
-      { min: 0.71, max: 0.80, cents: 17900 },
-      { min: 0.81, max: 1.15, cents: 19500 },
-      { min: 1.16, max: 1.29, cents: 20900 },
-      { min: 1.30, max: 1.50, cents: 22900 },
-      { min: 1.51, max: 2.00, cents: 24900 },
-    ],
-    30: [
-      { min: 0.01, max: 0.13, cents:  9500 },
-      { min: 0.14, max: 0.20, cents: 11000 },
-      { min: 0.21, max: 0.30, cents: 12500 },
-      { min: 0.31, max: 0.40, cents: 13500 },
-      { min: 0.41, max: 0.50, cents: 14500 },
-      { min: 0.51, max: 0.60, cents: 16500 },
-      { min: 0.61, max: 0.70, cents: 17500 },
-      { min: 0.71, max: 0.80, cents: 19500 },
-      { min: 0.81, max: 1.15, cents: 21500 },
-      { min: 1.16, max: 1.29, cents: 23000 },
-      { min: 1.30, max: 1.50, cents: 25000 },
-      { min: 1.51, max: 2.00, cents: 27000 },
-    ],
-    42: [
-      { min: 0.01, max: 0.13, cents: 12500 },
-      { min: 0.14, max: 0.20, cents: 14500 },
-      { min: 0.21, max: 0.30, cents: 15500 },
-      { min: 0.31, max: 0.40, cents: 16500 },
-      { min: 0.41, max: 0.50, cents: 17500 },
-      { min: 0.51, max: 0.60, cents: 19500 },
-      { min: 0.61, max: 0.70, cents: 20500 },
-      { min: 0.71, max: 0.80, cents: 22500 },
-      { min: 0.81, max: 1.15, cents: 24500 },
-      { min: 1.16, max: 1.29, cents: 26000 },
-      { min: 1.30, max: 1.50, cents: 28000 },
-      { min: 1.51, max: 2.00, cents: 30000 },
-    ],
-  };
-  const ANNUAL_TIERS = [
-    { min: 0.01, max: 0.13, cents:  99900 },
-    { min: 0.14, max: 0.20, cents: 120000 },
-    { min: 0.21, max: 0.30, cents: 135000 },
-    { min: 0.31, max: 0.40, cents: 145000 },
-    { min: 0.41, max: 0.50, cents: 160000 },
-    { min: 0.51, max: 0.60, cents: 180000 },
-    { min: 0.61, max: 0.70, cents: 190000 },
-    { min: 0.71, max: 0.80, cents: 210000 },
-    { min: 0.81, max: 1.15, cents: 230000 },
-    { min: 1.16, max: 1.29, cents: 250000 },
-    { min: 1.30, max: 1.50, cents: 270000 },
-    { min: 1.51, max: 2.00, cents: 290000 },
-  ] as const;
-  const ONE_TIME_CENTS = 17500;
+  // ── Plan pricing — sourced from @shared/pricing (single source of truth) ──
   const acreage = selectedProperty?.acreage;
-  const lookupCadenceCents = (cadence: number): number | null => {
-    if (!acreage) return null;
-    const tiers = CADENCE_TIERS[cadence] ?? CADENCE_TIERS[30];
-    return tiers.find(t => acreage >= t.min && acreage <= t.max)?.cents ?? null;
-  };
-  const subPriceCents  = lookupCadenceCents(selectedCadenceDays);
-  const annualPriceCents = acreage
-    ? (ANNUAL_TIERS.find(t => acreage >= t.min && acreage <= t.max)?.cents ?? null)
-    : null;
+  const lookupCadenceCents = (cadence: number): number | null =>
+    acreage ? lookupCadenceCentsShared(acreage, cadence) : null;
+  const subPriceCents     = lookupCadenceCents(selectedCadenceDays);
+  const annualPriceCents  = acreage ? lookupAnnualCents(acreage) : null;
+  const onetimePriceCents = acreage ? lookupOneTimeCents(acreage) : null;
   const fmtCents = (cents: number) =>
     cents >= 100000
       ? `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
@@ -616,7 +543,7 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
         const remaining  = properties.filter(p => p.id !== bookedPropertyId);
         const paidCents  =
           selectedProgram === "annual"   ? annualPriceCents  :
-          selectedProgram === "one_time" ? ONE_TIME_CENTS    :
+          selectedProgram === "one_time" ? onetimePriceCents :
           subPriceCents;
         // Next billing date — cadenceDays from today (Stripe anchors billing at subscription creation).
         const nextBillingDate: Date | null = selectedProgram === "one_time" ? null : (() => {
@@ -821,8 +748,8 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
                     description: "A single visit — perfect for events or trying us out.",
                     badge: null,
                     icon: <CheckCircle2 className="h-5 w-5" />,
-                    priceDisplay: fmtCents(ONE_TIME_CENTS),
-                    priceSub: "flat rate, one visit + tax",
+                    priceDisplay: onetimePriceCents ? fmtCents(onetimePriceCents) : null,
+                    priceSub: "single treatment + tax",
                   },
                   {
                     value: "annual" as const,
@@ -1495,7 +1422,7 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
         {step === "payment" && (() => {
           const paymentCents =
             selectedProgram === "annual"   ? annualPriceCents  :
-            selectedProgram === "one_time" ? ONE_TIME_CENTS    :
+            selectedProgram === "one_time" ? onetimePriceCents :
             subPriceCents;
           const amountLabel = paymentCents ? fmtCents(paymentCents) : undefined;
 

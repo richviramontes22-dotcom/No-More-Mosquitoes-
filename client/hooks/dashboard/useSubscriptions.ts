@@ -23,6 +23,7 @@ type SubscriptionRow = {
   id: string;
   property_id: string | null;
   status: string;
+  program: string | null;
   cadence_days: number | null;
   amount_cents: number | null;
   current_period_end: string | null;
@@ -49,6 +50,7 @@ const fetchSubscriptions = async (userId: string): Promise<SubscriptionProperty[
           id,
           property_id,
           status,
+          program,
           cadence_days,
           amount_cents,
           current_period_end,
@@ -69,11 +71,13 @@ const fetchSubscriptions = async (userId: string): Promise<SubscriptionProperty[
 
   const result: SubscriptionProperty[] = (subscriptions as SubscriptionRow[]).map((subscription) => {
     const acreage = 0.25;  // Default, not enriched
-    const cadence = subscription.cadence_days || 30;
+    // Legacy rows predate the `program` column and were always real Stripe subscriptions.
+    const program = (subscription.program as ProgramType | null) ?? "subscription";
+    const cadence = subscription.cadence_days ?? (program === "subscription" ? 30 : undefined);
     const pricing = calculatePricing({
       acreage,
-      program: "subscription",
-      frequencyDays: cadence as any,
+      program,
+      frequencyDays: (cadence ?? 30) as any,
     });
 
     const priceFromSubscription = subscription.amount_cents != null ? subscription.amount_cents / 100 : null;
@@ -85,7 +89,7 @@ const fetchSubscriptions = async (userId: string): Promise<SubscriptionProperty[
       zip: "",  // Will be enriched separately
       acreage,
       plan: pricing.tierLabel || "Standard",
-      program: (subscription.status === "active" ? "subscription" : "one_time") as ProgramType,
+      program,
       cadence,
       price: priceFromSubscription ?? pricing.perVisit ?? 0,
       status: subscription.status ?? null,

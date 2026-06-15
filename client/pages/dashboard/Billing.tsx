@@ -504,7 +504,11 @@ const Billing = () => {
                 <CardHeader className="bg-primary/5 pb-8">
                   <div className="flex items-center justify-between">
                     <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/10 border-none">
-                      {property.program === "one_time" ? "Single Treatment" : "Active Subscription"}
+                      {property.program === "one_time"
+                        ? "Single Treatment"
+                        : property.program === "annual"
+                          ? "Prepaid Annual Plan"
+                          : "Active Subscription"}
                     </Badge>
                     <CheckCircle2 className="h-5 w-5 text-primary" />
                   </div>
@@ -515,13 +519,14 @@ const Billing = () => {
                   <CardDescription className="text-foreground/70 font-medium ml-7">
                     {property.program === "one_time"
                       ? "One-time intensive service"
-                      : `${property.cadence ?? "?"}-day recurring cadence`}
+                      : property.program === "annual"
+                        ? "Prepaid annual service"
+                        : `${property.cadence ?? "?"}-day recurring cadence`}
                     {" • "}
                     {property.price != null && property.price > 0
                       ? `$${property.price.toFixed(2)}`
                       : "Custom pricing"}
-                    {" "}
-                    {property.program === "annual" ? "/ year" : "/ visit"}
+                    {property.program === "annual" ? " / year" : property.program === "one_time" ? "" : " / visit"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6 flex-1">
@@ -534,6 +539,12 @@ const Billing = () => {
                       <div className="h-1.5 w-1.5 rounded-full bg-primary" />
                       <span>Property Size: <span className="font-semibold text-foreground">{property.acreage.toFixed(2)} Acres</span></span>
                     </div>
+                    {property.program === "annual" && property.currentPeriodEnd && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        <span>Renews: <span className="font-semibold text-foreground">{new Date(property.currentPeriodEnd).toLocaleDateString()}</span></span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-4 border-t border-border/40 flex flex-wrap gap-3 mt-auto relative z-20">
@@ -547,7 +558,7 @@ const Billing = () => {
                       <RefreshCcw className="mr-2 h-4 w-4" />
                       Manage Plan
                     </Button>
-                    {property.program !== "one_time" && (
+                    {property.program === "subscription" && (
                       <>
                         <Button
                           variant="outline"

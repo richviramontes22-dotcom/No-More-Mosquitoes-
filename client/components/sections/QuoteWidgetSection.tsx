@@ -12,84 +12,9 @@ import { usePropertyLookup } from "@/hooks/use-property-lookup";
 import { useAuth } from "@/contexts/AuthContext";
 import { savePendingOnboarding } from "@/lib/pendingOnboarding";
 import { GoogleAddressAutocomplete, type GoogleAddressAutocompleteResult } from "@/components/common/GoogleAddressAutocomplete";
+import { lookupAnnualCents, lookupCadenceCents as lookupCadenceCentsShared, lookupOneTimeCents } from "@shared/pricing";
 
 type Program = "subscription" | "one_time" | "annual";
-
-const CADENCE_TIERS: Record<number, { min: number; max: number; cents: number }[]> = {
-  14: [
-    { min: 0.01, max: 0.13, cents:  5000 },
-    { min: 0.14, max: 0.20, cents:  7500 },
-    { min: 0.21, max: 0.30, cents:  8500 },
-    { min: 0.31, max: 0.40, cents:  9500 },
-    { min: 0.41, max: 0.50, cents: 10500 },
-    { min: 0.51, max: 0.60, cents: 12500 },
-    { min: 0.61, max: 0.70, cents: 13500 },
-    { min: 0.71, max: 0.80, cents: 15000 },
-    { min: 0.81, max: 1.15, cents: 16500 },
-    { min: 1.16, max: 1.29, cents: 18000 },
-    { min: 1.30, max: 1.50, cents: 19500 },
-    { min: 1.51, max: 2.00, cents: 22500 },
-  ],
-  21: [
-    { min: 0.01, max: 0.13, cents:  8000 },
-    { min: 0.14, max: 0.20, cents: 10000 },
-    { min: 0.21, max: 0.30, cents: 11000 },
-    { min: 0.31, max: 0.40, cents: 11900 },
-    { min: 0.41, max: 0.50, cents: 12900 },
-    { min: 0.51, max: 0.60, cents: 14900 },
-    { min: 0.61, max: 0.70, cents: 15900 },
-    { min: 0.71, max: 0.80, cents: 17900 },
-    { min: 0.81, max: 1.15, cents: 19500 },
-    { min: 1.16, max: 1.29, cents: 20900 },
-    { min: 1.30, max: 1.50, cents: 22900 },
-    { min: 1.51, max: 2.00, cents: 24900 },
-  ],
-  30: [
-    { min: 0.01, max: 0.13, cents:  9500 },
-    { min: 0.14, max: 0.20, cents: 11000 },
-    { min: 0.21, max: 0.30, cents: 12500 },
-    { min: 0.31, max: 0.40, cents: 13500 },
-    { min: 0.41, max: 0.50, cents: 14500 },
-    { min: 0.51, max: 0.60, cents: 16500 },
-    { min: 0.61, max: 0.70, cents: 17500 },
-    { min: 0.71, max: 0.80, cents: 19500 },
-    { min: 0.81, max: 1.15, cents: 21500 },
-    { min: 1.16, max: 1.29, cents: 23000 },
-    { min: 1.30, max: 1.50, cents: 25000 },
-    { min: 1.51, max: 2.00, cents: 27000 },
-  ],
-  42: [
-    { min: 0.01, max: 0.13, cents: 12500 },
-    { min: 0.14, max: 0.20, cents: 14500 },
-    { min: 0.21, max: 0.30, cents: 15500 },
-    { min: 0.31, max: 0.40, cents: 16500 },
-    { min: 0.41, max: 0.50, cents: 17500 },
-    { min: 0.51, max: 0.60, cents: 19500 },
-    { min: 0.61, max: 0.70, cents: 20500 },
-    { min: 0.71, max: 0.80, cents: 22500 },
-    { min: 0.81, max: 1.15, cents: 24500 },
-    { min: 1.16, max: 1.29, cents: 26000 },
-    { min: 1.30, max: 1.50, cents: 28000 },
-    { min: 1.51, max: 2.00, cents: 30000 },
-  ],
-};
-
-const ANNUAL_TIERS = [
-  { min: 0.01, max: 0.13, cents:  99900 },
-  { min: 0.14, max: 0.20, cents: 120000 },
-  { min: 0.21, max: 0.30, cents: 135000 },
-  { min: 0.31, max: 0.40, cents: 145000 },
-  { min: 0.41, max: 0.50, cents: 160000 },
-  { min: 0.51, max: 0.60, cents: 180000 },
-  { min: 0.61, max: 0.70, cents: 190000 },
-  { min: 0.71, max: 0.80, cents: 210000 },
-  { min: 0.81, max: 1.15, cents: 230000 },
-  { min: 1.16, max: 1.29, cents: 250000 },
-  { min: 1.30, max: 1.50, cents: 270000 },
-  { min: 1.51, max: 2.00, cents: 290000 },
-] as const;
-
-const ONE_TIME_CENTS = 17500;
 
 const fmtCents = (cents: number) =>
   cents >= 100000
@@ -131,16 +56,9 @@ const QuoteWidgetSection = ({ id }: Props) => {
   const [selectedProgram, setSelectedProgram] = useState<Program>("subscription");
   const [selectedCadence, setSelectedCadence] = useState<number>(21);
 
-  const lookupCadenceCents = (cadence: number): number | null => {
-    if (!acreage) return null;
-    const tiers = CADENCE_TIERS[cadence] ?? CADENCE_TIERS[30];
-    return tiers.find(t => acreage >= t.min && acreage <= t.max)?.cents ?? null;
-  };
-
-  const subPriceCents    = lookupCadenceCents(selectedCadence);
-  const annualPriceCents = acreage
-    ? (ANNUAL_TIERS.find(t => acreage! >= t.min && acreage! <= t.max)?.cents ?? null)
-    : null;
+  const subPriceCents     = acreage ? lookupCadenceCentsShared(acreage, selectedCadence) : null;
+  const annualPriceCents  = acreage ? lookupAnnualCents(acreage) : null;
+  const onetimePriceCents = acreage ? lookupOneTimeCents(acreage) : null;
 
   const [county, setCounty] = useState<string | null>(null);
   const [confidence, setConfidence] = useState<"high" | "medium" | "low" | null>(null);
@@ -216,7 +134,12 @@ const QuoteWidgetSection = ({ id }: Props) => {
   };
 
   const handleSchedule = () => {
-    const cadenceDays = selectedProgram === "annual" ? 30 : selectedCadence;
+    // One-time treatments don't recur — no cadence to record.
+    const cadenceDays = selectedProgram === "annual" ? 30 : selectedProgram === "one_time" ? undefined : selectedCadence;
+    const priceCents =
+      selectedProgram === "annual" ? annualPriceCents :
+      selectedProgram === "one_time" ? onetimePriceCents :
+      subPriceCents;
     savePendingOnboarding({
       address,
       city,
@@ -225,7 +148,7 @@ const QuoteWidgetSection = ({ id }: Props) => {
       acreage: acreage ?? 0.2,
       program: selectedProgram,
       cadenceDays,
-      estimatedPrice: subPriceCents != null ? subPriceCents / 100 : undefined,
+      estimatedPrice: priceCents != null ? priceCents / 100 : undefined,
       source: "pricing-page",
     });
 
@@ -447,8 +370,8 @@ const QuoteWidgetSection = ({ id }: Props) => {
                     description: "Single knockdown + barrier visit. Great for events or trying us out.",
                     badge: null,
                     icon: <CheckCircle2 className="h-5 w-5" />,
-                    priceDisplay: `Starting at ${fmtCents(ONE_TIME_CENTS)}`,
-                    priceSub: "flat rate, one visit + tax",
+                    priceDisplay: onetimePriceCents ? fmtCents(onetimePriceCents) : null,
+                    priceSub: "single treatment + tax",
                   },
                   {
                     value: "annual" as Program,
@@ -526,7 +449,7 @@ const QuoteWidgetSection = ({ id }: Props) => {
                     { days: 30, label: "Monthly",       note: "Standard protection" },
                     { days: 42, label: "Every 6 wks",  note: "Low exposure areas" },
                   ]).map(({ days, label, note }) => {
-                    const p = lookupCadenceCents(days);
+                    const p = acreage ? lookupCadenceCentsShared(acreage, days) : null;
                     return (
                       <button
                         key={days}

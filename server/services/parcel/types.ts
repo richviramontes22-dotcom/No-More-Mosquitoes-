@@ -94,7 +94,7 @@ export type PricingQuote = {
       defaultCadenceDays: number;
     };
     one_time: {
-      cents: number;
+      cents: number | null;
     };
     annual: {
       cents: number | null;
