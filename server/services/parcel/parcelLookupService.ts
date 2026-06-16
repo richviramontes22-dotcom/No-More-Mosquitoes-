@@ -11,15 +11,17 @@ import { OrangeCountyAdapter } from "./adapters/OrangeCountyAdapter";
 import { RiversideCountyAdapter } from "./adapters/RiversideCountyAdapter";
 import { SanDiegoCountyAdapter } from "./adapters/SanDiegoCountyAdapter";
 import { LosAngelesCountyAdapter } from "./adapters/LosAngelesCountyAdapter";
+import { SanBernardinoCountyAdapter } from "./adapters/SanBernardinoCountyAdapter";
 import type { CountyParcelAdapter } from "./adapters/BaseCountyAdapter";
 
 // Active county adapters only — SCAG and Regrid are not in this chain.
 const ADAPTER_MAP: Record<SupportedCounty, CountyParcelAdapter | null> = {
-  orange:      OrangeCountyAdapter,
-  riverside:   RiversideCountyAdapter,
-  san_diego:   SanDiegoCountyAdapter,
-  los_angeles: LosAngelesCountyAdapter, // returns null if no stable public endpoint
-  unknown:     null,
+  orange:          OrangeCountyAdapter,
+  riverside:       RiversideCountyAdapter,
+  san_diego:       SanDiegoCountyAdapter,
+  los_angeles:     LosAngelesCountyAdapter,
+  san_bernardino:  SanBernardinoCountyAdapter,
+  unknown:         null,
 };
 
 const ADAPTER_TIMEOUT_MS = parseInt(process.env.COUNTY_ADAPTER_TIMEOUT_MS ?? "8000", 10);

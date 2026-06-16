@@ -3,6 +3,7 @@ export type SupportedCounty =
   | "los_angeles"
   | "san_diego"
   | "riverside"
+  | "san_bernardino"
   | "unknown";
 
 export type AcreageSource =

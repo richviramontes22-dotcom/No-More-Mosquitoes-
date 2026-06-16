@@ -358,15 +358,58 @@ const la = [
   ['93590','Palmdale'],['93591','Palmdale'],['93599','Palmdale'],
 ];
 
-const escape = s => s.replace(/'/g, "''");
-const sections = [
-  { county: 'Orange County, CA', zips: oc },
-  { county: 'Riverside County, CA', zips: rv },
-  { county: 'San Diego County, CA', zips: sd },
-  { county: 'Los Angeles County, CA', zips: la },
+const sb = [
+  // Western Inland Empire
+  ['91701','Rancho Cucamonga'],['91708','Chino'],['91709','Chino Hills'],
+  ['91710','Chino'],['91730','Rancho Cucamonga'],['91737','Rancho Cucamonga'],
+  ['91739','Rancho Cucamonga'],['91743','Ontario'],['91758','Ontario'],
+  ['91761','Ontario'],['91762','Ontario'],['91763','Montclair'],
+  ['91764','Ontario'],['91784','Upland'],['91785','Upland'],['91786','Upland'],
+  // Mountain communities
+  ['92305','Angelus Oaks'],['92314','Big Bear City'],['92315','Big Bear Lake'],
+  ['92317','Blue Jay'],['92321','Cedar Glen'],['92322','Cedarpines Park'],
+  ['92325','Crestline'],['92326','Crest Park'],['92333','Fawnskin'],
+  ['92339','Forest Falls'],['92341','Green Valley Lake'],['92352','Lake Arrowhead'],
+  ['92356','Lucerne Valley'],['92358','Lytle Creek'],['92378','Rimforest'],
+  ['92382','Running Springs'],['92385','Skyforest'],['92386','Sugarloaf'],
+  ['92391','Twin Peaks'],['92397','Wrightwood'],
+  // San Bernardino Valley / Inland Empire East
+  ['92313','Grand Terrace'],['92316','Bloomington'],['92318','Bryn Mawr'],
+  ['92324','Colton'],['92331','Fontana'],['92334','Fontana'],['92335','Fontana'],
+  ['92336','Fontana'],['92337','Fontana'],['92346','Highland'],
+  ['92350','Loma Linda'],['92354','Loma Linda'],['92357','Loma Linda'],
+  ['92359','Mentone'],['92373','Redlands'],['92374','Redlands'],['92375','Redlands'],
+  ['92376','Rialto'],['92377','Rialto'],['92399','Yucaipa'],
+  // High Desert
+  ['92301','Adelanto'],['92307','Apple Valley'],['92308','Apple Valley'],
+  ['92311','Barstow'],['92312','Barstow'],['92327','Daggett'],['92329','Phelan'],
+  ['92340','Hesperia'],['92342','Helendale'],['92344','Hesperia'],['92345','Hesperia'],
+  ['92347','Hinkley'],['92368','Oro Grande'],['92371','Phelan'],
+  ['92392','Victorville'],['92393','Victorville'],['92394','Victorville'],['92395','Victorville'],
+  // Desert communities
+  ['92256','Morongo Valley'],['92277','Twentynine Palms'],['92278','Twentynine Palms'],
+  ['92284','Yucca Valley'],['92285','Landers'],['92286','Yucca Valley'],
+  ['92309','Baker'],['92310','Fort Irwin'],['92323','Cima'],['92332','Essex'],
+  ['92338','Ludlow'],['92363','Needles'],['92364','Nipton'],
+  ['92365','Newberry Springs'],['92366','Mountain Pass'],['92369','Patton'],['92372','Pioneertown'],
+  // San Bernardino city
+  ['92401','San Bernardino'],['92403','San Bernardino'],['92404','San Bernardino'],
+  ['92405','San Bernardino'],['92406','San Bernardino'],['92407','San Bernardino'],
+  ['92408','San Bernardino'],['92410','San Bernardino'],['92411','San Bernardino'],
+  ['92413','San Bernardino'],['92415','San Bernardino'],['92418','San Bernardino'],
+  ['92423','San Bernardino'],['92427','San Bernardino'],
 ];
 
-let sql = `-- Service area seed: Orange, Riverside, San Diego, and Los Angeles counties (CA)\n`;
+const escape = s => s.replace(/'/g, "''");
+const sections = [
+  { county: 'Orange County, CA', displayCounty: 'Orange', zips: oc },
+  { county: 'Riverside County, CA', displayCounty: 'Riverside', zips: rv },
+  { county: 'San Diego County, CA', displayCounty: 'San Diego', zips: sd },
+  { county: 'Los Angeles County, CA', displayCounty: 'Los Angeles', zips: la },
+  { county: 'San Bernardino County, CA', displayCounty: 'San Bernardino', zips: sb },
+];
+
+let sql = `-- Service area seed: Orange, Riverside, San Diego, Los Angeles, and San Bernardino counties (CA)\n`;
 sql += `-- Generated: 2026-06-16\n`;
 sql += `-- Source: zipcodestogo.com and zip-codes.com county ZIP code lists\n`;
 sql += `-- Apply via Supabase SQL Editor on project qamfxqbtvwwlzlmqrqbh\n\n`;

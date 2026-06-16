@@ -36,13 +36,14 @@ interface DemandSummary {
   last_event_at: string;
 }
 
-const COUNTY_ORDER = ["Los Angeles", "Orange", "Riverside", "San Diego"];
+const COUNTY_ORDER = ["Los Angeles", "Orange", "Riverside", "San Bernardino", "San Diego"];
 
 const COUNTY_COLOR: Record<string, string> = {
-  "Los Angeles": "bg-blue-500/10 text-blue-700",
-  "Orange": "bg-orange-500/10 text-orange-700",
-  "Riverside": "bg-purple-500/10 text-purple-700",
-  "San Diego": "bg-cyan-500/10 text-cyan-700",
+  "Los Angeles":    "bg-blue-500/10 text-blue-700",
+  "Orange":         "bg-orange-500/10 text-orange-700",
+  "Riverside":      "bg-purple-500/10 text-purple-700",
+  "San Bernardino": "bg-rose-500/10 text-rose-700",
+  "San Diego":      "bg-cyan-500/10 text-cyan-700",
 };
 
 function pctBar(active: number, total: number) {

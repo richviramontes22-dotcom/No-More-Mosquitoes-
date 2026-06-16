@@ -24,6 +24,7 @@ const FIPS_TO_COUNTY: Record<string, string> = {
   "037": "Los Angeles",
   "059": "Orange",
   "065": "Riverside",
+  "071": "San Bernardino",
   "073": "San Diego",
 };
 
@@ -79,8 +80,8 @@ export default function ServiceAreaMap({ areasByCounty, onCountyClick }: Props) 
     if (!window.google?.maps?.Map) return;
 
     mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
-      center: { lat: 33.75, lng: -117.5 },
-      zoom: 8,
+      center: { lat: 34.1, lng: -117.3 },
+      zoom: 7,
       disableDefaultUI: true,
       gestureHandling: "cooperative",
     });
