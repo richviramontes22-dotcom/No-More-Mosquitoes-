@@ -5,10 +5,11 @@ import { buildPricingQuote } from "../services/parcel/pricingQuote";
 import { checkRateLimit } from "../services/parcel/rateLimit";
 import { reverseGeocode } from "../services/parcel/googleAddressService";
 import { getCachedReverseGeocode, setCachedReverseGeocode } from "../services/parcel/reverseGeocodeCache";
-import { buildAddressHash } from "../services/parcel/cache";
+import { buildLeadAddressHash } from "../services/parcel/cache";
 import { notifyAdmin } from "../services/notifications/adminNotificationService";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { supabase } from "../lib/supabase";
+import { upsertLeadFromQuote, upsertLeadFromManualReview } from "../services/leads/leadService";
 
 const router = Router();
 
@@ -37,9 +38,11 @@ router.post("/quote", async (req: Request, res: Response) => {
     return res.status(400).json({ ok: false, code: "INVALID_ADDRESS", message: "ZIP code is required." });
   }
 
+  const cleanZip = zip.trim().replace(/\D/g, "").slice(0, 5);
+
   const result = await lookupParcel({
     address: address.trim(),
-    zip: zip.trim().replace(/\D/g, "").slice(0, 5),
+    zip: cleanZip,
     city: city?.trim(),
     state: state?.trim() ?? "CA",
     lat: typeof lat === "number" ? lat : undefined,
@@ -58,14 +61,13 @@ router.post("/quote", async (req: Request, res: Response) => {
     // follow up and quote it by hand, flagged so it's distinguishable from a
     // normal instant-quote lead.
     if (result.errorCode === "MANUAL_REVIEW_REQUIRED") {
-      const cleanZip = zip.trim().replace(/\D/g, "").slice(0, 5);
       notifyAdmin({
         event_type: "leads.manual_review_required",
         severity: "info",
         title: `New lead — manual review required (${address.trim()})`,
         body: `${address.trim()}${city ? `, ${city.trim()}` : ""} ${cleanZip} could not be auto-quoted (${result.message}). Needs a manual quote.`,
         entity_type: "lead",
-        entity_id: buildAddressHash(`${address.trim()}, ${cleanZip}`),
+        entity_id: buildLeadAddressHash(address.trim(), city, state, cleanZip),
         metadata: {
           address: address.trim(),
           city: city?.trim(),
@@ -74,6 +76,18 @@ router.post("/quote", async (req: Request, res: Response) => {
           manualReview: true,
           reason: result.message,
         },
+      });
+
+      // Capture as a lead so the team can follow up and quote it by hand —
+      // best-effort, never blocks the customer-facing error response.
+      void upsertLeadFromManualReview({
+        address: address.trim(),
+        city: city?.trim(),
+        state: state?.trim() ?? "CA",
+        zip: cleanZip,
+        manualReviewReason: result.message,
+      }).catch((err) => {
+        console.error("[parcelQuote] upsertLeadFromManualReview failed:", err);
       });
     }
 
@@ -107,15 +121,28 @@ router.post("/quote", async (req: Request, res: Response) => {
     title: `New price quote — ${result.normalizedAddress}`,
     body: `An instant quote was generated for ${result.normalizedAddress}${result.county !== "unknown" ? ` (${result.county} County)` : ""}, ${result.acreage ?? "?"} ac.`,
     entity_type: "lead",
-    entity_id: buildAddressHash(result.normalizedAddress),
+    entity_id: buildLeadAddressHash(address.trim(), city, state, cleanZip),
     metadata: {
       address: result.normalizedAddress,
-      zip: zip.trim().replace(/\D/g, "").slice(0, 5),
+      zip: cleanZip,
       county: result.county,
       acreage: result.acreage,
       confidence: result.confidence,
       oversized,
     },
+  });
+
+  // Capture as a lead so the admin Lead Inbox shows every quoted prospect —
+  // best-effort, never blocks the customer-facing quote response.
+  void upsertLeadFromQuote({
+    address: address.trim(),
+    city: city?.trim(),
+    state: state?.trim() ?? "CA",
+    zip: cleanZip,
+    acreage: result.acreage,
+    county: result.county,
+  }).catch((err) => {
+    console.error("[parcelQuote] upsertLeadFromQuote failed:", err);
   });
 
   return res.json({

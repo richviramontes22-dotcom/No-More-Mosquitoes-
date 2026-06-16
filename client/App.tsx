@@ -72,6 +72,8 @@ import AdminRevenue from "./pages/admin/Revenue";
 import AdminSettings from "./pages/admin/Settings";
 import AdminNotifications from "./pages/admin/Notifications";
 import AdminAlerts from "./pages/admin/Alerts";
+import AdminLeads from "./pages/admin/Leads";
+import AdminLeadDetail from "./pages/admin/LeadDetail";
 import AdminBusinessHours from "./pages/admin/BusinessHours";
 import AdminEmployeeTracking from "./pages/admin/EmployeeTracking";
 import AdminRoutePlanning from "./pages/admin/RoutePlanning";
@@ -207,6 +209,8 @@ const App = () => (
                       <Route path="business-hours" element={<AdminBusinessHours />} />
                       <Route path="notifications" element={<AdminNotifications />} />
                       <Route path="alerts" element={<AdminAlerts />} />
+                      <Route path="leads" element={<AdminLeads />} />
+                      <Route path="leads/:id" element={<AdminLeadDetail />} />
                       <Route path="settings" element={<AdminSettings />} />
                     </Route>
 

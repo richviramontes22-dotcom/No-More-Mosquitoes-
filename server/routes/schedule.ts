@@ -7,6 +7,7 @@ import { getEmailProvider, getFromEmail } from "../services/notifications/provid
 import { buildLeadAcknowledgementEmail } from "../services/notifications/emailTemplates";
 import { logNotification } from "../services/notifications/notificationLogger";
 import { notifyAdmin } from "../services/notifications/adminNotificationService";
+import { upsertLeadFromScheduleRequest } from "../services/leads/leadService";
 
 // Service role bypasses RLS for appointment count (capacity check) and INSERT.
 // Auth validation (getUser) still uses the anon client with the user's JWT.
@@ -231,6 +232,34 @@ export const handleScheduleRequest: RequestHandler = async (req, res) => {
         service: payload.serviceFrequency || "Mosquito Service",
       },
     });
+
+    // ── CRM Phase 1: create/update lead record (best-effort) ───────────────────
+    // Merges into an existing quote/manual-review lead for the same property
+    // (via address_hash) or the same person (via email/phone) instead of
+    // creating a duplicate — see SCHEDULE_REQUEST_MERGE_REPORT.md.
+    if (data?.id) {
+      const realPropertyId =
+        payload.propertyId && !payload.propertyId.startsWith("prop-system")
+          ? payload.propertyId
+          : null;
+
+      void upsertLeadFromScheduleRequest({
+        scheduleRequestId: data.id,
+        name: payload.fullName,
+        email: payload.email,
+        phone: payload.phone,
+        address: payload.serviceAddress,
+        city: payload.city,
+        state: payload.state,
+        zip: payload.zipCode,
+        acreage: payload.acreage ?? null,
+        cadence: payload.serviceFrequency,
+        profileId: userId ?? null,
+        propertyId: realPropertyId,
+      }).catch((err) => {
+        console.error("[Schedule] upsertLeadFromScheduleRequest failed:", err);
+      });
+    }
 
     // ── Create appointment for authenticated users with a real property ────────
     if (userId && payload.propertyId && !payload.propertyId.startsWith("prop-system")) {

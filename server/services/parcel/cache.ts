@@ -10,6 +10,29 @@ export function buildAddressHash(normalizedAddress: string): string {
     .slice(0, 32);
 }
 
+/**
+ * Canonical address hash for lead deduplication.
+ *
+ * Always hashes the raw, pre-geocode input fields (address, city, state, zip)
+ * in a fixed order — NOT the post-geocode `normalizedAddress` returned by
+ * Google. This guarantees the quote-success path, the manual-review path,
+ * and the schedule-request path all produce the same hash for the same
+ * submitted address, regardless of whether geocoding ran or succeeded.
+ * See admin-crm-audit-reports/ADDRESS_HASH_STANDARDIZATION_REPORT.md.
+ */
+export function buildLeadAddressHash(
+  address: string,
+  city?: string | null,
+  state?: string | null,
+  zip?: string | null,
+): string {
+  const normalized = [address, city, state || "CA", zip]
+    .map((part) => (part ?? "").toString().trim())
+    .filter(Boolean)
+    .join(", ");
+  return buildAddressHash(normalized);
+}
+
 export type CacheRow = {
   normalized_address: string;
   address_hash: string;

@@ -1,0 +1,167 @@
+// Minimal in-memory Supabase client stand-in for unit-testing leadService.ts.
+// Supports exactly the query-builder chains leadService.ts uses:
+//   .select() / .insert() / .update() / .eq() / .ilike() / .in() / .or()
+//   .order() / .range() / .limit() / .single() / .maybeSingle() / await (thenable)
+
+export type Row = Record<string, any>;
+
+type Filter = (row: Row) => boolean;
+
+function randomId(): string {
+  return `id-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function createFakeSupabase(initialTables: Record<string, Row[]> = {}) {
+  const tables: Record<string, Row[]> = {};
+  for (const [name, rows] of Object.entries(initialTables)) {
+    tables[name] = rows.map((row) => ({ ...row }));
+  }
+
+  function from(table: string) {
+    if (!tables[table]) tables[table] = [];
+    const rows = tables[table];
+
+    let mode: "select" | "insert" | "update" = "select";
+    let payload: Row | Row[] | null = null;
+    let withCount = false;
+    let wantsData = false;
+    const filters: Filter[] = [];
+    let orderSpec: { column: string; ascending: boolean } | null = null;
+    let rangeSpec: { from: number; to: number } | null = null;
+    let limitSpec: number | null = null;
+
+    function matchAll(row: Row): boolean {
+      return filters.every((f) => f(row));
+    }
+
+    function execute(): { data: any; error: null; count?: number } {
+      if (mode === "insert") {
+        const items = Array.isArray(payload) ? payload : [payload as Row];
+        const inserted = items.map((item) => {
+          const now = new Date().toISOString();
+          const row: Row = {
+            id: randomId(),
+            created_at: now,
+            updated_at: now,
+            ...item,
+          };
+          rows.push(row);
+          return { ...row };
+        });
+        return { data: wantsData ? inserted : null, error: null, count: inserted.length };
+      }
+
+      if (mode === "update") {
+        const matched = rows.filter(matchAll);
+        for (const row of matched) {
+          Object.assign(row, payload, { updated_at: new Date().toISOString() });
+        }
+        return { data: wantsData ? matched.map((r) => ({ ...r })) : null, error: null, count: matched.length };
+      }
+
+      // select
+      let result = rows.filter(matchAll).map((r) => ({ ...r }));
+      const total = result.length;
+
+      if (orderSpec) {
+        const { column, ascending } = orderSpec;
+        result = [...result].sort((a, b) => {
+          const av = a[column];
+          const bv = b[column];
+          if (av === bv) return 0;
+          return (av > bv ? 1 : -1) * (ascending ? 1 : -1);
+        });
+      }
+
+      if (rangeSpec) {
+        result = result.slice(rangeSpec.from, rangeSpec.to + 1);
+      } else if (limitSpec != null) {
+        result = result.slice(0, limitSpec);
+      }
+
+      return { data: result, error: null, count: withCount ? total : undefined };
+    }
+
+    const builder: any = {
+      select(_cols?: string, opts?: { count?: string }) {
+        if (mode !== "insert" && mode !== "update") mode = "select";
+        if (opts?.count) withCount = true;
+        wantsData = true;
+        return builder;
+      },
+      insert(item: Row | Row[]) {
+        mode = "insert";
+        payload = item;
+        return builder;
+      },
+      update(item: Row) {
+        mode = "update";
+        payload = item;
+        return builder;
+      },
+      eq(col: string, val: any) {
+        filters.push((row) => row[col] === val);
+        return builder;
+      },
+      ilike(col: string, val: string) {
+        const needle = String(val).replace(/%/g, "").toLowerCase();
+        filters.push((row) => String(row[col] ?? "").toLowerCase() === needle);
+        return builder;
+      },
+      in(col: string, vals: any[]) {
+        filters.push((row) => vals.includes(row[col]));
+        return builder;
+      },
+      or(expr: string) {
+        const clauses = expr.split(",").map((clause) => {
+          const [col, op, ...rest] = clause.split(".");
+          return { col, op, val: rest.join(".") };
+        });
+        filters.push((row) =>
+          clauses.some(({ col, op, val }) => {
+            if (op === "ilike") {
+              const needle = val.replace(/%/g, "").toLowerCase();
+              return String(row[col] ?? "").toLowerCase().includes(needle);
+            }
+            return false;
+          }),
+        );
+        return builder;
+      },
+      order(column: string, opts?: { ascending?: boolean }) {
+        orderSpec = { column, ascending: opts?.ascending ?? true };
+        return builder;
+      },
+      range(rangeFrom: number, rangeTo: number) {
+        rangeSpec = { from: rangeFrom, to: rangeTo };
+        return builder;
+      },
+      limit(n: number) {
+        limitSpec = n;
+        return builder;
+      },
+      async maybeSingle() {
+        wantsData = true;
+        const { data, error } = execute();
+        const arr = Array.isArray(data) ? data : data ? [data] : [];
+        return { data: arr[0] ?? null, error };
+      },
+      async single() {
+        wantsData = true;
+        const { data, error } = execute();
+        const arr = Array.isArray(data) ? data : data ? [data] : [];
+        if (arr.length === 0) return { data: null, error: { message: "No rows found" } };
+        return { data: arr[0], error: null };
+      },
+      then(resolve: (value: any) => any, reject?: (reason: any) => any) {
+        return Promise.resolve(execute()).then(resolve, reject);
+      },
+    };
+
+    return builder;
+  }
+
+  return { from, tables };
+}
+
+export type FakeSupabase = ReturnType<typeof createFakeSupabase>;
