@@ -15,6 +15,13 @@ export interface AdminLead {
   program: string | null;
   cadence: string | null;
   manual_review_reason: string | null;
+  lost_reason: string | null;
+  service_state: string | null;
+  service_county: string | null;
+  service_zip: string | null;
+  service_area_status: string | null;
+  service_area_id: string | null;
+  out_of_area_reason: string | null;
   profile_id: string | null;
   property_id: string | null;
   subscription_id: string | null;
@@ -39,9 +46,19 @@ export interface AdminLeadActivity {
   created_at: string;
 }
 
+export interface AdminLeadNote {
+  id: string;
+  lead_id: string;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AdminLeadDetail {
   lead: AdminLead;
   activities: AdminLeadActivity[];
+  notes: AdminLeadNote[];
   linked: {
     profile: Record<string, unknown> | null;
     property: Record<string, unknown> | null;
@@ -103,8 +120,8 @@ export function useAdminLeads(options: UseAdminLeadsOptions = {}) {
 }
 
 /**
- * Fetches a single lead with its activity timeline and linked records
- * (profile/property/schedule request/subscription) for the lead detail view.
+ * Fetches a single lead with its activity timeline, staff notes, and linked
+ * records for the lead detail view.
  */
 export function useAdminLeadDetail(id: string | undefined) {
   const [detail, setDetail] = useState<AdminLeadDetail | null>(null);
@@ -131,4 +148,22 @@ export function useAdminLeadDetail(id: string | undefined) {
   }, [fetchDetail]);
 
   return { detail, isLoading, error, refetch: fetchDetail };
+}
+
+/** PATCH /api/admin/leads/:id — update lead status (admin only). */
+export async function patchLeadStatus(
+  id: string,
+  status: string,
+  lostReason?: string,
+): Promise<AdminLead> {
+  const body: Record<string, string> = { status };
+  if (lostReason) body.lost_reason = lostReason;
+  const data = await adminApi(`/api/admin/leads/${id}`, "PATCH", body);
+  return data.lead as AdminLead;
+}
+
+/** POST /api/admin/leads/:id/notes — add a staff note to a lead (admin only). */
+export async function postLeadNote(id: string, body: string): Promise<AdminLeadNote> {
+  const data = await adminApi(`/api/admin/leads/${id}/notes`, "POST", { body });
+  return data.note as AdminLeadNote;
 }

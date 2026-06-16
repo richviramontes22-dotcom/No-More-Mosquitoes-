@@ -9,7 +9,12 @@ import { buildLeadAddressHash } from "../services/parcel/cache";
 import { notifyAdmin } from "../services/notifications/adminNotificationService";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { supabase } from "../lib/supabase";
-import { upsertLeadFromQuote, upsertLeadFromManualReview } from "../services/leads/leadService";
+import {
+  upsertLeadFromQuote,
+  upsertLeadFromManualReview,
+  upsertLeadFromOutOfArea,
+  recordServiceAreaDemandEvent,
+} from "../services/leads/leadService";
 
 const router = Router();
 
@@ -132,18 +137,50 @@ router.post("/quote", async (req: Request, res: Response) => {
     },
   });
 
-  // Capture as a lead so the admin Lead Inbox shows every quoted prospect —
-  // best-effort, never blocks the customer-facing quote response.
-  void upsertLeadFromQuote({
-    address: address.trim(),
-    city: city?.trim(),
-    state: state?.trim() ?? "CA",
-    zip: cleanZip,
-    acreage: result.acreage,
-    county: result.county,
-  }).catch((err) => {
-    console.error("[parcelQuote] upsertLeadFromQuote failed:", err);
-  });
+  // Check if this ZIP is in our service area, then capture the lead accordingly.
+  // Covered ZIPs → normal "new" lead. Uncovered ZIPs → "out_of_area" lead +
+  // demand event so admins can track where expansion interest is highest.
+  // Best-effort, never blocks the customer-facing quote response.
+  void (async () => {
+    try {
+      const leadDb = supabaseAdmin ?? supabase;
+      const saResult = await leadDb
+        .from("service_areas")
+        .select("id")
+        .eq("zip", cleanZip)
+        .eq("is_active", true)
+        .maybeSingle();
+      const serviceArea = saResult.data;
+
+      if (serviceArea) {
+        await upsertLeadFromQuote({
+          address: address.trim(),
+          city: city?.trim(),
+          state: state?.trim() ?? "CA",
+          zip: cleanZip,
+          acreage: result.acreage,
+          county: result.county,
+        });
+      } else {
+        const lead = await upsertLeadFromOutOfArea({
+          address: address.trim(),
+          city: city?.trim(),
+          state: state?.trim() ?? "CA",
+          zip: cleanZip,
+          acreage: result.acreage,
+          county: result.county,
+          outOfAreaReason: "ZIP not in service area",
+        });
+        await recordServiceAreaDemandEvent({
+          zip: cleanZip,
+          eventType: "out_of_area_quote",
+          leadId: lead?.id ?? null,
+        });
+      }
+    } catch (err) {
+      console.error("[parcelQuote] lead capture failed:", err);
+    }
+  })();
 
   return res.json({
     ok: true,

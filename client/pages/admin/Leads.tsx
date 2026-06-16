@@ -14,12 +14,20 @@ const STATUS_BADGE: Record<string, string> = {
   new: "bg-blue-100 text-blue-800",
   manual_review: "bg-amber-100 text-amber-800",
   scheduled: "bg-green-100 text-green-800",
+  out_of_area: "bg-slate-100 text-slate-700",
+  contacted: "bg-indigo-100 text-indigo-800",
+  quoted: "bg-violet-100 text-violet-800",
+  lost: "bg-red-100 text-red-700",
 };
 
 const STATUS_LABEL: Record<string, string> = {
   new: "New",
   manual_review: "Manual Review",
   scheduled: "Scheduled",
+  out_of_area: "Out of Area",
+  contacted: "Contacted",
+  quoted: "Quoted",
+  lost: "Lost",
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -108,8 +116,12 @@ const AdminLeads = () => {
           >
             <option value="all">All statuses</option>
             <option value="new">New</option>
+            <option value="out_of_area">Out of Area</option>
+            <option value="contacted">Contacted</option>
+            <option value="quoted">Quoted</option>
             <option value="manual_review">Manual Review</option>
             <option value="scheduled">Scheduled</option>
+            <option value="lost">Lost</option>
           </select>
           <select
             aria-label="Filter by source"
@@ -121,6 +133,7 @@ const AdminLeads = () => {
             <option value="quote">Quote</option>
             <option value="manual_review">Manual Review</option>
             <option value="schedule_request">Schedule Request</option>
+            <option value="waitlist">Waitlist</option>
           </select>
         </div>
       </div>

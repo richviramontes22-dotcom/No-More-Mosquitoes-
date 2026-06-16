@@ -36,6 +36,7 @@ import devAuthRouter from "./routes/devAuth";
 import adminBusinessHoursRouter from "./routes/adminBusinessHours";
 import adminAlertsRouter from "./routes/adminAlerts";
 import adminLeadsRouter from "./routes/adminLeads";
+import adminServiceAreaDemandRouter from "./routes/adminServiceAreaDemand";
 import unsubscribeRouter from "./routes/unsubscribe";
 import adminOnboardingRouter from "./routes/adminOnboarding";
 import employeeOnboardingRouter from "./routes/employeeOnboarding";
@@ -182,8 +183,11 @@ export function createServer() {
   // Admin Alerts API (internal owner notifications)
   app.use("/api/admin", adminAlertsRouter);
 
-  // Admin Leads API (CRM Phase 1 — Lead Inbox)
+  // Admin Leads API (CRM Phase 1 + Phase 2 — Lead Inbox, notes, status)
   app.use("/api/admin", adminLeadsRouter);
+
+  // Admin Service Area Demand API (CRM Phase 2 — demand intelligence)
+  app.use("/api/admin", adminServiceAreaDemandRouter);
 
   // Email unsubscribe (one-click CAN-SPAM compliance — unauthenticated)
   app.use("/api", unsubscribeRouter);

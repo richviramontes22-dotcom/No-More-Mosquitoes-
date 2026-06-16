@@ -6,14 +6,16 @@ import { buildLeadAddressHash } from "../parcel/cache";
 // flows (quote widget, schedule form) — same pattern used across server/routes/admin*.ts.
 const db = supabaseAdmin ?? supabase;
 
-export type LeadSource = "quote" | "manual_review" | "schedule_request";
-export type LeadStatus = "new" | "manual_review" | "scheduled";
+export type LeadSource = "quote" | "manual_review" | "schedule_request" | "waitlist";
+export type LeadStatus = "new" | "manual_review" | "scheduled" | "out_of_area" | "contacted" | "quoted" | "lost";
 export type LeadActivityType =
   | "created"
   | "quote_requested"
   | "manual_review"
   | "schedule_request_received"
-  | "merged";
+  | "merged"
+  | "status_changed"
+  | "note_added";
 export type LeadActivityActor = "system" | "admin";
 
 export interface Lead {
@@ -30,6 +32,13 @@ export interface Lead {
   program: string | null;
   cadence: string | null;
   manual_review_reason: string | null;
+  lost_reason: string | null;
+  service_state: string | null;
+  service_county: string | null;
+  service_zip: string | null;
+  service_area_status: string | null;
+  service_area_id: string | null;
+  out_of_area_reason: string | null;
   profile_id: string | null;
   property_id: string | null;
   subscription_id: string | null;
@@ -53,9 +62,19 @@ export interface LeadActivity {
   created_at: string;
 }
 
+export interface LeadNote {
+  id: string;
+  lead_id: string;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface LeadDetail {
   lead: Lead;
   activities: LeadActivity[];
+  notes: LeadNote[];
   linked: {
     profile: Record<string, unknown> | null;
     property: Record<string, unknown> | null;
@@ -88,14 +107,16 @@ const DEFAULT_PAGE_SIZE = 25;
 
 /**
  * Status precedence used by merge logic — never move a lead "backwards".
- * `scheduled` outranks `new`/`manual_review` so a later schedule request
- * always wins, but a later manual-review hit on an already-scheduled lead
- * doesn't downgrade it back to manual_review.
+ * `scheduled` outranks all other statuses. `contacted` and `quoted` represent
+ * admin-initiated progression that outranks initial capture statuses.
  */
 const STATUS_RANK: Record<string, number> = {
+  out_of_area: 0,
   new: 0,
   manual_review: 0,
-  scheduled: 1,
+  contacted: 1,
+  quoted: 2,
+  scheduled: 3,
 };
 
 function shouldAdvanceStatus(currentStatus: string, nextStatus: LeadStatus): boolean {
@@ -188,6 +209,100 @@ export async function recordLeadActivity(params: {
   }
 }
 
+// ─── Admin mutations ────────────────────────────────────────────────────────
+
+const ADMIN_VALID_STATUSES = ["new", "manual_review", "scheduled", "out_of_area", "contacted", "quoted", "lost"] as const;
+
+/**
+ * Manually updates a lead's status. Only callable by admins via PATCH /api/admin/leads/:id.
+ * - "lost" and "new" are always settable (terminal / reset).
+ * - All other statuses must be >= current rank (no unintentional downgrades).
+ * - "lost" requires a non-empty lostReason.
+ */
+export async function updateLeadStatus(
+  leadId: string,
+  status: string,
+  lostReason?: string | null,
+  actorId?: string | null,
+): Promise<Lead | null> {
+  if (!ADMIN_VALID_STATUSES.includes(status as any)) {
+    throw new Error(`Invalid status: ${status}`);
+  }
+  if (status === "lost" && !lostReason?.trim()) {
+    throw new Error("lost_reason is required when status is 'lost'");
+  }
+
+  const { data: existing } = await db.from("leads").select("*").eq("id", leadId).maybeSingle();
+  if (!existing) return null;
+
+  // "lost" (explicit terminal) and "new" (admin reset) bypass the rank check.
+  if (status !== "lost" && status !== "new") {
+    const currentRank = STATUS_RANK[existing.status] ?? 0;
+    const nextRank = STATUS_RANK[status] ?? 0;
+    if (nextRank < currentRank) {
+      throw new Error(`Cannot move lead from '${existing.status}' to '${status}' (would decrease rank)`);
+    }
+  }
+
+  const updates: Record<string, unknown> = { status };
+  if (status === "lost") updates.lost_reason = lostReason!.trim();
+
+  const { data, error } = await db.from("leads").update(updates).eq("id", leadId).select("*").single();
+  if (error || !data) {
+    console.error("[leadService] updateLeadStatus failed:", error?.message);
+    return null;
+  }
+
+  await recordLeadActivity({
+    leadId,
+    activityType: "status_changed",
+    actor: "admin",
+    actorId,
+    payload: {
+      from: existing.status,
+      to: status,
+      ...(status === "lost" ? { lost_reason: lostReason!.trim() } : {}),
+    },
+  });
+
+  return data as Lead;
+}
+
+/**
+ * Adds a staff-written note to a lead. Inserts both a lead_notes row and a
+ * lead_activities row so the timeline reflects when notes were added.
+ */
+export async function addLeadNote(
+  leadId: string,
+  body: string,
+  authorId?: string | null,
+): Promise<LeadNote | null> {
+  if (!body?.trim()) throw new Error("Note body cannot be empty");
+
+  const { data: note, error } = await db
+    .from("lead_notes")
+    .insert({ lead_id: leadId, author_id: authorId ?? null, body: body.trim() })
+    .select("*")
+    .single();
+
+  if (error || !note) {
+    console.error("[leadService] addLeadNote insert failed:", error?.message);
+    return null;
+  }
+
+  await recordLeadActivity({
+    leadId,
+    activityType: "note_added",
+    actor: "admin",
+    actorId: authorId ?? null,
+    payload: { body: body.trim(), author_id: authorId ?? null },
+  });
+
+  return note as LeadNote;
+}
+
+// ─── Customer-facing upsert functions ──────────────────────────────────────
+
 export interface UpsertLeadFromQuoteParams {
   address: string;
   city?: string | null;
@@ -201,7 +316,7 @@ export interface UpsertLeadFromQuoteParams {
 }
 
 /**
- * Creates or updates a lead for a successful instant quote.
+ * Creates or updates a lead for a successful instant quote from a covered ZIP.
  * Dedups on address_hash — a repeat quote for the same address updates
  * `last_seen_at` and logs a `quote_requested` activity instead of creating
  * a duplicate lead.
@@ -499,9 +614,209 @@ export async function upsertLeadFromScheduleRequest(params: UpsertLeadFromSchedu
   return data as Lead;
 }
 
+export interface UpsertLeadFromOutOfAreaParams {
+  address: string;
+  city?: string | null;
+  state?: string | null;
+  zip: string;
+  acreage?: number | null;
+  county?: string | null;
+  outOfAreaReason: string;
+}
+
 /**
- * Fetches a single lead with its full activity timeline and any linked
- * records (profile/property/schedule request/subscription) for the admin
+ * Creates or updates a lead for a quote where the ZIP is not in our service area.
+ * Records the demand signal in the lead itself. If an existing lead is found
+ * (same address hash), updates last_seen_at without changing status — the
+ * existing status may represent more context (e.g. a previous schedule request).
+ */
+export async function upsertLeadFromOutOfArea(params: UpsertLeadFromOutOfAreaParams): Promise<Lead | null> {
+  const addressHash = buildLeadAddressHash(params.address, params.city, params.state, params.zip);
+  const existing = await findExistingLead({ addressHash });
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const updates: Record<string, unknown> = {
+      last_seen_at: now,
+      out_of_area_reason: params.outOfAreaReason,
+      service_zip: params.zip,
+      service_state: params.state ?? null,
+      service_area_status: "not_covered",
+    };
+    if (params.acreage != null && existing.acreage == null) updates.acreage = params.acreage;
+
+    const { data, error } = await db
+      .from("leads")
+      .update(updates)
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      console.error("[leadService] upsertLeadFromOutOfArea update failed:", error?.message);
+      return existing;
+    }
+
+    await recordLeadActivity({
+      leadId: existing.id,
+      activityType: "quote_requested",
+      payload: {
+        address: params.address,
+        zip: params.zip,
+        acreage: params.acreage ?? null,
+        out_of_area: true,
+        reason: params.outOfAreaReason,
+      },
+    });
+
+    return data as Lead;
+  }
+
+  const { data, error } = await db
+    .from("leads")
+    .insert({
+      source: "quote",
+      status: "out_of_area",
+      address_hash: addressHash,
+      address: params.address,
+      zip: params.zip,
+      acreage: params.acreage ?? null,
+      service_zip: params.zip,
+      service_state: params.state ?? null,
+      service_area_status: "not_covered",
+      out_of_area_reason: params.outOfAreaReason,
+      first_seen_at: now,
+      last_seen_at: now,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("[leadService] upsertLeadFromOutOfArea insert failed:", error?.message);
+    return null;
+  }
+
+  await recordLeadActivity({
+    leadId: data.id,
+    activityType: "created",
+    payload: {
+      source: "quote",
+      address: params.address,
+      zip: params.zip,
+      acreage: params.acreage ?? null,
+      out_of_area: true,
+      reason: params.outOfAreaReason,
+    },
+  });
+
+  return data as Lead;
+}
+
+export interface UpsertLeadFromWaitlistParams {
+  email: string;
+  name?: string | null;
+  phone?: string | null;
+}
+
+/**
+ * Creates or updates a lead for a waitlist signup. Deduped by email then phone
+ * (no address available from the waitlist form). Status out_of_area signals
+ * they want service in an area we don't yet cover.
+ */
+export async function upsertLeadFromWaitlist(params: UpsertLeadFromWaitlistParams): Promise<Lead | null> {
+  const normalizedEmail = normalizeEmail(params.email);
+  const normalizedPhone = params.phone ? normalizePhone(params.phone) : null;
+
+  const existing = await findExistingLead({
+    email: normalizedEmail,
+    phone: normalizedPhone || undefined,
+  });
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const updates: Record<string, unknown> = { last_seen_at: now };
+    if (!existing.name && params.name) updates.name = params.name.trim();
+    if (!existing.phone && normalizedPhone) updates.phone = normalizedPhone;
+
+    const { data, error } = await db
+      .from("leads")
+      .update(updates)
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      console.error("[leadService] upsertLeadFromWaitlist update failed:", error?.message);
+      return existing;
+    }
+
+    await recordLeadActivity({
+      leadId: existing.id,
+      activityType: "merged",
+      payload: { source: "waitlist", email: normalizedEmail, matched_on: "email" },
+    });
+
+    return data as Lead;
+  }
+
+  const { data, error } = await db
+    .from("leads")
+    .insert({
+      source: "waitlist",
+      status: "out_of_area",
+      email: normalizedEmail,
+      name: params.name?.trim() ?? null,
+      phone: normalizedPhone ?? null,
+      first_seen_at: now,
+      last_seen_at: now,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("[leadService] upsertLeadFromWaitlist insert failed:", error?.message);
+    return null;
+  }
+
+  await recordLeadActivity({
+    leadId: data.id,
+    activityType: "created",
+    payload: { source: "waitlist", email: normalizedEmail },
+  });
+
+  return data as Lead;
+}
+
+/**
+ * Records a demand event for a ZIP not in our service area. Used to surface
+ * which uncovered areas have the most interest — visible on the admin
+ * Service Areas page via GET /api/admin/service-area-demand.
+ */
+export async function recordServiceAreaDemandEvent(params: {
+  zip: string;
+  eventType: "out_of_area_quote" | "waitlist_signup";
+  leadId?: string | null;
+  email?: string | null;
+  name?: string | null;
+}): Promise<void> {
+  const { error } = await db.from("service_area_demand_events").insert({
+    zip: params.zip,
+    event_type: params.eventType,
+    lead_id: params.leadId ?? null,
+    email: params.email ?? null,
+    name: params.name ?? null,
+  });
+
+  if (error) {
+    console.error("[leadService] recordServiceAreaDemandEvent failed:", error.message);
+  }
+}
+
+// ─── Read functions ─────────────────────────────────────────────────────────
+
+/**
+ * Fetches a single lead with its full activity timeline, staff notes, and any
+ * linked records (profile/property/schedule request/subscription) for the admin
  * lead detail view. Returns null if the lead doesn't exist.
  */
 export async function getLead(id: string): Promise<LeadDetail | null> {
@@ -513,6 +828,12 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
     .select("*")
     .eq("lead_id", id)
     .order("created_at", { ascending: true });
+
+  const { data: notes } = await db
+    .from("lead_notes")
+    .select("*")
+    .eq("lead_id", id)
+    .order("created_at", { ascending: false });
 
   const linked: LeadDetail["linked"] = {
     profile: null,
@@ -541,6 +862,7 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
   return {
     lead: lead as Lead,
     activities: (activities ?? []) as LeadActivity[],
+    notes: (notes ?? []) as LeadNote[],
     linked,
   };
 }
@@ -572,7 +894,15 @@ export async function listLeads(params: ListLeadsParams = {}): Promise<ListLeads
   if (term) {
     const like = `%${term}%`;
     query = query.or(
-      [`name.ilike.${like}`, `email.ilike.${like}`, `phone.ilike.${like}`, `address.ilike.${like}`].join(","),
+      [
+        `name.ilike.${like}`,
+        `email.ilike.${like}`,
+        `phone.ilike.${like}`,
+        `address.ilike.${like}`,
+        `zip.ilike.${like}`,
+        `service_county.ilike.${like}`,
+        `service_state.ilike.${like}`,
+      ].join(","),
     );
   }
 

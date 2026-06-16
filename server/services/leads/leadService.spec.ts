@@ -12,6 +12,10 @@ import {
   upsertLeadFromQuote,
   upsertLeadFromManualReview,
   upsertLeadFromScheduleRequest,
+  upsertLeadFromOutOfArea,
+  upsertLeadFromWaitlist,
+  updateLeadStatus,
+  addLeadNote,
   getLead,
   listLeads,
   normalizeEmail,
@@ -247,7 +251,7 @@ describe("listLeads (admin leads list)", () => {
 });
 
 describe("getLead (admin lead detail)", () => {
-  it("returns the lead, its activity timeline, and null linked records when none are set", async () => {
+  it("returns the lead, its activity timeline, empty notes, and null linked records", async () => {
     const created = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
     await upsertLeadFromManualReview({ ...ADDRESS_A, manualReviewReason: "Follow up needed" });
 
@@ -256,6 +260,7 @@ describe("getLead (admin lead detail)", () => {
     expect(detail).not.toBeNull();
     expect(detail!.lead.id).toBe(created!.id);
     expect(detail!.activities.map((a) => a.activity_type)).toEqual(["created", "manual_review"]);
+    expect(detail!.notes).toEqual([]);
     expect(detail!.linked).toEqual({
       profile: null,
       property: null,
@@ -267,5 +272,205 @@ describe("getLead (admin lead detail)", () => {
   it("returns null for an unknown lead id", async () => {
     const detail = await getLead("does-not-exist");
     expect(detail).toBeNull();
+  });
+
+  it("includes notes from addLeadNote in the detail response", async () => {
+    const lead = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+    await addLeadNote(lead!.id, "First note", null);
+    await addLeadNote(lead!.id, "Second note", null);
+
+    const detail = await getLead(lead!.id);
+    expect(detail!.notes).toHaveLength(2);
+    const bodies = detail!.notes.map((n) => n.body).sort();
+    expect(bodies).toEqual(["First note", "Second note"]);
+  });
+});
+
+describe("updateLeadStatus (admin status mutation)", () => {
+  it("changes status and writes a status_changed activity", async () => {
+    const lead = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+    expect(lead!.status).toBe("new");
+
+    const updated = await updateLeadStatus(lead!.id, "contacted", null, null);
+
+    expect(updated).not.toBeNull();
+    expect(updated!.status).toBe("contacted");
+    expect(fakeDb.tables.leads[0].status).toBe("contacted");
+
+    const activities = fakeDb.tables.lead_activities.filter(
+      (a) => a.lead_id === lead!.id && a.activity_type === "status_changed",
+    );
+    expect(activities).toHaveLength(1);
+    expect(activities[0].payload).toMatchObject({ from: "new", to: "contacted" });
+  });
+
+  it("requires lost_reason when setting status to lost", async () => {
+    const lead = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+    await expect(updateLeadStatus(lead!.id, "lost", null, null)).rejects.toThrow("lost_reason is required");
+    await expect(updateLeadStatus(lead!.id, "lost", "  ", null)).rejects.toThrow("lost_reason is required");
+  });
+
+  it("sets lost_reason on the lead when status is lost", async () => {
+    const lead = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+    const updated = await updateLeadStatus(lead!.id, "lost", "Not interested", null);
+
+    expect(updated!.status).toBe("lost");
+    expect(updated!.lost_reason).toBe("Not interested");
+    const activity = fakeDb.tables.lead_activities.find(
+      (a) => a.lead_id === lead!.id && a.activity_type === "status_changed",
+    );
+    expect(activity!.payload).toMatchObject({ from: "new", to: "lost", lost_reason: "Not interested" });
+  });
+
+  it("rejects invalid status values", async () => {
+    const lead = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+    await expect(updateLeadStatus(lead!.id, "converted", null, null)).rejects.toThrow("Invalid status");
+    await expect(updateLeadStatus(lead!.id, "unknown_status", null, null)).rejects.toThrow("Invalid status");
+  });
+
+  it("prevents rank downgrade (e.g. scheduled → contacted)", async () => {
+    const lead = await upsertLeadFromScheduleRequest({
+      scheduleRequestId: "sched-status-1",
+      name: "Jane",
+      email: "jane@test.com",
+      phone: "7145550000",
+      ...ADDRESS_A,
+    });
+    expect(lead!.status).toBe("scheduled");
+
+    await expect(updateLeadStatus(lead!.id, "contacted", null, null)).rejects.toThrow("would decrease rank");
+  });
+
+  it("always allows setting status to new (admin reset) regardless of current rank", async () => {
+    const lead = await upsertLeadFromScheduleRequest({
+      scheduleRequestId: "sched-status-2",
+      name: "Jane",
+      email: "jane2@test.com",
+      phone: "7145550001",
+      ...ADDRESS_A,
+    });
+    expect(lead!.status).toBe("scheduled");
+
+    const reset = await updateLeadStatus(lead!.id, "new", null, null);
+    expect(reset!.status).toBe("new");
+  });
+
+  it("always allows setting status to lost regardless of current rank", async () => {
+    const lead = await upsertLeadFromScheduleRequest({
+      scheduleRequestId: "sched-status-3",
+      name: "Jane",
+      email: "jane3@test.com",
+      phone: "7145550002",
+      ...ADDRESS_B,
+    });
+    expect(lead!.status).toBe("scheduled");
+
+    const lost = await updateLeadStatus(lead!.id, "lost", "No response after 3 attempts", null);
+    expect(lost!.status).toBe("lost");
+  });
+
+  it("returns null for a non-existent lead id", async () => {
+    const result = await updateLeadStatus("does-not-exist", "contacted", null, null);
+    expect(result).toBeNull();
+  });
+});
+
+describe("addLeadNote", () => {
+  it("inserts a lead_notes row and a note_added activity", async () => {
+    const lead = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+
+    const note = await addLeadNote(lead!.id, "Called and left voicemail", "admin-user-id");
+
+    expect(note).not.toBeNull();
+    expect(note!.lead_id).toBe(lead!.id);
+    expect(note!.body).toBe("Called and left voicemail");
+    expect(note!.author_id).toBe("admin-user-id");
+
+    expect(fakeDb.tables.lead_notes).toHaveLength(1);
+
+    const activity = fakeDb.tables.lead_activities.find(
+      (a) => a.lead_id === lead!.id && a.activity_type === "note_added",
+    );
+    expect(activity).toBeTruthy();
+    expect(activity!.payload).toMatchObject({ body: "Called and left voicemail" });
+  });
+
+  it("rejects empty note body", async () => {
+    const lead = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+    await expect(addLeadNote(lead!.id, "", null)).rejects.toThrow("cannot be empty");
+    await expect(addLeadNote(lead!.id, "  ", null)).rejects.toThrow("cannot be empty");
+  });
+
+  it("trims whitespace from the note body before storing", async () => {
+    const lead = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+    const note = await addLeadNote(lead!.id, "  trimmed  ", null);
+    expect(note!.body).toBe("trimmed");
+  });
+});
+
+describe("upsertLeadFromOutOfArea", () => {
+  it("creates a new lead with source=quote, status=out_of_area, and service area columns set", async () => {
+    const lead = await upsertLeadFromOutOfArea({
+      ...ADDRESS_A,
+      acreage: 1.5,
+      outOfAreaReason: "ZIP not in service area",
+    });
+
+    expect(lead).not.toBeNull();
+    expect(lead!.status).toBe("out_of_area");
+    expect(lead!.source).toBe("quote");
+    expect(lead!.out_of_area_reason).toBe("ZIP not in service area");
+    expect(lead!.service_area_status).toBe("not_covered");
+    expect(lead!.service_zip).toBe(ADDRESS_A.zip);
+
+    const activity = fakeDb.tables.lead_activities.find((a) => a.activity_type === "created");
+    expect(activity).toBeTruthy();
+    expect(activity!.payload).toMatchObject({ out_of_area: true });
+  });
+
+  it("merges into an existing lead without changing its status", async () => {
+    const existing = await upsertLeadFromQuote({ ...ADDRESS_A, acreage: 1.5, county: "orange" });
+    expect(existing!.status).toBe("new");
+
+    const merged = await upsertLeadFromOutOfArea({
+      ...ADDRESS_A,
+      acreage: 1.5,
+      outOfAreaReason: "ZIP not in service area",
+    });
+
+    expect(merged!.id).toBe(existing!.id);
+    expect(merged!.status).toBe("new"); // does not downgrade
+    expect(merged!.service_area_status).toBe("not_covered");
+    expect(fakeDb.tables.leads).toHaveLength(1);
+  });
+});
+
+describe("upsertLeadFromWaitlist", () => {
+  it("creates a new lead with source=waitlist, status=out_of_area", async () => {
+    const lead = await upsertLeadFromWaitlist({ email: "bob@example.com", name: "Bob", phone: null });
+
+    expect(lead).not.toBeNull();
+    expect(lead!.source).toBe("waitlist");
+    expect(lead!.status).toBe("out_of_area");
+    expect(lead!.email).toBe("bob@example.com");
+    expect(lead!.name).toBe("Bob");
+
+    const activity = fakeDb.tables.lead_activities.find((a) => a.activity_type === "created");
+    expect(activity).toBeTruthy();
+  });
+
+  it("merges into an existing lead matched by email", async () => {
+    const first = await upsertLeadFromScheduleRequest({
+      scheduleRequestId: "sched-wl-1",
+      name: "Bob",
+      email: "BOB@example.com",
+      phone: "7145550099",
+      ...ADDRESS_A,
+    });
+
+    const merged = await upsertLeadFromWaitlist({ email: "bob@example.com", name: "Bob", phone: null });
+
+    expect(merged!.id).toBe(first!.id);
+    expect(fakeDb.tables.leads).toHaveLength(1);
   });
 });

@@ -3,10 +3,18 @@ import SectionHeading from "@/components/common/SectionHeading";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle2, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { adminApi } from "@/lib/adminApi";
 import { AdminEmptyState, AdminErrorState, AdminLoadingState } from "@/components/admin/AdminState";
+
+interface DemandSummary {
+  zip: string;
+  total: number;
+  out_of_area_quote: number;
+  waitlist_signup: number;
+  last_event_at: string;
+}
 
 interface ServiceArea {
   id: string;
@@ -28,8 +36,22 @@ const ServiceAreas = () => {
   const [newState, setNewState] = useState("CA");
   const [adding, setAdding] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [demand, setDemand] = useState<DemandSummary[]>([]);
+  const [demandLoading, setDemandLoading] = useState(false);
 
-  useEffect(() => { fetchAreas(); }, []);
+  useEffect(() => { fetchAreas(); fetchDemand(); }, []);
+
+  const fetchDemand = async () => {
+    setDemandLoading(true);
+    try {
+      const res = await adminApi("/api/admin/service-area-demand");
+      setDemand(res.demand ?? []);
+    } catch {
+      // demand is non-critical — fail silently
+    } finally {
+      setDemandLoading(false);
+    }
+  };
 
   const fetchAreas = async () => {
     setLoading(true);
@@ -244,6 +266,48 @@ const ServiceAreas = () => {
           ))}
         </div>
       )}
+
+      {/* Demand Intelligence */}
+      <div className="rounded-2xl border border-border/70 bg-card/95 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/40">
+          <div>
+            <p className="font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              Expansion Demand
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              ZIPs outside your service area with the most quote and waitlist activity.
+            </p>
+          </div>
+          {demandLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+        </div>
+        {demandLoading ? (
+          <div className="p-6">
+            <AdminLoadingState label="Loading demand data..." />
+          </div>
+        ) : demand.length === 0 ? (
+          <div className="px-6 py-8 text-sm text-muted-foreground italic text-center">
+            No out-of-area demand recorded yet. Demand events are logged when prospects quote or join the waitlist for uncovered ZIPs.
+          </div>
+        ) : (
+          <div>
+            <div className="grid grid-cols-4 px-6 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b border-border/30 bg-muted/20">
+              <span>ZIP</span>
+              <span className="text-center">Total</span>
+              <span className="text-center">Quotes</span>
+              <span className="text-center">Waitlist</span>
+            </div>
+            {demand.map((d) => (
+              <div key={d.zip} className="grid grid-cols-4 items-center px-6 py-3 border-b border-border/20 last:border-0 hover:bg-muted/10">
+                <span className="font-mono font-semibold text-sm">{d.zip}</span>
+                <span className="text-center font-bold text-foreground">{d.total}</span>
+                <span className="text-center text-sm text-muted-foreground">{d.out_of_area_quote}</span>
+                <span className="text-center text-sm text-muted-foreground">{d.waitlist_signup}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

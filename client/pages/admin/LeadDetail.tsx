@@ -1,31 +1,60 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import SectionHeading from "@/components/common/SectionHeading";
 import { AdminOwnershipBadge } from "@/components/admin/AdminOwnershipBadge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Loader2, Mail, Phone, MapPin, Ruler, Calendar,
   User, Home, ClipboardList, CreditCard, Clock, AlertTriangle,
+  StickyNote, ChevronDown,
 } from "lucide-react";
-import { useAdminLeadDetail, type AdminLeadActivity } from "@/hooks/admin/useAdminLeads";
+import {
+  useAdminLeadDetail,
+  patchLeadStatus,
+  postLeadNote,
+  type AdminLeadActivity,
+  type AdminLeadNote,
+} from "@/hooks/admin/useAdminLeads";
+
+const VALID_STATUSES = [
+  { value: "new", label: "New" },
+  { value: "out_of_area", label: "Out of Area" },
+  { value: "contacted", label: "Contacted" },
+  { value: "quoted", label: "Quoted" },
+  { value: "manual_review", label: "Manual Review" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "lost", label: "Lost" },
+];
 
 const STATUS_BADGE: Record<string, string> = {
   new: "bg-blue-100 text-blue-800",
   manual_review: "bg-amber-100 text-amber-800",
   scheduled: "bg-green-100 text-green-800",
+  out_of_area: "bg-slate-100 text-slate-700",
+  contacted: "bg-indigo-100 text-indigo-800",
+  quoted: "bg-violet-100 text-violet-800",
+  lost: "bg-red-100 text-red-700",
 };
 
 const STATUS_LABEL: Record<string, string> = {
   new: "New",
   manual_review: "Manual Review",
   scheduled: "Scheduled",
+  out_of_area: "Out of Area",
+  contacted: "Contacted",
+  quoted: "Quoted",
+  lost: "Lost",
 };
 
 const SOURCE_LABEL: Record<string, string> = {
   quote: "Quote",
   manual_review: "Manual Review",
   schedule_request: "Schedule Request",
+  waitlist: "Waitlist",
 };
 
 const ACTIVITY_LABEL: Record<string, string> = {
@@ -34,6 +63,8 @@ const ACTIVITY_LABEL: Record<string, string> = {
   manual_review: "Manual review",
   schedule_request_received: "Schedule request received",
   merged: "Merged",
+  status_changed: "Status changed",
+  note_added: "Note added",
 };
 
 function formatDateTime(iso: string | null | undefined): string {
@@ -46,6 +77,21 @@ function formatDateTime(iso: string | null | undefined): string {
       hour: "numeric",
       minute: "2-digit",
     });
+  } catch {
+    return iso;
+  }
+}
+
+function formatRelative(iso: string): string {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
   } catch {
     return iso;
   }
@@ -136,10 +182,33 @@ function ActivityRow({ activity }: { activity: AdminLeadActivity }) {
   );
 }
 
+function NoteCard({ note }: { note: AdminLeadNote }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-card/80 p-4">
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Admin note</span>
+        <span className="text-xs text-muted-foreground" title={note.created_at}>{formatRelative(note.created_at)}</span>
+      </div>
+      <p className="text-sm text-foreground whitespace-pre-wrap">{note.body}</p>
+    </div>
+  );
+}
+
 const AdminLeadDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { detail, isLoading, error } = useAdminLeadDetail(id);
+  const { detail, isLoading, error, refetch } = useAdminLeadDetail(id);
+
+  // Status editor state
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [lostReason, setLostReason] = useState("");
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  // Note composer state
+  const [noteBody, setNoteBody] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -163,7 +232,46 @@ const AdminLeadDetailPage = () => {
     );
   }
 
-  const { lead, activities, linked } = detail;
+  const { lead, activities, notes, linked } = detail;
+
+  const currentStatus = selectedStatus || lead.status;
+
+  async function handleSaveStatus() {
+    if (!id || !selectedStatus || selectedStatus === lead.status) return;
+    if (selectedStatus === "lost" && !lostReason.trim()) {
+      setStatusError("Lost reason is required.");
+      return;
+    }
+    setSavingStatus(true);
+    setStatusError(null);
+    try {
+      await patchLeadStatus(id, selectedStatus, selectedStatus === "lost" ? lostReason : undefined);
+      await refetch();
+      setSelectedStatus("");
+      setLostReason("");
+    } catch (err: any) {
+      setStatusError(err.message ?? "Failed to save status.");
+    } finally {
+      setSavingStatus(false);
+    }
+  }
+
+  async function handleAddNote() {
+    if (!id || !noteBody.trim()) return;
+    setSavingNote(true);
+    setNoteError(null);
+    try {
+      await postLeadNote(id, noteBody);
+      setNoteBody("");
+      await refetch();
+    } catch (err: any) {
+      setNoteError(err.message ?? "Failed to add note.");
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  const statusChanged = selectedStatus && selectedStatus !== lead.status;
 
   return (
     <div className="grid gap-8">
@@ -260,8 +368,118 @@ const AdminLeadDetailPage = () => {
               </div>
             </div>
           )}
+
+          {lead.out_of_area_reason && (
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <MapPin className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Out of Area</p>
+                <p className="text-sm text-slate-700 mt-0.5">{lead.out_of_area_reason}</p>
+              </div>
+            </div>
+          )}
+
+          {lead.lost_reason && (
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3">
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-red-700 uppercase tracking-wide">Lost Reason</p>
+                <p className="text-sm text-red-800 mt-0.5">{lead.lost_reason}</p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Status editor */}
+      <Card className="rounded-2xl border-border/60 bg-card/95">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm font-bold">
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            Update Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Status</label>
+              <select
+                className="h-10 w-full rounded-xl border border-border/60 bg-background px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                value={currentStatus}
+                onChange={(e) => {
+                  setSelectedStatus(e.target.value);
+                  if (e.target.value !== "lost") setLostReason("");
+                  setStatusError(null);
+                }}
+              >
+                {VALID_STATUSES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+            {statusChanged && (
+              <Button
+                className="rounded-xl h-10 shrink-0"
+                onClick={handleSaveStatus}
+                disabled={savingStatus}
+              >
+                {savingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Save Status
+              </Button>
+            )}
+          </div>
+          {currentStatus === "lost" && (
+            <div className="mt-3">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Lost Reason <span className="text-destructive">*</span>
+              </label>
+              <Input
+                placeholder="Why is this lead lost? (required)"
+                value={lostReason}
+                onChange={(e) => { setLostReason(e.target.value); setStatusError(null); }}
+                className="rounded-xl border-border/60"
+              />
+            </div>
+          )}
+          {statusError && (
+            <p className="text-xs text-destructive mt-2">{statusError}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Notes section */}
+      <div>
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+          <StickyNote className="h-3.5 w-3.5" />
+          Staff Notes {notes.length > 0 && <span className="font-normal normal-case tracking-normal">({notes.length})</span>}
+        </h3>
+
+        <div className="space-y-3 mb-4">
+          {notes.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">No notes yet.</p>
+          ) : (
+            notes.map((note) => <NoteCard key={note.id} note={note} />)
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-border/60 bg-card/95 p-4 flex flex-col gap-3">
+          <Textarea
+            placeholder="Add a note about this lead…"
+            value={noteBody}
+            onChange={(e) => { setNoteBody(e.target.value); setNoteError(null); }}
+            className="rounded-xl border-border/60 resize-none min-h-[80px] text-sm"
+          />
+          {noteError && <p className="text-xs text-destructive">{noteError}</p>}
+          <Button
+            className="self-end rounded-xl h-9 text-sm"
+            disabled={!noteBody.trim() || savingNote}
+            onClick={handleAddNote}
+          >
+            {savingNote ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Add Note
+          </Button>
+        </div>
+      </div>
 
       {/* Linked entities */}
       <div>

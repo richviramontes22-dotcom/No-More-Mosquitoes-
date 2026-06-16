@@ -1,5 +1,6 @@
 import { Router, RequestHandler } from "express";
 import { supabase } from "../lib/supabase";
+import { upsertLeadFromWaitlist } from "../services/leads/leadService";
 
 const router = Router();
 
@@ -51,6 +52,15 @@ const handleWaitlistSignup: RequestHandler = async (req, res) => {
       success: true,
       message: "Successfully added to waitlist",
       data: data?.[0]
+    });
+
+    // Capture as a CRM lead — best-effort, never blocks the waitlist response.
+    void upsertLeadFromWaitlist({
+      email: normalizedEmail,
+      name: name ? String(name).trim() : null,
+      phone: phoneNumber ? String(phoneNumber).trim() : null,
+    }).catch((err) => {
+      console.error("[waitlist] lead capture failed:", err);
     });
   } catch (err: any) {
     console.error("[Waitlist] Error:", err);
