@@ -370,13 +370,13 @@ let sql = `-- Service area seed: Orange, Riverside, San Diego, and Los Angeles c
 sql += `-- Generated: 2026-06-16\n`;
 sql += `-- Source: zipcodestogo.com and zip-codes.com county ZIP code lists\n`;
 sql += `-- Apply via Supabase SQL Editor on project qamfxqbtvwwlzlmqrqbh\n\n`;
-sql += `INSERT INTO service_areas (zip, city, state, is_active)\nVALUES\n`;
+sql += `INSERT INTO service_areas (zip, city, state, is_active, name)\nVALUES\n`;
 
 const allRows = [];
 for (const { county, zips } of sections) {
   allRows.push(`  -- ${county}`);
   for (const [zip, city] of zips) {
-    allRows.push(`  ('${zip}', '${escape(city)}', 'CA', true)`);
+    allRows.push(`  ('${zip}', '${escape(city)}', 'CA', true, '${escape(city)}')`);
   }
 }
 sql += allRows.join(',\n') + '\nON CONFLICT DO NOTHING;\n';
