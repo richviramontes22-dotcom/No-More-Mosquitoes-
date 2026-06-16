@@ -34,6 +34,7 @@ const SOURCE_LABEL: Record<string, string> = {
   quote: "Quote",
   manual_review: "Manual Review",
   schedule_request: "Schedule Request",
+  waitlist: "Waitlist",
 };
 
 function formatDateTime(iso: string | null): string {
