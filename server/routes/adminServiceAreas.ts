@@ -6,6 +6,8 @@ import { requireAdmin } from "../middleware/requireAdmin";
 const router = Router();
 const db = supabaseAdmin ?? supabase;
 
+const AREA_FIELDS = "id, zip, city, state, county, capacity, is_active, updated_at";
+
 const normalizeZip = (value: unknown) => String(value || "").trim();
 
 const normalizeCapacity = (value: unknown) => {
@@ -18,7 +20,7 @@ const normalizeCapacity = (value: unknown) => {
 router.get("/service-areas", requireAdmin, async (_req, res) => {
   const { data, error } = await db
     .from("service_areas")
-    .select("id, zip, city, state, capacity, is_active, updated_at")
+    .select(AREA_FIELDS)
     .order("zip", { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
@@ -36,6 +38,7 @@ router.post("/service-areas", requireAdmin, async (req, res) => {
     zip,
     city: req.body.city?.trim() || null,
     state: req.body.state?.trim() || null,
+    county: req.body.county?.trim() || null,
     capacity: normalizeCapacity(req.body.capacity),
     is_active: req.body.is_active ?? true,
     updated_at: new Date().toISOString(),
@@ -53,13 +56,33 @@ router.post("/service-areas", requireAdmin, async (req, res) => {
     ? db.from("service_areas").update(payload).eq("id", existing.data.id)
     : db.from("service_areas").insert(payload);
 
-  const { data, error } = await query.select().single();
+  const { data, error } = await query.select(AREA_FIELDS).single();
 
   if (error) return res.status(500).json({ error: error.message });
   res.status(existing.data ? 200 : 201).json({ area: data });
 });
 
-/** PATCH /api/admin/service-areas/:id - update ZIP, city, state, capacity, active flag */
+/** POST /api/admin/service-areas/batch-update - bulk enable/disable multiple ZIPs */
+router.post("/service-areas/batch-update", requireAdmin, async (req, res) => {
+  const { ids, is_active } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "ids array is required" });
+  }
+  if (typeof is_active !== "boolean") {
+    return res.status(400).json({ error: "is_active boolean is required" });
+  }
+
+  const { data, error } = await db
+    .from("service_areas")
+    .update({ is_active, updated_at: new Date().toISOString() })
+    .in("id", ids)
+    .select(AREA_FIELDS);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ areas: data || [] });
+});
+
+/** PATCH /api/admin/service-areas/:id - update ZIP, city, state, county, capacity, active flag */
 router.patch("/service-areas/:id", requireAdmin, async (req, res) => {
   const update: Record<string, any> = {};
 
@@ -72,6 +95,7 @@ router.patch("/service-areas/:id", requireAdmin, async (req, res) => {
   }
   if (req.body.city !== undefined) update.city = req.body.city?.trim() || null;
   if (req.body.state !== undefined) update.state = req.body.state?.trim() || null;
+  if (req.body.county !== undefined) update.county = req.body.county?.trim() || null;
   if (req.body.capacity !== undefined) update.capacity = normalizeCapacity(req.body.capacity);
   if (req.body.is_active !== undefined) update.is_active = Boolean(req.body.is_active);
   update.updated_at = new Date().toISOString();
@@ -80,7 +104,7 @@ router.patch("/service-areas/:id", requireAdmin, async (req, res) => {
     .from("service_areas")
     .update(update)
     .eq("id", req.params.id)
-    .select("id, zip, city, state, capacity, is_active, updated_at")
+    .select(AREA_FIELDS)
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
@@ -93,7 +117,7 @@ router.delete("/service-areas/:id", requireAdmin, async (req, res) => {
     .from("service_areas")
     .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq("id", req.params.id)
-    .select("id, zip, city, state, capacity, is_active, updated_at")
+    .select(AREA_FIELDS)
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
