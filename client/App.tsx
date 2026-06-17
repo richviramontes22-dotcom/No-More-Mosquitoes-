@@ -18,6 +18,7 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 import { LogoProvider } from "@/contexts/LogoContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ScheduleDialogProvider } from "@/components/schedule/ScheduleDialogProvider";
+import { captureReferralCodeFromUrl } from "@/lib/referralCapture";
 import { ScrollToTop } from "@/components/common/ScrollToTop";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -25,6 +26,7 @@ import Licenses from "./pages/Licenses";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Guarantee from "./pages/Guarantee";
+import PublicLegalDocument from "./pages/legal/PublicLegalDocument";
 import Pricing from "./pages/Pricing";
 import Services from "./pages/Services";
 import OurStory from "./pages/OurStory";
@@ -37,6 +39,7 @@ import Contact from "./pages/Contact";
 import Safety from "./pages/Safety";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
+import LegalAcceptance from "./pages/LegalAcceptance";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
@@ -66,6 +69,7 @@ import AdminContent from "./pages/admin/Content";
 import AdminPricing from "./pages/admin/Pricing";
 import AdminWebsiteManager from "./pages/admin/WebsiteManager";
 import AdminPromos from "./pages/admin/Promos";
+import AdminReferrals from "./pages/admin/Referrals";
 import AdminServiceAreas from "./pages/admin/ServiceAreas";
 import AdminReports from "./pages/admin/Reports";
 import AdminRevenue from "./pages/admin/Revenue";
@@ -79,6 +83,7 @@ import AdminEmployeeTracking from "./pages/admin/EmployeeTracking";
 import AdminRoutePlanning from "./pages/admin/RoutePlanning";
 import AdminEmployees from "./pages/admin/Employees";
 import AdminLegalCompliance from "./pages/admin/LegalCompliance";
+import AdminLegal from "./pages/admin/AdminLegal";
 import AdminWorkforce from "./pages/admin/Workforce";
 import AdminDebug from "./pages/admin/Debug";
 import AdminEmailManagement from "./pages/admin/EmailManagement";
@@ -119,6 +124,10 @@ import { stripePromise } from "@/lib/stripe";
 
 // Initialize Sentry as early as possible (no-op if not configured)
 initSentry();
+
+// Capture a `?ref=CODE` referral link before any routing happens — runs once
+// per fresh page load, which is exactly when a referral link would be hit.
+captureReferralCodeFromUrl();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -197,9 +206,11 @@ const App = () => (
                       <Route path="content" element={<AdminContent />} />
                       <Route path="pricing" element={<AdminPricing />} />
                       <Route path="promos" element={<AdminPromos />} />
+                      <Route path="referrals" element={<AdminReferrals />} />
                       <Route path="service-areas" element={<AdminServiceAreas />} />
                       <Route path="employees" element={<AdminEmployees />} />
                       <Route path="legal-compliance" element={<AdminLegalCompliance />} />
+                      <Route path="legal" element={<AdminLegal />} />
                       <Route path="workforce" element={<AdminWorkforce />} />
                       <Route path="debug" element={<AdminDebug />} />
                       <Route path="email-management" element={<AdminEmailManagement />} />
@@ -236,6 +247,10 @@ const App = () => (
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/terms" element={<Terms />} />
                     <Route path="/guarantee" element={<Guarantee />} />
+                    <Route path="/legal/terms" element={<PublicLegalDocument documentType="terms_and_conditions" fallbackTitle="Terms and Conditions" canonicalPath="/legal/terms" />} />
+                    <Route path="/legal/privacy" element={<PublicLegalDocument documentType="privacy_policy" fallbackTitle="Privacy Policy" canonicalPath="/legal/privacy" />} />
+                    <Route path="/legal/service-agreement" element={<PublicLegalDocument documentType="service_agreement" fallbackTitle="Service Agreement" canonicalPath="/legal/service-agreement" />} />
+                    <Route path="/legal/pesticide-consent" element={<PublicLegalDocument documentType="pesticide_consent" fallbackTitle="Pesticide Consent and Acknowledgement" canonicalPath="/legal/pesticide-consent" />} />
                     <Route path="*" element={<NotFound />} />
                   </Route>
 
@@ -244,6 +259,13 @@ const App = () => (
                     <Route path="/onboarding" element={
                       <RequireAuth>
                         <Onboarding />
+                      </RequireAuth>
+                    } />
+                    {/* RequireAuth only (not RequireCustomer) — RequireCustomer redirects
+                        here, so gating this route with RequireCustomer would loop. */}
+                    <Route path="/legal-acceptance" element={
+                      <RequireAuth>
+                        <LegalAcceptance />
                       </RequireAuth>
                     } />
                   </Route>

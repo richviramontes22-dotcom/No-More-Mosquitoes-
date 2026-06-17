@@ -23,6 +23,8 @@ import {
   Droplets,
   Layers,
   RotateCcw,
+  Tag,
+  X,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
@@ -167,6 +169,18 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
   const [paymentSubscriptionId,setPaymentSubscriptionId]= useState<string | null>(null);
   const [isLoadingPayment,     setIsLoadingPayment]     = useState(false);
   const [paymentError,         setPaymentError]         = useState<string | null>(null);
+
+  // ── Promo code (applied before the payment intent is created) ────────────────
+  const [promoInput,   setPromoInput]   = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    discount_cents: number;
+    stripe_promotion_code_id: string | null;
+    promo_code_id: string | null;
+    description: string;
+  } | null>(null);
+  const [promoError,   setPromoError]   = useState<string | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
 
   // ── Post-booking multi-property state ─────────────────────────────────────────
   const [bookingCompleted,     setBookingCompleted]     = useState(false);
@@ -399,7 +413,56 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
 
   const isFirstStep = step === "property"; // property is always the first step
 
-  // ── Payment intent fetch (runs when user enters payment step) ───────────────
+  // ── Promo code ────────────────────────────────────────────────────────────────
+  // Applying/removing a promo clears the cached client secret so the payment-intent
+  // effect below (keyed on `appliedPromo`) re-fetches a fresh intent at the discounted amount.
+
+  const currentPlanCents = () =>
+    selectedProgram === "annual"   ? annualPriceCents  :
+    selectedProgram === "one_time" ? onetimePriceCents :
+    subPriceCents;
+
+  const handleApplyPromo = async () => {
+    if (!promoInput.trim()) return;
+    setPromoError(null);
+    setPromoLoading(true);
+    try {
+      const res = await fetch("/api/promos/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoInput.trim(), order_total_cents: currentPlanCents() ?? undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setPromoError(json.error || "Invalid code"); return; }
+      if (selectedProgram === "subscription" && !json.stripe_promotion_code_id) {
+        setPromoError("This code can't be applied to recurring plans. Try a one-time or annual plan, or contact support.");
+        return;
+      }
+      setAppliedPromo({
+        code: promoInput.trim().toUpperCase(),
+        discount_cents: json.discount_cents,
+        stripe_promotion_code_id: json.stripe_promotion_code_id,
+        promo_code_id: json.promo_code_id,
+        description: json.description,
+      });
+      setPromoInput("");
+      setPaymentClientSecret(null);
+      setPaymentIntentId(null);
+    } catch {
+      setPromoError("Could not validate code. Please try again.");
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoError(null);
+    setPaymentClientSecret(null);
+    setPaymentIntentId(null);
+  };
+
+  // ── Payment intent fetch (runs when user enters payment step, or promo changes) ─
 
   useEffect(() => {
     if (step !== "payment") return;
@@ -442,6 +505,9 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
             preferredDays,
             preferredWindows,
             flexibilityDays,
+            promoDiscountCents:     appliedPromo?.discount_cents ?? 0,
+            stripePromotionCodeId: appliedPromo?.stripe_promotion_code_id ?? null,
+            promoDatabaseId:        appliedPromo?.promo_code_id ?? null,
           }),
         }), 12000, "Payment intent");
 
@@ -459,7 +525,7 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
     };
 
     fetch_();
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, appliedPromo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── After Stripe confirms payment — create appointment + finalize ─────────────
 
@@ -1424,7 +1490,9 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
             selectedProgram === "annual"   ? annualPriceCents  :
             selectedProgram === "one_time" ? onetimePriceCents :
             subPriceCents;
-          const amountLabel = paymentCents ? fmtCents(paymentCents) : undefined;
+          const discountCents = appliedPromo ? Math.min(appliedPromo.discount_cents, paymentCents ?? 0) : 0;
+          const discountedCents = paymentCents != null ? Math.max(50, paymentCents - discountCents) : null;
+          const amountLabel = discountedCents != null ? fmtCents(discountedCents) : undefined;
 
           return (
             <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1478,8 +1546,60 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
                         )}
                       </div>
                     </div>
+                    {/* Promo code */}
+                    <div className="border-t border-border/40 pt-4 space-y-2">
+                      {appliedPromo ? (
+                        <div className="flex items-center justify-between rounded-xl bg-green-50 border border-green-200 px-3 py-2 text-sm">
+                          <span className="flex items-center gap-1.5 text-green-800 font-semibold">
+                            <Tag className="h-3.5 w-3.5" />
+                            {appliedPromo.code}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-green-700 font-bold">−{fmtCents(discountCents)}</span>
+                            <button
+                              type="button"
+                              onClick={handleRemovePromo}
+                              className="text-green-700/60 hover:text-green-900"
+                              aria-label="Remove promo code"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="flex gap-2">
+                            <Input
+                              value={promoInput}
+                              onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                              placeholder="Promo code"
+                              className="rounded-xl h-9 text-sm"
+                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleApplyPromo(); } }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl h-9 shrink-0"
+                              disabled={promoLoading || !promoInput.trim()}
+                              onClick={handleApplyPromo}
+                            >
+                              {promoLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Apply"}
+                            </Button>
+                          </div>
+                          {promoError && <p className="text-xs text-destructive">{promoError}</p>}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Amount due */}
                     <div className="border-t border-border/40 pt-4 space-y-1.5">
+                      {appliedPromo && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="text-muted-foreground">{paymentCents ? fmtCents(paymentCents) : "—"}</span>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-muted-foreground">Due today</span>
                         <span className="text-2xl font-black text-primary">{amountLabel ?? "—"}</span>

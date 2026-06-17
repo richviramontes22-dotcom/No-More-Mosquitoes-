@@ -23,6 +23,11 @@
 [functions.send-annual-warnings]
   schedule = "0 10 * * *"
 
+# Scheduled function: routing automation sweep (no-op unless an admin has enabled
+# review_window or fully_automatic mode in Route Planning settings) — every 15 minutes
+[functions.auto-publish-routes]
+  schedule = "*/15 * * * *"
+
 # Force HTTPS redirect
 [[redirects]]
   from = "http://*"

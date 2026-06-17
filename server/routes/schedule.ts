@@ -8,6 +8,7 @@ import { buildLeadAcknowledgementEmail } from "../services/notifications/emailTe
 import { logNotification } from "../services/notifications/notificationLogger";
 import { notifyAdmin } from "../services/notifications/adminNotificationService";
 import { upsertLeadFromScheduleRequest } from "../services/leads/leadService";
+import { attributeReferral } from "../services/referrals/referralService";
 
 // Service role bypasses RLS for appointment count (capacity check) and INSERT.
 // Auth validation (getUser) still uses the anon client with the user's JWT.
@@ -259,6 +260,15 @@ export const handleScheduleRequest: RequestHandler = async (req, res) => {
       }).catch((err) => {
         console.error("[Schedule] upsertLeadFromScheduleRequest failed:", err);
       });
+
+      // Referral attribution (best-effort, fire-and-forget) — only when a code
+      // was captured client-side (see client/lib/referralCapture.ts). Invalid/
+      // missing codes are silently skipped, never block the booking.
+      if (payload.referralCode) {
+        void attributeReferral({ code: payload.referralCode, leadId: data.id }).catch((err) => {
+          console.error("[Schedule] attributeReferral failed:", err);
+        });
+      }
     }
 
     // ── Create appointment for authenticated users with a real property ────────

@@ -14,6 +14,9 @@ import {
   Trash2,
   Lock,
   AlertCircle,
+  Gift,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
@@ -86,6 +89,46 @@ const Profile = () => {
       toast({ title: "Couldn't save preference", description: "Change saved locally but not synced to your account.", variant: "destructive" });
     } finally {
       setSavingNotif(false);
+    }
+  };
+
+  // Refer & Earn
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referralCount, setReferralCount] = useState(0);
+  const [loadingReferral, setLoadingReferral] = useState(true);
+  const [copiedReferral, setCopiedReferral] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const res = await fetch("/api/referrals/my-code", { headers: { Authorization: `Bearer ${token}` } });
+        const json = await res.json();
+        if (res.ok) {
+          setReferralCode(json.code);
+          setReferralCount(json.converted_count ?? 0);
+        }
+      } catch {
+        // Non-critical widget — fail silently, card just won't render content.
+      } finally {
+        setLoadingReferral(false);
+      }
+    })();
+  }, [user]);
+
+  const referralLink = referralCode ? `${window.location.origin}/?ref=${referralCode}` : "";
+
+  const handleCopyReferralLink = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setCopiedReferral(true);
+      setTimeout(() => setCopiedReferral(false), 2000);
+    } catch {
+      toast({ title: "Couldn't copy", description: "Please copy the link manually.", variant: "destructive" });
     }
   };
 
@@ -375,6 +418,42 @@ const Profile = () => {
         </div>
 
         <aside className="space-y-8">
+          {/* Refer & Earn */}
+          <Card className="rounded-[28px] border-border/60 bg-card/95 shadow-soft">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Gift className="h-5 w-5" />
+                </div>
+                <CardTitle className="text-lg">Refer & Earn</CardTitle>
+              </div>
+              <CardDescription>Share your code — friends who sign up help unlock rewards.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loadingReferral ? (
+                <p className="text-xs text-muted-foreground">Loading your code…</p>
+              ) : referralCode ? (
+                <>
+                  <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3 text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Your code</p>
+                    <p className="text-xl font-display font-bold tracking-wide text-primary">{referralCode}</p>
+                  </div>
+                  <Button variant="outline" className="w-full rounded-xl" onClick={handleCopyReferralLink}>
+                    {copiedReferral ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                    {copiedReferral ? "Link copied!" : "Copy share link"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    {referralCount > 0
+                      ? `${referralCount} successful referral${referralCount === 1 ? "" : "s"} so far`
+                      : "No referrals yet — share your link to get started"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Unable to load your referral code right now.</p>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Security */}
           <Card className="rounded-[28px] border-border/60 bg-card/95 shadow-soft">
             <CardHeader>

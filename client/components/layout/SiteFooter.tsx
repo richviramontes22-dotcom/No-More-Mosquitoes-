@@ -50,6 +50,11 @@ export const SiteFooter = () => {
     { label: footerLinks?.terms || "Terms", path: "/terms" },
     { label: footerLinks?.guarantee || "Guarantee", path: "/guarantee" },
     { label: footerLinks?.licenses || "Licenses", path: "/licenses" },
+    // Versioned, admin-managed legal documents (separate from the static
+    // pages above) — these pages show "Document not yet published" until an
+    // admin deploys an attorney-reviewed version, so it's always safe to link.
+    { label: "Service Agreement", path: "/legal/service-agreement" },
+    { label: "Pesticide Consent", path: "/legal/pesticide-consent" },
   ];
 
   const currentYear = new Date().getFullYear();

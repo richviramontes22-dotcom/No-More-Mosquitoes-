@@ -37,6 +37,8 @@ import adminBusinessHoursRouter from "./routes/adminBusinessHours";
 import adminAlertsRouter from "./routes/adminAlerts";
 import adminLeadsRouter from "./routes/adminLeads";
 import adminServiceAreaDemandRouter from "./routes/adminServiceAreaDemand";
+import adminReferralsRouter from "./routes/adminReferrals";
+import adminLegalRouter from "./routes/adminLegal";
 import unsubscribeRouter from "./routes/unsubscribe";
 import adminOnboardingRouter from "./routes/adminOnboarding";
 import employeeOnboardingRouter from "./routes/employeeOnboarding";
@@ -188,6 +190,16 @@ export function createServer() {
 
   // Admin Service Area Demand API (CRM Phase 2 — demand intelligence)
   app.use("/api/admin", adminServiceAreaDemandRouter);
+
+  // Referral Program — admin endpoints are defined with an /admin/referrals/*
+  // path internally (unlike most admin*.ts files), and /referrals/validate +
+  // /referrals/my-code are customer/public-facing — single mount at /api covers all.
+  app.use("/api", adminReferralsRouter);
+
+  // Legal Documents — admin endpoints are defined with an /admin/legal/* path
+  // internally; /legal/status, /legal/documents/:type, /legal/acceptances are
+  // public/customer-facing — single mount at /api covers all.
+  app.use("/api", adminLegalRouter);
 
   // Email unsubscribe (one-click CAN-SPAM compliance — unauthenticated)
   app.use("/api", unsubscribeRouter);

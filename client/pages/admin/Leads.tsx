@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Filter, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
-import { useAdminLeads } from "@/hooks/admin/useAdminLeads";
+import { Search, Filter, Loader2, ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
+import { useAdminLeads, useAdminLeadStaff } from "@/hooks/admin/useAdminLeads";
 
 const STATUS_BADGE: Record<string, string> = {
   new: "bg-blue-100 text-blue-800",
@@ -81,6 +81,10 @@ const AdminLeads = () => {
     pageSize: PAGE_SIZE,
   });
 
+  const { staff } = useAdminLeadStaff();
+  const staffById: Record<string, string> = {};
+  staff.forEach((s) => { staffById[s.id] = s.name || s.email; });
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -147,6 +151,7 @@ const AdminLeads = () => {
                 <TableRow className="bg-muted/30 border-none">
                   <TableHead className="pl-8 py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Status</TableHead>
                   <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Source</TableHead>
+                  <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Assigned</TableHead>
                   <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Address</TableHead>
                   <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Name</TableHead>
                   <TableHead className="py-4 font-bold text-muted-foreground uppercase text-[10px] tracking-widest">Email</TableHead>
@@ -159,14 +164,14 @@ const AdminLeads = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-40 text-center bg-muted/5">
+                    <TableCell colSpan={10} className="h-40 text-center bg-muted/5">
                       <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary/40 mb-2" />
                       <span className="text-muted-foreground italic">Loading leads...</span>
                     </TableCell>
                   </TableRow>
                 ) : error ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-40 text-center text-destructive bg-muted/5">
+                    <TableCell colSpan={10} className="h-40 text-center text-destructive bg-muted/5">
                       Failed to load leads: {error}
                     </TableCell>
                   </TableRow>
@@ -185,6 +190,14 @@ const AdminLeads = () => {
                       <TableCell className="py-5 text-sm text-muted-foreground">
                         {SOURCE_LABEL[lead.source] ?? lead.source}
                       </TableCell>
+                      <TableCell className="py-5 text-sm text-muted-foreground">
+                        {lead.assigned_to ? (
+                          <span className="flex items-center gap-1.5">
+                            <UserPlus className="h-3.5 w-3.5 text-sky-600" />
+                            {staffById[lead.assigned_to] ?? "Assigned"}
+                          </span>
+                        ) : "—"}
+                      </TableCell>
                       <TableCell className="py-5 text-sm font-medium max-w-xs truncate">
                         {lead.address || "—"}
                         {lead.zip ? <span className="text-muted-foreground"> {lead.zip}</span> : null}
@@ -199,7 +212,7 @@ const AdminLeads = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-40 text-center text-muted-foreground italic bg-muted/5">
+                    <TableCell colSpan={10} className="h-40 text-center text-muted-foreground italic bg-muted/5">
                       No leads found matching your filters.
                     </TableCell>
                   </TableRow>

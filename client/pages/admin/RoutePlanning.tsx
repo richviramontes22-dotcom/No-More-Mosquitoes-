@@ -7,8 +7,21 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Clock, Navigation, Trash2, Users, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-import { adminApi } from "@/lib/adminApi";
+import { MapPin, Clock, Navigation, Trash2, Users, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, TrendingDown, Settings2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { adminApi, AdminApiError } from "@/lib/adminApi";
+
+interface RouteAutomationSettings {
+  mode: "manual_only" | "review_window" | "fully_automatic";
+  review_window_minutes: number;
+  auto_publish_cutoff_time: string | null;
+  require_smart_optimize: boolean;
+  block_low_confidence: boolean;
+  block_mock_geo: boolean;
+  block_drive_cap_exceeded: boolean;
+  enabled: boolean;
+}
 
 interface RouteStop {
   id: string;
@@ -31,6 +44,8 @@ interface Route {
   total_duration_minutes: number;
   published_at?: string | null;
   approved_at?: string | null;
+  confidence?: string | null;
+  conflict_notes?: string[] | null;
   stops: RouteStop[];
 }
 
@@ -63,7 +78,28 @@ const RoutePlanning = () => {
   const [generatingDay, setGeneratingDay] = useState(false);
   const [loadingDay, setLoadingDay] = useState(false);
   const [approvingAll, setApprovingAll] = useState(false);
-  const [publishingAll, setPublishingAll] = useState(false);
+
+  // Smart Optimize modal
+  const [optimizeRouteId, setOptimizeRouteId] = useState<string | null>(null);
+  const [optimizePreview, setOptimizePreview] = useState<any | null>(null);
+  const [loadingOptimize, setLoadingOptimize] = useState(false);
+  const [applyingOptimize, setApplyingOptimize] = useState(false);
+
+  // Publish confirmation modal
+  const [publishConfirm, setPublishConfirm] = useState<{
+    type: "single" | "all";
+    routeId?: string;
+    confidence?: string | null;
+    conflictNotes?: string[];
+  } | null>(null);
+  const [publishBlocked, setPublishBlocked] = useState<{ warnings?: any; validation?: any; hint?: string } | null>(null);
+  const [publishing, setPublishing] = useState(false);
+
+  // Routing automation settings
+  const [automationOpen, setAutomationOpen] = useState(false);
+  const [automationSettings, setAutomationSettings] = useState<RouteAutomationSettings | null>(null);
+  const [loadingAutomation, setLoadingAutomation] = useState(false);
+  const [savingAutomation, setSavingAutomation] = useState(false);
 
   // Load employees on mount
   useEffect(() => {
@@ -124,16 +160,71 @@ const RoutePlanning = () => {
     }
   };
 
-  const handlePublishAll = async () => {
+  const doPublish = async (force: boolean) => {
+    if (!publishConfirm) return;
+    setPublishing(true);
     try {
-      setPublishingAll(true);
-      const data = await adminApi("/api/admin/routes/day/publish", "POST", { date: selectedDate });
-      toast({ title: data.message || "Routes published" });
-      await loadDay();
+      if (publishConfirm.type === "single" && publishConfirm.routeId) {
+        const data = await adminApi(
+          `/api/admin/routes/${publishConfirm.routeId}/publish`,
+          "POST",
+          force ? { force: true } : {}
+        );
+        setRoutes(routes.map(r => r.id === publishConfirm.routeId ? { ...r, ...data.route } : r));
+        setSelectedRoute(prev => prev?.id === publishConfirm.routeId ? { ...prev, ...data.route } : prev);
+        await loadDay().catch(() => {});
+        toast({ title: "Route Published", description: data.message });
+        setPublishConfirm(null);
+        setPublishBlocked(null);
+      } else if (publishConfirm.type === "all") {
+        const data = await adminApi(
+          "/api/admin/routes/day/publish",
+          "POST",
+          { date: selectedDate, ...(force ? { force: true } : {}) }
+        );
+        toast({ title: data.message || "Routes published" });
+        await loadDay();
+        setPublishConfirm(null);
+        setPublishBlocked(null);
+      }
+    } catch (err: any) {
+      if (err instanceof AdminApiError && err.details && (err.details.warnings || err.details.validation)) {
+        setPublishBlocked(err.details);
+      } else {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+        setPublishConfirm(null);
+        setPublishBlocked(null);
+      }
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const openAutomationSettings = async () => {
+    setAutomationOpen(true);
+    setLoadingAutomation(true);
+    try {
+      const data = await adminApi("/api/admin/routes/automation-settings");
+      setAutomationSettings(data.settings);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
-      setPublishingAll(false);
+      setLoadingAutomation(false);
+    }
+  };
+
+  const saveAutomationSettings = async () => {
+    if (!automationSettings) return;
+    setSavingAutomation(true);
+    try {
+      const data = await adminApi("/api/admin/routes/automation-settings", "PATCH", automationSettings);
+      setAutomationSettings(data.settings);
+      toast({ title: "Automation settings saved" });
+      setAutomationOpen(false);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingAutomation(false);
     }
   };
 
@@ -265,17 +356,6 @@ const RoutePlanning = () => {
     }
   };
 
-  const handlePublishRoute = async (routeId: string) => {
-    try {
-      const data = await adminApi(`/api/admin/routes/${routeId}/publish`, "POST");
-      setRoutes(routes.map(r => r.id === routeId ? { ...r, ...data.route } : r));
-      setSelectedRoute(prev => prev?.id === routeId ? { ...prev, ...data.route } : prev);
-      toast({ title: "Route Published", description: data.message });
-    } catch (err) {
-      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
-    }
-  };
-
   const handleRebuildRoute = async (routeId: string) => {
     if (!window.confirm("Clear all stops for this route? You'll need to generate again.")) return;
     try {
@@ -284,6 +364,38 @@ const RoutePlanning = () => {
       loadRoutes();
     } catch (err) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+    }
+  };
+
+  const handleSmartOptimize = async (routeId: string) => {
+    try {
+      setLoadingOptimize(true);
+      setOptimizeRouteId(routeId);
+      setOptimizePreview(null);
+      const data = await adminApi("/api/admin/routes/optimize-preview", "POST", { routeId });
+      setOptimizePreview(data.proposed);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setOptimizeRouteId(null);
+    } finally {
+      setLoadingOptimize(false);
+    }
+  };
+
+  const handleApplyOptimization = async () => {
+    if (!optimizeRouteId || !optimizePreview) return;
+    try {
+      setApplyingOptimize(true);
+      const orderedAssignmentIds = optimizePreview.stops.map((s: any) => s.assignmentId);
+      await adminApi(`/api/admin/routes/${optimizeRouteId}/reorder-stops`, "POST", { orderedAssignmentIds });
+      toast({ title: "Optimization applied", description: `Saved ${optimizePreview.improvement.timeSavedMinutes} min` });
+      setOptimizeRouteId(null);
+      setOptimizePreview(null);
+      await Promise.all([loadRoutes(), loadDay()]);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setApplyingOptimize(false);
     }
   };
 
@@ -367,18 +479,26 @@ const RoutePlanning = () => {
             </Button>
             <Button
               variant="outline"
-              onClick={handlePublishAll}
-              disabled={publishingAll || dayRoutes.filter(r => ["draft","approved"].includes(r.status)).length === 0}
+              onClick={() => { setPublishBlocked(null); setPublishConfirm({ type: "all" }); }}
+              disabled={dayRoutes.filter(r => ["draft","approved"].includes(r.status)).length === 0}
               className="rounded-xl"
             >
-              {publishingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Publish All
             </Button>
             <Button
               variant="outline"
               size="sm"
+              onClick={openAutomationSettings}
+              className="rounded-xl ml-auto"
+            >
+              <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+              Automation Settings
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleRebuildDay}
-              className="rounded-xl text-destructive hover:bg-destructive/10 border-destructive/30 ml-auto"
+              className="rounded-xl text-destructive hover:bg-destructive/10 border-destructive/30"
             >
               <Trash2 className="h-3.5 w-3.5 mr-1.5" />
               Discard Drafts
@@ -427,7 +547,21 @@ const RoutePlanning = () => {
                         <span>{r.conflict_notes.length} coordinate warning{r.conflict_notes.length > 1 ? "s" : ""}</span>
                       </div>
                     )}
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex gap-2 pt-1 flex-wrap">
+                      {(r.status === "draft" || r.status === "approved") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-lg h-8 text-xs border-violet-200 text-violet-700 hover:bg-violet-50"
+                          disabled={loadingOptimize && optimizeRouteId === r.id}
+                          onClick={() => handleSmartOptimize(r.id)}
+                        >
+                          {loadingOptimize && optimizeRouteId === r.id
+                            ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                            : <Sparkles className="h-3 w-3 mr-1" />}
+                          Smart
+                        </Button>
+                      )}
                       {r.status === "draft" && (
                         <Button
                           size="sm"
@@ -446,10 +580,14 @@ const RoutePlanning = () => {
                         <Button
                           size="sm"
                           className="flex-1 rounded-lg h-8 text-xs shadow-brand"
-                          onClick={async () => {
-                            await adminApi(`/api/admin/routes/${r.id}/publish`, "POST");
-                            await loadDay();
-                            toast({ title: "Route published" });
+                          onClick={() => {
+                            setPublishBlocked(null);
+                            setPublishConfirm({
+                              type: "single",
+                              routeId: r.id,
+                              confidence: r.confidence,
+                              conflictNotes: r.conflict_notes ?? [],
+                            });
                           }}
                         >
                           Publish
@@ -609,6 +747,17 @@ const RoutePlanning = () => {
                   {selectedRoute.status === "draft" && (
                     <>
                       <Button
+                        variant="outline"
+                        className="h-11 rounded-xl border-violet-200 text-violet-700 hover:bg-violet-50"
+                        disabled={loadingOptimize}
+                        onClick={() => handleSmartOptimize(selectedRoute.id)}
+                      >
+                        {loadingOptimize
+                          ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          : <Sparkles className="h-4 w-4 mr-2" />}
+                        Smart Optimize
+                      </Button>
+                      <Button
                         className="flex-1 h-11 rounded-xl font-bold shadow-brand"
                         onClick={() => handleApproveRoute(selectedRoute.id)}
                       >
@@ -635,7 +784,15 @@ const RoutePlanning = () => {
                     <>
                       <Button
                         className="flex-1 h-11 rounded-xl font-bold shadow-brand"
-                        onClick={() => handlePublishRoute(selectedRoute.id)}
+                        onClick={() => {
+                          setPublishBlocked(null);
+                          setPublishConfirm({
+                            type: "single",
+                            routeId: selectedRoute.id,
+                            confidence: selectedRoute.confidence,
+                            conflictNotes: selectedRoute.conflict_notes ?? [],
+                          });
+                        }}
                       >
                         Publish & Notify Employee
                       </Button>
@@ -705,6 +862,291 @@ const RoutePlanning = () => {
       </div>
       )}
 
+      {/* Smart Optimize Preview Modal */}
+      <Dialog open={!!optimizeRouteId} onOpenChange={(open) => { if (!open) { setOptimizeRouteId(null); setOptimizePreview(null); } }}>
+        <DialogContent className="max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-violet-600" />
+              Smart Route Optimization
+            </DialogTitle>
+            <DialogDescription>
+              Home-base-aware routing with speed zone estimation
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingOptimize && (
+            <div className="flex items-center justify-center py-10 gap-3 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Analyzing route…
+            </div>
+          )}
+
+          {!loadingOptimize && optimizePreview && (
+            <div className="space-y-4">
+              {optimizePreview.improvement.percentImprovement > 0 ? (
+                <div className="rounded-xl bg-violet-50 border border-violet-200 p-4 flex items-center gap-3">
+                  <TrendingDown className="h-5 w-5 text-violet-600 shrink-0" />
+                  <div>
+                    <p className="font-semibold text-sm text-violet-900">
+                      {optimizePreview.improvement.percentImprovement}% shorter route
+                    </p>
+                    <p className="text-xs text-violet-700">
+                      Saves {optimizePreview.improvement.distanceSavedMiles} mi · {optimizePreview.improvement.timeSavedMinutes} min drive time
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-muted/40 border border-border/40 p-4 text-sm text-muted-foreground text-center">
+                  Current order is already optimal
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Proposed stop order</p>
+                <div className="max-h-56 overflow-y-auto rounded-xl border border-border/40 divide-y divide-border/30">
+                  {optimizePreview.stops.map((s: any, i: number) => (
+                    <div key={s.assignmentId} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                      <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{i + 1}</span>
+                      <span className="flex-1 truncate">{s.address || s.assignmentId}</span>
+                      {s.isMockGeo && (
+                        <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">est. geo</span>
+                      )}
+                      {s.exceedsDriveCap && (
+                        <span className="text-[10px] text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 shrink-0">cap</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {optimizePreview.exceedsDriveCap && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-start gap-2 text-xs text-amber-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  Drive time cap exceeded at stop {(optimizePreview.driveCapExceededAtStopIndex ?? 0) + 1}. Consider reducing stops.
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  className="flex-1 rounded-xl shadow-brand"
+                  disabled={applyingOptimize || optimizePreview.improvement.percentImprovement <= 0}
+                  onClick={handleApplyOptimization}
+                >
+                  {applyingOptimize ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Apply New Order
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => { setOptimizeRouteId(null); setOptimizePreview(null); }}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Keep Current
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Publish Confirmation Modal */}
+      <Dialog open={!!publishConfirm} onOpenChange={(open) => { if (!open) { setPublishConfirm(null); setPublishBlocked(null); } }}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              {publishConfirm?.type === "all" ? "Publish All Routes?" : "Publish Route?"}
+            </DialogTitle>
+            <DialogDescription>
+              {publishConfirm?.type === "all"
+                ? "Sends every draft/approved route for this day to its assigned employee."
+                : "Sends this route to the assigned employee and locks the stop order."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {publishConfirm?.type === "single" && publishConfirm.confidence && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Confidence:</span>
+                {confidenceBadge(publishConfirm.confidence)}
+              </div>
+            )}
+
+            {publishConfirm?.type === "single" && (publishConfirm.conflictNotes?.length ?? 0) > 0 && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {publishConfirm.conflictNotes!.length} warning{publishConfirm.conflictNotes!.length > 1 ? "s" : ""}
+                </p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {publishConfirm.conflictNotes!.slice(0, 5).map((note, i) => <li key={i}>{note}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {publishConfirm?.type === "all" && (
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p>
+                  {dayRoutes.filter(r => ["draft", "approved"].includes(r.status)).length} route(s) will be published.
+                </p>
+                {dayRoutes.some(r => r.confidence === "low" || (r.conflict_notes?.length ?? 0) > 0) && (
+                  <p className="text-amber-700 font-medium flex items-start gap-1.5">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    Some routes have low confidence or coordinate warnings — check the Day Planner cards above before publishing.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {publishBlocked && (
+              <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-800 space-y-1.5">
+                <p className="font-semibold">
+                  {publishBlocked.hint ? "Review required before publishing" : "Publish blocked"}
+                </p>
+                {publishBlocked.warnings?.conflict_notes?.length > 0 && (
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {publishBlocked.warnings.conflict_notes.slice(0, 5).map((n: string, i: number) => <li key={i}>{n}</li>)}
+                  </ul>
+                )}
+                {publishBlocked.validation?.routes?.some((r: any) => r.result.blockers.length > 0) && (
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {publishBlocked.validation.routes
+                      .flatMap((r: any) => r.result.blockers.map((b: any) => b.message))
+                      .slice(0, 5)
+                      .map((m: string, i: number) => <li key={i}>{m}</li>)}
+                  </ul>
+                )}
+                {publishBlocked.hint && <p className="italic text-red-700">{publishBlocked.hint}</p>}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              className="flex-1 rounded-xl shadow-brand"
+              disabled={publishing}
+              onClick={() => doPublish(!!publishBlocked)}
+            >
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {publishBlocked ? "Force Publish Anyway" : "Confirm Publish"}
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => { setPublishConfirm(null); setPublishBlocked(null); }}
+            >
+              <X className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Routing Automation Settings */}
+      <Dialog open={automationOpen} onOpenChange={setAutomationOpen}>
+        <DialogContent className="max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5 text-primary" />
+              Routing Automation Settings
+            </DialogTitle>
+            <DialogDescription>
+              Controls whether routes need manual publish, auto-publish after a review window, or auto-publish immediately once safe. Disabled by default.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingAutomation || !automationSettings ? (
+            <div className="flex items-center justify-center py-10 gap-3 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading settings…
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between rounded-xl border border-border/60 p-3">
+                <div>
+                  <Label className="text-sm font-semibold">Automation enabled</Label>
+                  <p className="text-xs text-muted-foreground">Master switch — off means every route still requires manual publish, regardless of mode.</p>
+                </div>
+                <Switch
+                  checked={automationSettings.enabled}
+                  onCheckedChange={(checked) => setAutomationSettings({ ...automationSettings, enabled: checked })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Mode</Label>
+                <select
+                  value={automationSettings.mode}
+                  onChange={(e) => setAutomationSettings({ ...automationSettings, mode: e.target.value as RouteAutomationSettings["mode"] })}
+                  className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                >
+                  <option value="manual_only">Manual only — admin always publishes</option>
+                  <option value="review_window">Review window — auto-publish after a delay</option>
+                  <option value="fully_automatic">Fully automatic — auto-publish immediately when safe</option>
+                </select>
+              </div>
+
+              {automationSettings.mode === "review_window" && (
+                <div className="space-y-2">
+                  <Label className="text-sm">Review window (minutes)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={automationSettings.review_window_minutes}
+                    onChange={(e) => setAutomationSettings({ ...automationSettings, review_window_minutes: Number(e.target.value) })}
+                    className="rounded-xl"
+                  />
+                  <p className="text-xs text-muted-foreground">Routes wait this long after generation before becoming eligible for auto-publish.</p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-sm">Auto-publish cutoff time (optional)</Label>
+                <Input
+                  type="time"
+                  value={automationSettings.auto_publish_cutoff_time ?? ""}
+                  onChange={(e) => setAutomationSettings({ ...automationSettings, auto_publish_cutoff_time: e.target.value || null })}
+                  className="rounded-xl"
+                />
+                <p className="text-xs text-muted-foreground">Don't auto-publish before this time of day. Leave blank for no cutoff.</p>
+              </div>
+
+              <div className="space-y-2.5 rounded-xl border border-border/60 p-3">
+                <Label className="text-sm font-semibold">Safety checks</Label>
+                {[
+                  { key: "require_smart_optimize", label: "Require Smart Optimize before auto-publish" },
+                  { key: "block_low_confidence", label: "Block low-confidence routes" },
+                  { key: "block_mock_geo", label: "Block routes with estimated (mock) coordinates" },
+                  { key: "block_drive_cap_exceeded", label: "Block routes exceeding technician drive cap" },
+                ].map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">{label}</span>
+                    <Switch
+                      checked={(automationSettings as any)[key]}
+                      onCheckedChange={(checked) => setAutomationSettings({ ...automationSettings, [key]: checked })}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <Button
+                  className="flex-1 rounded-xl shadow-brand"
+                  disabled={savingAutomation}
+                  onClick={saveAutomationSettings}
+                >
+                  {savingAutomation ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Save Settings
+                </Button>
+                <Button variant="outline" className="rounded-xl" onClick={() => setAutomationOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

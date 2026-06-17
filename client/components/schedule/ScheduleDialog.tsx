@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { FormStatus, isValidEmail, isValidPhone, postJson } from "@/lib/forms";
 import { cn } from "@/lib/utils";
 import type { ScheduleRequestPayload, ScheduleResponse } from "@shared/api";
+import { getStoredReferralCode } from "@/lib/referralCapture";
 import { ScheduleFlow } from "./ScheduleFlow";
 
 const SERVICE_FREQUENCY_OPTIONS = [
@@ -131,6 +132,7 @@ const createSchedulePayload = (values: ScheduleFormValues, origin: string | null
   ...values,
   origin: origin ?? undefined,
   submittedAt: new Date().toISOString(),
+  referralCode: getStoredReferralCode() ?? undefined,
 });
 
 const ScheduleDialog = ({ open, origin, preset, onOpenChange }: ScheduleDialogProps) => {

@@ -1,6 +1,28 @@
 import { useState, useEffect, useCallback } from "react";
 import { adminApi } from "@/lib/adminApi";
 
+export interface AdminLeadStaffMember {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
+/** Fetches admin/employee profiles eligible to be assigned a lead or follow-up. */
+export function useAdminLeadStaff() {
+  const [staff, setStaff] = useState<AdminLeadStaffMember[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    adminApi("/api/admin/leads/staff")
+      .then((data) => setStaff(data.staff ?? []))
+      .catch(() => setStaff([]))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  return { staff, isLoading };
+}
+
 export interface AdminLead {
   id: string;
   source: string;
@@ -28,6 +50,7 @@ export interface AdminLead {
   schedule_request_id: string | null;
   admin_alert_id: string | null;
   converted_customer_id: string | null;
+  assigned_to: string | null;
   first_seen_at: string;
   last_seen_at: string;
   converted_at: string | null;
@@ -55,15 +78,30 @@ export interface AdminLeadNote {
   updated_at: string;
 }
 
+export interface AdminLeadFollowUp {
+  id: string;
+  lead_id: string;
+  assigned_to: string | null;
+  due_at: string;
+  status: "pending" | "completed" | "skipped";
+  notes: string | null;
+  completed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AdminLeadDetail {
   lead: AdminLead;
   activities: AdminLeadActivity[];
   notes: AdminLeadNote[];
+  followups: AdminLeadFollowUp[];
   linked: {
     profile: Record<string, unknown> | null;
     property: Record<string, unknown> | null;
     scheduleRequest: Record<string, unknown> | null;
     subscription: Record<string, unknown> | null;
+    referral: { code: string | null; owner_type: string | null; partner_name: string | null; status: string } | null;
   };
 }
 
@@ -166,4 +204,32 @@ export async function patchLeadStatus(
 export async function postLeadNote(id: string, body: string): Promise<AdminLeadNote> {
   const data = await adminApi(`/api/admin/leads/${id}/notes`, "POST", { body });
   return data.note as AdminLeadNote;
+}
+
+/** POST /api/admin/leads/:id/assign — assign a lead to a staff member (admin only). */
+export async function assignLeadTo(id: string, assignedTo: string): Promise<AdminLead> {
+  const data = await adminApi(`/api/admin/leads/${id}/assign`, "POST", { assigned_to: assignedTo });
+  return data.lead as AdminLead;
+}
+
+/** POST /api/admin/leads/:id/followups — create a due-dated follow-up (admin only). */
+export async function postLeadFollowUp(
+  id: string,
+  params: { dueAt: string; assignedTo?: string; notes?: string },
+): Promise<AdminLeadFollowUp> {
+  const data = await adminApi(`/api/admin/leads/${id}/followups`, "POST", {
+    due_at: params.dueAt,
+    assigned_to: params.assignedTo,
+    notes: params.notes,
+  });
+  return data.followup as AdminLeadFollowUp;
+}
+
+/** PATCH /api/admin/leads/followups/:followupId — mark a follow-up completed or skipped. */
+export async function patchFollowUpStatus(
+  followupId: string,
+  status: "completed" | "skipped",
+): Promise<AdminLeadFollowUp> {
+  const data = await adminApi(`/api/admin/leads/followups/${followupId}`, "PATCH", { status });
+  return data.followup as AdminLeadFollowUp;
 }

@@ -2,6 +2,12 @@ import express from "express";
 import { supabase } from "../lib/supabase";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { optimizeRoute, type AssignmentForRouting } from "../lib/routeOptimization";
+import { smartOptimizeRoute, type SmartStop } from "../services/routing/smartRoutingOptimizer";
+import {
+  getRouteAutomationSettings,
+  updateRouteAutomationSettings,
+  autoPublishEligibleRoutes,
+} from "../services/routing/routeAutomationPolicy";
 import { isTechnicianAvailable } from "../lib/technicianAvailability";
 import { getEffectiveDailyCapacity } from "../lib/technicianCapacity";
 import { flags } from "../lib/featureFlags";
@@ -749,7 +755,7 @@ router.post("/routes/day/publish", async (req, res) => {
   const now = new Date().toISOString();
   const { data: approvedRoutes } = await db
     .from("routes")
-    .select("id, employee_id")
+    .select("id, employee_id, confidence, conflict_notes")
     .eq("date", date)
     .in("status", ["approved", "draft"]);
 
@@ -764,7 +770,13 @@ router.post("/routes/day/publish", async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  routeIds.forEach((id) => logRouteAudit(id, adminId, "admin", "route_published", { bulk: true, date }));
+  routes.forEach((r: any) => logRouteAudit(r.id, adminId, "admin", "route_published", {
+    bulk: true,
+    date,
+    confidence: r.confidence ?? null,
+    conflict_notes_count: (r.conflict_notes ?? []).length,
+    forced: !!force,
+  }));
 
   // Admin alert for bulk publish
   void (async () => {
@@ -867,6 +879,34 @@ router.post("/routes/:routeId/publish", async (req, res) => {
   const adminId = await getAdminUserId(req);
   if (!adminId) return res.status(403).json({ error: "Admin required" });
 
+  const { force } = req.body || {};
+
+  const { data: existing } = await db
+    .from("routes")
+    .select("id, employee_id, date, status, confidence, conflict_notes")
+    .eq("id", req.params.routeId)
+    .maybeSingle();
+
+  if (!existing) return res.status(404).json({ error: "Route not found" });
+
+  if (["published", "completed", "canceled"].includes((existing as any).status)) {
+    return res.status(400).json({
+      error: `Route is already ${(existing as any).status} — cannot publish again.`,
+    });
+  }
+
+  const conflictNotes: string[] = (existing as any).conflict_notes ?? [];
+  const confidence: string | null = (existing as any).confidence ?? null;
+  const hasWarnings = confidence === "low" || conflictNotes.length > 0;
+
+  if (hasWarnings && !force) {
+    return res.status(400).json({
+      error: "This route has unresolved warnings — review before publishing.",
+      warnings: { confidence, conflict_notes: conflictNotes },
+      hint: "Pass { force: true } to publish anyway (will be logged).",
+    });
+  }
+
   const now = new Date().toISOString();
   const { data: route, error } = await db
     .from("routes")
@@ -897,7 +937,12 @@ router.post("/routes/:routeId/publish", async (req, res) => {
   })();
 
   logRouteAudit(req.params.routeId, adminId, "admin", "route_published", {
-    stop_count: stopCount, employee_id: (route as any).employee_id,
+    stop_count: stopCount,
+    employee_id: (route as any).employee_id,
+    confidence,
+    conflict_notes_count: conflictNotes.length,
+    published_with_warnings: hasWarnings,
+    forced: !!force,
   });
 
   res.json({ success: true, route, message: `Route published with ${stopCount ?? 0} stops.` });
@@ -1095,6 +1140,303 @@ router.get("/employee/routes/today", async (req, res) => {
 
   const stops = (rawStops || []).map((s: any) => ({ ...s, ...(enrichment[s.assignment_id] ?? {}) }));
   res.json({ route, stops, has_route: true });
+});
+
+// ─── POST /api/admin/routes/optimize-preview ─────────────────────────────────
+// Returns a proposed smart-optimized stop ordering without mutating the DB.
+
+router.post("/routes/optimize-preview", async (req, res) => {
+  const adminId = await getAdminUserId(req);
+  if (!adminId) return res.status(403).json({ error: "Admin required" });
+
+  const { routeId } = req.body;
+  if (!routeId) return res.status(400).json({ error: "routeId required" });
+
+  // Load route
+  const { data: route } = await db
+    .from("routes")
+    .select("id, employee_id, date, status")
+    .eq("id", routeId)
+    .maybeSingle();
+
+  if (!route) return res.status(404).json({ error: "Route not found" });
+
+  // Load stops with assignment → appointment → property chain
+  const { data: rawStops } = await db
+    .from("route_stops")
+    .select("id, sequence_number, estimated_duration_minutes, assignment_id")
+    .eq("route_id", routeId)
+    .order("sequence_number");
+
+  if (!rawStops || rawStops.length === 0) {
+    return res.json({ routeId, currentOrder: [], proposed: null });
+  }
+
+  const assignmentIds = rawStops.map((s: any) => s.assignment_id).filter(Boolean);
+  const { data: assignments } = await db
+    .from("assignments")
+    .select("id, appointment_id, appointments!inner(property_id)")
+    .in("id", assignmentIds);
+
+  const propIds = [
+    ...new Set(
+      (assignments || [])
+        .map((a: any) => a.appointments?.property_id)
+        .filter(Boolean)
+    ),
+  ];
+  const { data: props } = propIds.length
+    ? await db
+        .from("properties")
+        .select("id, address, city, zip, lat, lng")
+        .in("id", propIds)
+    : { data: [] };
+
+  const propMap: Record<string, any> = {};
+  (props || []).forEach((p: any) => { propMap[p.id] = p; });
+  const apptMap: Record<string, any> = {};
+  (assignments || []).forEach((a: any) => { apptMap[a.id] = a; });
+
+  // Build SmartStop array
+  const smartStops: SmartStop[] = rawStops.map((s: any) => {
+    const assignment = apptMap[s.assignment_id] ?? {};
+    const propId = assignment.appointments?.property_id;
+    const prop = propId ? propMap[propId] : null;
+    const hasRealGeo = prop?.lat != null && prop?.lng != null;
+    return {
+      assignmentId: s.assignment_id,
+      appointmentId: assignment.appointment_id ?? "",
+      address: prop ? `${prop.address}, ${prop.city} ${prop.zip}` : s.assignment_id,
+      geo: hasRealGeo
+        ? { latitude: prop.lat, longitude: prop.lng }
+        : undefined,
+      estimatedServiceMinutes: s.estimated_duration_minutes ?? 45,
+      isMockGeo: !hasRealGeo,
+    };
+  });
+
+  // Load technician capacity for home_base + drive cap
+  const { data: capProfile } = await db
+    .from("technician_capacity_profiles")
+    .select("home_base_lat, home_base_lng, max_drive_minutes_per_day")
+    .eq("employee_id", route.employee_id)
+    .maybeSingle();
+
+  const depotGeo =
+    capProfile?.home_base_lat != null && capProfile?.home_base_lng != null
+      ? { latitude: capProfile.home_base_lat, longitude: capProfile.home_base_lng }
+      : undefined;
+
+  const startTime = new Date(`${route.date}T08:00:00`);
+
+  const proposed = smartOptimizeRoute({
+    stops: smartStops,
+    depotGeo,
+    startTime,
+    maxDriveMinutes: capProfile?.max_drive_minutes_per_day ?? undefined,
+  });
+
+  // Current ordering stats (for comparison)
+  const currentOrder = smartStops.map((s, i) => ({
+    sequenceNumber: i + 1,
+    assignmentId: s.assignmentId,
+    address: s.address,
+    isMockGeo: s.isMockGeo,
+  }));
+
+  res.json({ routeId, currentOrder, proposed });
+});
+
+// ─── POST /api/admin/routes/:routeId/reorder-stops ───────────────────────────
+// Applies a new stop order to an existing draft or approved route.
+// Body: { orderedAssignmentIds: string[] }
+
+router.post("/routes/:routeId/reorder-stops", async (req, res) => {
+  const adminId = await getAdminUserId(req);
+  if (!adminId) return res.status(403).json({ error: "Admin required" });
+
+  const { orderedAssignmentIds } = req.body;
+  if (!Array.isArray(orderedAssignmentIds) || orderedAssignmentIds.length === 0) {
+    return res.status(400).json({ error: "orderedAssignmentIds array required" });
+  }
+
+  const { data: route } = await db
+    .from("routes")
+    .select("id, status, employee_id, date")
+    .eq("id", req.params.routeId)
+    .maybeSingle();
+
+  if (!route) return res.status(404).json({ error: "Route not found" });
+  if (!["draft", "approved"].includes(route.status)) {
+    return res.status(400).json({ error: "Can only reorder draft or approved routes" });
+  }
+
+  const { data: stops } = await db
+    .from("route_stops")
+    .select("id, assignment_id, estimated_duration_minutes")
+    .eq("route_id", req.params.routeId);
+
+  const stopByAssignment: Record<string, any> = {};
+  (stops || []).forEach((s: any) => { stopByAssignment[s.assignment_id] = s; });
+
+  // Rebuild smart-optimized ETAs for the given order
+  const orderedStops = orderedAssignmentIds
+    .map((aid) => stopByAssignment[aid])
+    .filter(Boolean);
+
+  if (orderedStops.length === 0) return res.status(400).json({ error: "No matching stops found" });
+
+  // Fetch property coords for ETA recalculation
+  const assignmentIds = orderedStops.map((s: any) => s.assignment_id);
+  const { data: assignments } = await db
+    .from("assignments")
+    .select("id, appointments!inner(property_id)")
+    .in("id", assignmentIds);
+
+  const propIds = [
+    ...new Set(
+      (assignments || []).map((a: any) => a.appointments?.property_id).filter(Boolean)
+    ),
+  ];
+  const { data: props } = propIds.length
+    ? await db.from("properties").select("id, lat, lng").in("id", propIds)
+    : { data: [] };
+
+  const propMap: Record<string, any> = {};
+  (props || []).forEach((p: any) => { propMap[p.id] = p; });
+  const apptMap: Record<string, any> = {};
+  (assignments || []).forEach((a: any) => { apptMap[a.id] = a; });
+
+  const { data: capProfile } = await db
+    .from("technician_capacity_profiles")
+    .select("home_base_lat, home_base_lng, max_drive_minutes_per_day")
+    .eq("employee_id", route.employee_id)
+    .maybeSingle();
+
+  const depotGeo =
+    capProfile?.home_base_lat != null && capProfile?.home_base_lng != null
+      ? { latitude: capProfile.home_base_lat, longitude: capProfile.home_base_lng }
+      : undefined;
+
+  const smartStops: SmartStop[] = orderedStops.map((s: any) => {
+    const assignment = apptMap[s.assignment_id] ?? {};
+    const propId = assignment.appointments?.property_id;
+    const prop = propId ? propMap[propId] : null;
+    const hasRealGeo = prop?.lat != null && prop?.lng != null;
+    return {
+      assignmentId: s.assignment_id,
+      appointmentId: assignment.appointment_id ?? "",
+      address: "",
+      geo: hasRealGeo ? { latitude: prop.lat, longitude: prop.lng } : undefined,
+      estimatedServiceMinutes: s.estimated_duration_minutes ?? 45,
+      isMockGeo: !hasRealGeo,
+    };
+  });
+
+  const startTime = new Date(`${route.date}T08:00:00`);
+  const result = smartOptimizeRoute({
+    stops: smartStops,
+    depotGeo,
+    startTime,
+    maxDriveMinutes: capProfile?.max_drive_minutes_per_day ?? undefined,
+  });
+
+  // Update sequence_number and ETAs for each stop
+  const updates = result.stops.map((rs, i) => {
+    const stop = orderedStops[i];
+    return db.from("route_stops").update({
+      sequence_number: rs.sequenceNumber,
+      arrival_eta: rs.arrivalEta,
+      departure_eta: rs.departureEta,
+      distance_from_prev_miles: rs.distanceFromPrevMiles,
+      duration_from_prev_minutes: Math.round(rs.driveMinutesFromPrev),
+    }).eq("id", stop.id);
+  });
+
+  await Promise.all(updates);
+
+  // Update route totals and mark as smart-optimized
+  await db.from("routes").update({
+    total_distance_miles: Math.round(result.totalDistanceMiles * 10) / 10,
+    total_duration_minutes: Math.round(result.totalDriveMinutes + result.totalServiceMinutes),
+    algorithm_version: result.algorithmVersion,
+  }).eq("id", req.params.routeId);
+
+  logRouteAudit(req.params.routeId, adminId, "admin", "smart_reorder", {
+    stop_count: result.stops.length,
+    distance_saved_miles: result.improvement.distanceSavedMiles,
+    time_saved_minutes: result.improvement.timeSavedMinutes,
+    depot_geo_used: !!depotGeo,
+  });
+
+  const { data: updatedStops } = await db
+    .from("route_stops")
+    .select("*")
+    .eq("route_id", req.params.routeId)
+    .order("sequence_number");
+
+  res.json({ success: true, stops: updatedStops, improvement: result.improvement });
+});
+
+// ─── Routing Automation Policy ────────────────────────────────────────────────
+
+// GET /api/admin/routes/automation-settings
+router.get("/routes/automation-settings", async (req, res) => {
+  const adminId = await getAdminUserId(req);
+  if (!adminId) return res.status(403).json({ error: "Admin required" });
+
+  const settings = await getRouteAutomationSettings();
+  res.json({ settings });
+});
+
+// PATCH /api/admin/routes/automation-settings
+router.patch("/routes/automation-settings", async (req, res) => {
+  const adminId = await getAdminUserId(req);
+  if (!adminId) return res.status(403).json({ error: "Admin required" });
+
+  const allowedFields = [
+    "mode", "review_window_minutes", "auto_publish_cutoff_time",
+    "require_smart_optimize", "block_low_confidence", "block_mock_geo",
+    "block_drive_cap_exceeded", "enabled",
+  ];
+  const updates: Record<string, any> = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+  if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
+
+  if (updates.mode && !["manual_only", "review_window", "fully_automatic"].includes(updates.mode)) {
+    return res.status(400).json({ error: "Invalid mode" });
+  }
+
+  try {
+    const settings = await updateRouteAutomationSettings(updates);
+    logRouteAudit("automation-settings", adminId, "admin", "automation_settings_updated", { updates });
+    res.json({ success: true, settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/routes/automation/run-now
+// Manually triggers the same auto-publish sweep the scheduled job runs —
+// useful for admins to test settings without waiting for the cron interval.
+router.post("/routes/automation/run-now", async (req, res) => {
+  const adminId = await getAdminUserId(req);
+  if (!adminId) return res.status(403).json({ error: "Admin required" });
+
+  const { date } = req.body;
+  if (!date) return res.status(400).json({ error: "date required" });
+
+  try {
+    const result = await autoPublishEligibleRoutes(date);
+    logRouteAudit("automation-run-" + date, adminId, "admin", "automation_manual_run", {
+      date, checked: result.checked, published: result.published, blocked: result.blocked, skipped: result.skipped,
+    });
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

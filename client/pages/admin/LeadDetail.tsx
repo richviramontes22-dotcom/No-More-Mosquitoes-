@@ -10,14 +10,19 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, Loader2, Mail, Phone, MapPin, Ruler, Calendar,
   User, Home, ClipboardList, CreditCard, Clock, AlertTriangle,
-  StickyNote, ChevronDown,
+  StickyNote, ChevronDown, UserPlus, CalendarClock, Gift, Check, X as XIcon,
 } from "lucide-react";
 import {
   useAdminLeadDetail,
+  useAdminLeadStaff,
   patchLeadStatus,
   postLeadNote,
+  assignLeadTo,
+  postLeadFollowUp,
+  patchFollowUpStatus,
   type AdminLeadActivity,
   type AdminLeadNote,
+  type AdminLeadFollowUp,
 } from "@/hooks/admin/useAdminLeads";
 
 const VALID_STATUSES = [
@@ -65,6 +70,10 @@ const ACTIVITY_LABEL: Record<string, string> = {
   merged: "Merged",
   status_changed: "Status changed",
   note_added: "Note added",
+  lead_assigned: "Assigned",
+  followup_created: "Follow-up scheduled",
+  followup_completed: "Follow-up completed",
+  followup_skipped: "Follow-up skipped",
 };
 
 function formatDateTime(iso: string | null | undefined): string {
@@ -198,6 +207,7 @@ const AdminLeadDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { detail, isLoading, error, refetch } = useAdminLeadDetail(id);
+  const { staff } = useAdminLeadStaff();
 
   // Status editor state
   const [selectedStatus, setSelectedStatus] = useState<string>("");
@@ -209,6 +219,17 @@ const AdminLeadDetailPage = () => {
   const [noteBody, setNoteBody] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
+
+  // Assignment state
+  const [savingAssign, setSavingAssign] = useState(false);
+
+  // Follow-up composer state
+  const [followUpDueAt, setFollowUpDueAt] = useState("");
+  const [followUpAssignee, setFollowUpAssignee] = useState("");
+  const [followUpNotes, setFollowUpNotes] = useState("");
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [followUpError, setFollowUpError] = useState<string | null>(null);
+  const [updatingFollowUpId, setUpdatingFollowUpId] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -232,9 +253,11 @@ const AdminLeadDetailPage = () => {
     );
   }
 
-  const { lead, activities, notes, linked } = detail;
+  const { lead, activities, notes, followups, linked } = detail;
 
   const currentStatus = selectedStatus || lead.status;
+  const staffById: Record<string, string> = {};
+  staff.forEach((s) => { staffById[s.id] = s.name || s.email; });
 
   async function handleSaveStatus() {
     if (!id || !selectedStatus || selectedStatus === lead.status) return;
@@ -273,6 +296,55 @@ const AdminLeadDetailPage = () => {
 
   const statusChanged = selectedStatus && selectedStatus !== lead.status;
 
+  async function handleAssign(assignedTo: string) {
+    if (!id || !assignedTo) return;
+    setSavingAssign(true);
+    try {
+      await assignLeadTo(id, assignedTo);
+      await refetch();
+    } catch (err: any) {
+      console.error("Failed to assign lead:", err.message);
+    } finally {
+      setSavingAssign(false);
+    }
+  }
+
+  async function handleCreateFollowUp() {
+    if (!id || !followUpDueAt) {
+      setFollowUpError("Due date is required.");
+      return;
+    }
+    setSavingFollowUp(true);
+    setFollowUpError(null);
+    try {
+      await postLeadFollowUp(id, {
+        dueAt: new Date(followUpDueAt).toISOString(),
+        assignedTo: followUpAssignee || undefined,
+        notes: followUpNotes || undefined,
+      });
+      setFollowUpDueAt("");
+      setFollowUpAssignee("");
+      setFollowUpNotes("");
+      await refetch();
+    } catch (err: any) {
+      setFollowUpError(err.message ?? "Failed to create follow-up.");
+    } finally {
+      setSavingFollowUp(false);
+    }
+  }
+
+  async function handleFollowUpStatus(followUpId: string, status: "completed" | "skipped") {
+    setUpdatingFollowUpId(followUpId);
+    try {
+      await patchFollowUpStatus(followUpId, status);
+      await refetch();
+    } catch (err: any) {
+      console.error("Failed to update follow-up:", err.message);
+    } finally {
+      setUpdatingFollowUpId(null);
+    }
+  }
+
   return (
     <div className="grid gap-8">
       <Button variant="ghost" size="sm" className="self-start rounded-xl -ml-2" onClick={() => navigate("/admin/leads")}>
@@ -298,6 +370,19 @@ const AdminLeadDetailPage = () => {
             <Badge variant="secondary" className="font-bold border-none bg-muted text-foreground">
               {SOURCE_LABEL[lead.source] ?? lead.source}
             </Badge>
+            {lead.assigned_to && (
+              <Badge variant="outline" className="font-bold border-none bg-sky-100 text-sky-800 flex items-center gap-1">
+                <UserPlus className="h-3 w-3" />
+                {staffById[lead.assigned_to] ?? "Assigned"}
+              </Badge>
+            )}
+            {linked.referral && (
+              <Badge variant="outline" className="font-bold border-none bg-violet-100 text-violet-800 flex items-center gap-1">
+                <Gift className="h-3 w-3" />
+                Referred via {linked.referral.code}
+                {linked.referral.owner_type === "partner" && linked.referral.partner_name ? ` (${linked.referral.partner_name})` : ""}
+              </Badge>
+            )}
           </div>
 
           <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 text-sm">
@@ -446,6 +531,134 @@ const AdminLeadDetailPage = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Assignment */}
+      <Card className="rounded-2xl border-border/60 bg-card/95">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm font-bold">
+            <UserPlus className="h-4 w-4 text-muted-foreground" />
+            Assign Lead
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Assigned to</label>
+              <select
+                className="h-10 w-full rounded-xl border border-border/60 bg-background px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none"
+                value={lead.assigned_to ?? ""}
+                disabled={savingAssign}
+                onChange={(e) => handleAssign(e.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name || s.email}</option>
+                ))}
+              </select>
+            </div>
+            {savingAssign && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Follow-ups */}
+      <div>
+        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+          <CalendarClock className="h-3.5 w-3.5" />
+          Follow-ups {followups.length > 0 && <span className="font-normal normal-case tracking-normal">({followups.length})</span>}
+        </h3>
+
+        <div className="space-y-3 mb-4">
+          {followups.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">No follow-ups scheduled.</p>
+          ) : (
+            followups.map((f: AdminLeadFollowUp) => (
+              <div key={f.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-card/80 p-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-bold uppercase tracking-wide ${
+                      f.status === "completed" ? "text-green-700" : f.status === "skipped" ? "text-muted-foreground" : "text-amber-700"
+                    }`}>
+                      {f.status}
+                    </span>
+                    <span className="text-xs text-muted-foreground">Due {formatDateTime(f.due_at)}</span>
+                    {f.assigned_to && (
+                      <span className="text-xs text-muted-foreground">· {staffById[f.assigned_to] ?? "Assigned"}</span>
+                    )}
+                  </div>
+                  {f.notes && <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">{f.notes}</p>}
+                </div>
+                {f.status === "pending" && (
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-7 w-7 rounded-lg text-green-700 hover:bg-green-50"
+                      disabled={updatingFollowUpId === f.id}
+                      onClick={() => handleFollowUpStatus(f.id, "completed")}
+                      title="Mark completed"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-7 w-7 rounded-lg text-muted-foreground"
+                      disabled={updatingFollowUpId === f.id}
+                      onClick={() => handleFollowUpStatus(f.id, "skipped")}
+                      title="Skip"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-border/60 bg-card/95 p-4 flex flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Due date *</label>
+              <Input
+                type="datetime-local"
+                value={followUpDueAt}
+                onChange={(e) => { setFollowUpDueAt(e.target.value); setFollowUpError(null); }}
+                className="rounded-xl border-border/60"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Assign to (optional)</label>
+              <select
+                className="h-10 w-full rounded-xl border border-border/60 bg-background px-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                value={followUpAssignee}
+                onChange={(e) => setFollowUpAssignee(e.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name || s.email}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <Textarea
+            placeholder="What needs to happen? (optional)"
+            value={followUpNotes}
+            onChange={(e) => setFollowUpNotes(e.target.value)}
+            className="rounded-xl border-border/60 resize-none min-h-[60px] text-sm"
+          />
+          {followUpError && <p className="text-xs text-destructive">{followUpError}</p>}
+          <Button
+            className="self-end rounded-xl h-9 text-sm"
+            disabled={!followUpDueAt || savingFollowUp}
+            onClick={handleCreateFollowUp}
+          >
+            {savingFollowUp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Schedule Follow-up
+          </Button>
+        </div>
+      </div>
 
       {/* Notes section */}
       <div>

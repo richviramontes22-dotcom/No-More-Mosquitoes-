@@ -15,6 +15,8 @@ interface CapacityProfile {
   is_licensed_applicator: boolean;
   allowed_service_types: string[];
   home_base_address: string;
+  home_base_lat: number | null;
+  home_base_lng: number | null;
   vehicle_type: string;
   max_service_minutes_per_day: number | null;
 }
@@ -27,6 +29,8 @@ const defaultProfile = (): CapacityProfile => ({
   is_licensed_applicator: false,
   allowed_service_types: [],
   home_base_address: "",
+  home_base_lat: null,
+  home_base_lng: null,
   vehicle_type: "",
   max_service_minutes_per_day: null,
 });
@@ -58,6 +62,8 @@ const WorkforceCapacity = () => {
           is_licensed_applicator: data.profile.is_licensed_applicator ?? false,
           allowed_service_types: data.profile.allowed_service_types ?? [],
           home_base_address: data.profile.home_base_address ?? "",
+          home_base_lat: data.profile.home_base_lat ?? null,
+          home_base_lng: data.profile.home_base_lng ?? null,
           vehicle_type: data.profile.vehicle_type ?? "",
           max_service_minutes_per_day: data.profile.max_service_minutes_per_day ?? null,
         });
@@ -189,7 +195,26 @@ const WorkforceCapacity = () => {
                     <Label>Home base / Depot address</Label>
                     <Input value={profile.home_base_address} onChange={e => set("home_base_address", e.target.value)}
                       placeholder="123 Warehouse St, Irvine, CA" className="rounded-xl" />
-                    <p className="text-xs text-muted-foreground">Used as route starting point (future sprint)</p>
+                    <p className="text-xs text-muted-foreground">Human-readable reference only — Smart Optimize uses the coordinates below</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Home base latitude</Label>
+                    <Input type="number" step="0.000001" min={-90} max={90}
+                      value={profile.home_base_lat ?? ""}
+                      onChange={e => set("home_base_lat", e.target.value === "" ? null : Number(e.target.value))}
+                      placeholder="e.g., 33.6846" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Home base longitude</Label>
+                    <Input type="number" step="0.000001" min={-180} max={180}
+                      value={profile.home_base_lng ?? ""}
+                      onChange={e => set("home_base_lng", e.target.value === "" ? null : Number(e.target.value))}
+                      placeholder="e.g., -117.8265" className="rounded-xl" />
+                    <p className="text-xs text-muted-foreground">
+                      Look up coordinates from{" "}
+                      <a href="https://www.google.com/maps" target="_blank" rel="noreferrer" className="underline">Google Maps</a>
+                      {" "}(right-click the pin → copy coordinates). Used by Smart Optimize as the route starting point.
+                    </p>
                   </div>
                 </CardContent>
               </Card>

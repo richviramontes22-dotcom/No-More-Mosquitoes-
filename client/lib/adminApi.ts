@@ -2,11 +2,14 @@ import { supabase, withTimeout } from "@/lib/supabase";
 
 export class AdminApiError extends Error {
   status?: number;
+  /** Full parsed JSON error body — lets callers read fields like `warnings`, `validation`, `hint` beyond just the message. */
+  details?: any;
 
-  constructor(message: string, status?: number) {
+  constructor(message: string, status?: number, details?: any) {
     super(message);
     this.name = "AdminApiError";
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -47,7 +50,7 @@ export async function adminApi(path: string, method = "GET", body?: unknown, tim
     }
 
     if (!res.ok) {
-      throw new AdminApiError(json.error || "Request failed", res.status);
+      throw new AdminApiError(json.error || "Request failed", res.status, json);
     }
 
     return json;

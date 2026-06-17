@@ -261,11 +261,13 @@ describe("getLead (admin lead detail)", () => {
     expect(detail!.lead.id).toBe(created!.id);
     expect(detail!.activities.map((a) => a.activity_type)).toEqual(["created", "manual_review"]);
     expect(detail!.notes).toEqual([]);
+    expect(detail!.followups).toEqual([]);
     expect(detail!.linked).toEqual({
       profile: null,
       property: null,
       scheduleRequest: null,
       subscription: null,
+      referral: null,
     });
   });
 

@@ -28,6 +28,8 @@ export interface ScheduleRequestPayload {
   acreage?: number;
   origin?: string;
   submittedAt: string;
+  /** Referral code captured from a `?ref=CODE` link, if any (see client/lib/referralCapture.ts). */
+  referralCode?: string;
 }
 
 export interface ScheduleResponse {

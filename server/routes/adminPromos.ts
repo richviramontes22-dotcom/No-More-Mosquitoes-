@@ -48,6 +48,9 @@ router.post("/promos/codes", requireAdmin, async (req, res) => {
   try {
     const couponBody: Record<string, string> = {
       name: code,
+      // Stripe requires `duration`. "once" applies the discount to the first
+      // invoice/charge only — the standard semantic for a promo/discount code.
+      duration: "once",
       ...(discount_type === "percent"
         ? { percent_off: String(discount_value) }
         : { amount_off: String(Math.round(Number(discount_value) * 100)), currency: "usd" }),

@@ -343,6 +343,7 @@ router.post("/create-payment-intent", async (req, res) => {
       propertyId, acreage, cadenceDays, program,
       scheduledDate, window: windowId, windowLabel, windowStart, notes,
       preferredDays, preferredWindows, flexibilityDays,
+      promoDiscountCents, stripePromotionCodeId, promoDatabaseId,
     } = req.body;
 
     // Log incoming params to server console — helps diagnose missing/bad values
@@ -385,6 +386,23 @@ router.post("/create-payment-intent", async (req, res) => {
     if (Array.isArray(preferredDays)    && preferredDays.length)    meta.pref_days    = preferredDays.join(",");
     if (Array.isArray(preferredWindows) && preferredWindows.length) meta.pref_windows = preferredWindows.join(",");
     if (flexibilityDays !== undefined)  meta.flex_days = String(flexibilityDays);
+    if (promoDatabaseId)        meta.promo_code_id            = String(promoDatabaseId);
+    if (stripePromotionCodeId)  meta.stripe_promotion_code_id = String(stripePromotionCodeId);
+
+    // Subscriptions apply the discount via Stripe's own promotion-code mechanism
+    // (Stripe computes the discounted invoice) — that requires a Stripe-synced code.
+    // one_time/annual PaymentIntents instead reduce `amount` directly below, which
+    // works even for local-only codes that never synced to Stripe.
+    if (program !== "one_time" && program !== "annual" && promoDatabaseId && !stripePromotionCodeId) {
+      return res.status(400).json({
+        error: "This promo code isn't available for recurring plans yet. Try a one-time or annual plan, or contact support.",
+      });
+    }
+
+    // Promo discount applied directly to one_time/annual PaymentIntent amounts —
+    // mirrors the marketplace checkout's existing pattern. Stripe minimum charge is 50 cents.
+    const applyPromoDiscount = (cents: number): number =>
+      Math.max(50, cents - Math.min(promoDiscountCents || 0, cents));
 
     if (program === "annual") {
       // Annual plan: flat yearly charge as a one-time PaymentIntent.
@@ -395,7 +413,7 @@ router.post("/create-payment-intent", async (req, res) => {
         });
       }
       const body = new URLSearchParams({
-        amount:      String(annualCents),
+        amount:      String(applyPromoDiscount(annualCents)),
         currency:    "usd",
         customer:    customerId,
         description: "Annual Mosquito Service Plan",
@@ -421,7 +439,7 @@ router.post("/create-payment-intent", async (req, res) => {
         });
       }
       const body = new URLSearchParams({
-        amount:      String(oneTimeCents),
+        amount:      String(applyPromoDiscount(oneTimeCents)),
         currency:    "usd",
         customer:    customerId,
         description: "One-Time Mosquito Treatment",
@@ -459,6 +477,8 @@ router.post("/create-payment-intent", async (req, res) => {
       });
       if (autoTaxEnabled()) body.append("automatic_tax[enabled]", "true");
       for (const [k, v] of Object.entries(meta)) body.append(`metadata[${k}]`, v);
+      // Stripe-native discount — Stripe computes the discounted invoice/PI amount itself.
+      if (stripePromotionCodeId) body.append("discounts[0][promotion_code]", String(stripePromotionCodeId));
       // Inline expand — works reliably in POST bodies via %5B%5D decoding on Stripe's side.
       body.append("expand[]", "latest_invoice");
       body.append("expand[]", "latest_invoice.payment_intent");
@@ -620,6 +640,37 @@ router.post("/create-payment-intent", async (req, res) => {
 });
 
 /**
+ * Increments a promo code's used_count after a confirmed successful payment.
+ * Uses the atomic increment_promo_used_count RPC if available, falling back to
+ * a non-atomic read-then-write (acceptable — this is a usage counter, not a
+ * financial figure). Mirrors the equivalent block in webhooksStripe.ts for the
+ * marketplace flow.
+ */
+async function incrementPromoUsedCount(promoCodeId: string): Promise<void> {
+  try {
+    const { error: rpcError } = await supabaseAdmin.rpc("increment_promo_used_count", {
+      promo_id: promoCodeId,
+    });
+    if (rpcError) {
+      const { data: promoRow } = await supabaseAdmin
+        .from("promo_codes")
+        .select("used_count")
+        .eq("id", promoCodeId)
+        .eq("active", true)
+        .maybeSingle();
+      if (promoRow) {
+        await supabaseAdmin
+          .from("promo_codes")
+          .update({ used_count: (promoRow.used_count || 0) + 1 })
+          .eq("id", promoCodeId);
+      }
+    }
+  } catch (err: any) {
+    console.error("[Billing] promo used_count increment failed:", err.message);
+  }
+}
+
+/**
  * POST /api/billing/confirm-booking
  *
  * Called by the client immediately after stripe.confirmPayment() succeeds.
@@ -656,6 +707,24 @@ router.post("/confirm-booking", async (req, res) => {
       });
     }
     checkpoint(requestId, CP.BILLING_PAYMENT_VERIFIED, { userId: user.id });
+
+    // Redeem the promo code (if any) now that payment is confirmed. Read the
+    // promo_code_id back from Stripe metadata rather than trusting the request
+    // body — for one_time/annual it's on the PaymentIntent; for subscriptions
+    // it's on the Subscription object (metadata attached at creation in
+    // create-payment-intent), not the invoice's PaymentIntent.
+    void (async () => {
+      try {
+        let redeemedPromoId: string | undefined = (pi as any).metadata?.promo_code_id;
+        if (!redeemedPromoId && program !== "one_time" && program !== "annual" && subscriptionId) {
+          const sub = await stripeFetch(`/subscriptions/${subscriptionId}`);
+          redeemedPromoId = (sub as any).metadata?.promo_code_id;
+        }
+        if (redeemedPromoId) await incrementPromoUsedCount(redeemedPromoId);
+      } catch (promoErr: any) {
+        console.error("[Billing] promo redemption lookup failed:", promoErr.message);
+      }
+    })();
 
     // For recurring subscription plans: upsert the subscription record
     if (program !== "one_time" && program !== "annual" && subscriptionId) {

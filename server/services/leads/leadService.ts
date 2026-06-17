@@ -15,7 +15,11 @@ export type LeadActivityType =
   | "schedule_request_received"
   | "merged"
   | "status_changed"
-  | "note_added";
+  | "note_added"
+  | "lead_assigned"
+  | "followup_created"
+  | "followup_completed"
+  | "followup_skipped";
 export type LeadActivityActor = "system" | "admin";
 
 export interface Lead {
@@ -45,6 +49,7 @@ export interface Lead {
   schedule_request_id: string | null;
   admin_alert_id: string | null;
   converted_customer_id: string | null;
+  assigned_to: string | null;
   first_seen_at: string;
   last_seen_at: string;
   converted_at: string | null;
@@ -71,15 +76,41 @@ export interface LeadNote {
   updated_at: string;
 }
 
+export interface LeadAssignment {
+  id: string;
+  lead_id: string;
+  assigned_to: string;
+  assigned_by: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export type FollowUpStatus = "pending" | "completed" | "skipped";
+
+export interface LeadFollowUp {
+  id: string;
+  lead_id: string;
+  assigned_to: string | null;
+  due_at: string;
+  status: FollowUpStatus;
+  notes: string | null;
+  completed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface LeadDetail {
   lead: Lead;
   activities: LeadActivity[];
   notes: LeadNote[];
+  followups: LeadFollowUp[];
   linked: {
     profile: Record<string, unknown> | null;
     property: Record<string, unknown> | null;
     scheduleRequest: Record<string, unknown> | null;
     subscription: Record<string, unknown> | null;
+    referral: Record<string, unknown> | null;
   };
 }
 
@@ -299,6 +330,136 @@ export async function addLeadNote(
   });
 
   return note as LeadNote;
+}
+
+/**
+ * Assigns a lead to a staff member. Inserts a new lead_assignments row
+ * (full history, never overwritten) and updates the denormalized
+ * leads.assigned_to cache used by the Lead Inbox list view.
+ */
+export async function assignLead(
+  leadId: string,
+  assignedTo: string,
+  assignedBy?: string | null,
+): Promise<Lead | null> {
+  const { data: existing } = await db.from("leads").select("*").eq("id", leadId).maybeSingle();
+  if (!existing) return null;
+
+  const { error: assignErr } = await db.from("lead_assignments").insert({
+    lead_id: leadId,
+    assigned_to: assignedTo,
+    assigned_by: assignedBy ?? null,
+  });
+  if (assignErr) {
+    console.error("[leadService] assignLead insert failed:", assignErr.message);
+    return null;
+  }
+
+  const { data, error } = await db
+    .from("leads")
+    .update({ assigned_to: assignedTo })
+    .eq("id", leadId)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("[leadService] assignLead update failed:", error?.message);
+    return null;
+  }
+
+  await recordLeadActivity({
+    leadId,
+    activityType: "lead_assigned",
+    actor: "admin",
+    actorId: assignedBy ?? null,
+    payload: { assigned_to: assignedTo, previous_assignee: existing.assigned_to ?? null },
+  });
+
+  return data as Lead;
+}
+
+export interface CreateFollowUpParams {
+  leadId: string;
+  dueAt: string;
+  assignedTo?: string | null;
+  notes?: string | null;
+  createdBy?: string | null;
+}
+
+/** Creates a due-dated follow-up task for a lead. No SMS/email reminder is sent — visible in the admin UI only. */
+export async function createFollowUp(params: CreateFollowUpParams): Promise<LeadFollowUp | null> {
+  const { data, error } = await db
+    .from("lead_followups")
+    .insert({
+      lead_id: params.leadId,
+      due_at: params.dueAt,
+      assigned_to: params.assignedTo ?? null,
+      notes: params.notes ?? null,
+      created_by: params.createdBy ?? null,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("[leadService] createFollowUp failed:", error?.message);
+    return null;
+  }
+
+  await recordLeadActivity({
+    leadId: params.leadId,
+    activityType: "followup_created",
+    actor: "admin",
+    actorId: params.createdBy ?? null,
+    payload: { due_at: params.dueAt, assigned_to: params.assignedTo ?? null },
+  });
+
+  return data as LeadFollowUp;
+}
+
+/** Marks a follow-up completed or skipped. Status must already be 'pending'. */
+export async function updateFollowUpStatus(
+  followUpId: string,
+  status: "completed" | "skipped",
+  actorId?: string | null,
+): Promise<LeadFollowUp | null> {
+  const { data: existing } = await db.from("lead_followups").select("*").eq("id", followUpId).maybeSingle();
+  if (!existing) return null;
+
+  const updates: Record<string, unknown> = { status };
+  if (status === "completed") updates.completed_at = new Date().toISOString();
+
+  const { data, error } = await db.from("lead_followups").update(updates).eq("id", followUpId).select("*").single();
+  if (error || !data) {
+    console.error("[leadService] updateFollowUpStatus failed:", error?.message);
+    return null;
+  }
+
+  await recordLeadActivity({
+    leadId: existing.lead_id,
+    activityType: status === "completed" ? "followup_completed" : "followup_skipped",
+    actor: "admin",
+    actorId: actorId ?? null,
+    payload: { followup_id: followUpId },
+  });
+
+  return data as LeadFollowUp;
+}
+
+export interface ListFollowUpsParams {
+  status?: FollowUpStatus;
+  assignedTo?: string;
+  dueBefore?: string;
+}
+
+/** Lists follow-ups across all leads — used for an admin "my follow-ups" / overdue view. */
+export async function listFollowUps(params: ListFollowUpsParams = {}): Promise<LeadFollowUp[]> {
+  let query = db.from("lead_followups").select("*").order("due_at", { ascending: true });
+  if (params.status) query = query.eq("status", params.status);
+  if (params.assignedTo) query = query.eq("assigned_to", params.assignedTo);
+  if (params.dueBefore) query = query.lte("due_at", params.dueBefore);
+
+  const { data } = await query;
+  return (data ?? []) as LeadFollowUp[];
 }
 
 // ─── Customer-facing upsert functions ──────────────────────────────────────
@@ -835,11 +996,18 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
     .eq("lead_id", id)
     .order("created_at", { ascending: false });
 
+  const { data: followups } = await db
+    .from("lead_followups")
+    .select("*")
+    .eq("lead_id", id)
+    .order("due_at", { ascending: true });
+
   const linked: LeadDetail["linked"] = {
     profile: null,
     property: null,
     scheduleRequest: null,
     subscription: null,
+    referral: null,
   };
 
   if (lead.profile_id) {
@@ -859,10 +1027,22 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
     linked.subscription = data ?? null;
   }
 
+  // Referral attribution — best-effort lookup, never blocks the lead detail response.
+  const { data: referral } = await db.from("referrals").select("*").eq("lead_id", id).maybeSingle();
+  if (referral) {
+    const { data: code } = await db
+      .from("referral_codes")
+      .select("code, owner_type, partner_name")
+      .eq("id", referral.referral_code_id)
+      .maybeSingle();
+    linked.referral = { ...referral, code: code?.code ?? null, owner_type: code?.owner_type ?? null, partner_name: code?.partner_name ?? null };
+  }
+
   return {
     lead: lead as Lead,
     activities: (activities ?? []) as LeadActivity[],
     notes: (notes ?? []) as LeadNote[],
+    followups: (followups ?? []) as LeadFollowUp[],
     linked,
   };
 }

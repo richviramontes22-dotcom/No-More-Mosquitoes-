@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { isValidEmail } from "@/lib/forms";
+import {
+  fetchLegalStatus, savePendingLegalAcceptance, submitAcceptances, clearPendingLegalAcceptance,
+  type LegalStatus,
+} from "@/lib/legalGate";
+import LegalDocumentChecklist from "@/components/legal/LegalDocumentChecklist";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -33,8 +38,17 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Legal acceptance gate — fetched once; enforcement_enabled is false by
+  // default, in which case this changes nothing about the form below.
+  const [legalStatus, setLegalStatus] = useState<LegalStatus | null>(null);
+  const [legalChecked, setLegalChecked] = useState<Record<string, boolean>>({});
+
   const { toast } = useToast();
   const { login, signUp } = useAuth();
+
+  useEffect(() => {
+    fetchLegalStatus().then(setLegalStatus);
+  }, []);
 
   useEffect(() => { setMode(defaultMode); }, [defaultMode]);
 
@@ -48,6 +62,9 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
     }
   }, [defaultEmail, defaultName]);
 
+  const legalEnforced = !!legalStatus?.enforcement_enabled && (legalStatus?.required.length ?? 0) > 0;
+  const allLegalChecked = !legalEnforced || (legalStatus?.required.every((d) => legalChecked[d.document_id]) ?? false);
+
   const invalidSignupReason = useMemo(() => {
     if (!signupFirstName.trim()) return "Enter your first name";
     if (!signupLastName.trim())  return "Enter your last name";
@@ -55,9 +72,13 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
     if (signupPhone.trim() && !/^\+?[\d\s\-().]{7,15}$/.test(signupPhone.trim())) return "Enter a valid phone number";
     if (signupPassword.trim().length < MIN_PASSWORD_LENGTH) return `Use at least ${MIN_PASSWORD_LENGTH} characters`;
     if (signupPassword !== signupConfirmPassword) return "Passwords must match";
-    if (!termsAccepted) return "Please accept the terms to continue";
+    if (legalEnforced) {
+      if (!allLegalChecked) return "Please accept all required documents to continue";
+    } else if (!termsAccepted) {
+      return "Please accept the terms to continue";
+    }
     return null;
-  }, [signupFirstName, signupLastName, signupEmail, signupPhone, signupPassword, signupConfirmPassword, termsAccepted]);
+  }, [signupFirstName, signupLastName, signupEmail, signupPhone, signupPassword, signupConfirmPassword, termsAccepted, legalEnforced, allLegalChecked]);
 
   const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -114,6 +135,15 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
       const isTestAccount = import.meta.env.DEV &&
         signupEmail.trim().toLowerCase().endsWith("@test.com");
 
+      // Capture intent to accept BEFORE creating the account. Normal signups
+      // have no active session yet (email confirmation pending), so this
+      // pending payload is what the dashboard-entry gate writes for real once
+      // the customer actually logs in — see client/lib/legalGate.ts.
+      const acceptancePayload = legalEnforced
+        ? legalStatus!.required.map((d) => ({ document_id: d.document_id, document_type: d.document_type, document_version: d.version }))
+        : null;
+      if (acceptancePayload) savePendingLegalAcceptance(acceptancePayload);
+
       await signUp({
         firstName: signupFirstName,
         lastName:  signupLastName,
@@ -121,6 +151,19 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
         phone:     signupPhone,
         password:  signupPassword,
       });
+
+      // Best-effort immediate write — succeeds only if signUp() produced an
+      // active session right away (test-account fast path, or email
+      // confirmation disabled on this project). If it fails, the pending
+      // payload saved above is picked up by the dashboard-entry gate later.
+      if (acceptancePayload) {
+        try {
+          await submitAcceptances(acceptancePayload);
+          clearPendingLegalAcceptance();
+        } catch {
+          // Expected for normal (email-confirmation-required) signups — no-op.
+        }
+      }
 
       if (isTestAccount) {
         toast({
@@ -339,26 +382,39 @@ const AuthTabs = ({ defaultMode = "login", defaultEmail = "", defaultName = "", 
               />
             </div>
 
-            {/* Terms acceptance */}
-            <div className="flex items-start gap-3 pt-1">
-              <input
-                id="signup-terms"
-                type="checkbox"
-                checked={termsAccepted}
-                onChange={(e) => setTermsAccepted(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer"
-              />
-              <label htmlFor="signup-terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
-                I agree to the{" "}
-                <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-4 hover:no-underline">
-                  Terms of Service
-                </a>{" "}
-                and{" "}
-                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-4 hover:no-underline">
-                  Privacy Policy
-                </a>
-              </label>
-            </div>
+            {/* Legal acceptance — replaced by the per-document checklist only when
+                an admin has enabled enforcement and deployed required documents;
+                otherwise this is the original single Terms/Privacy checkbox, unchanged. */}
+            {legalEnforced ? (
+              <div className="pt-1 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">Please review and accept the following:</p>
+                <LegalDocumentChecklist
+                  documents={legalStatus!.required}
+                  checked={legalChecked}
+                  onChange={(documentId, isChecked) => setLegalChecked((prev) => ({ ...prev, [documentId]: isChecked }))}
+                />
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 pt-1">
+                <input
+                  id="signup-terms"
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                />
+                <label htmlFor="signup-terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
+                  I agree to the{" "}
+                  <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-4 hover:no-underline">
+                    Terms of Service
+                  </a>{" "}
+                  and{" "}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-4 hover:no-underline">
+                    Privacy Policy
+                  </a>
+                </label>
+              </div>
+            )}
 
             {invalidSignupReason && (signupConfirmPassword.length > 0 || termsAccepted !== undefined) && (
               <p className="text-xs text-destructive" role="alert">{invalidSignupReason}</p>
