@@ -176,36 +176,6 @@ router.get("/routes", async (req, res) => {
 
 // ─── GET /api/admin/routes/:routeId ──────────────────────────────────────────
 
-router.get("/routes/:routeId", async (req, res) => {
-  const actor = await getAdminOrEmployeeUserId(req);
-  if (!actor) return res.status(401).json({ error: "Unauthorized" });
-
-  const { data: route, error: rErr } = await db
-    .from("routes")
-    .select("*")
-    .eq("id", req.params.routeId)
-    .single();
-  if (rErr || !route) return res.status(404).json({ error: "Route not found" });
-
-  const { data: stops, error: sErr } = await db
-    .from("route_stops")
-    .select(`
-      *,
-      assignments!inner (
-        id, appointment_id,
-        appointments!inner (
-          id, scheduled_at, service_type,
-          properties!inner ( id, address, city, state, zip, lat, lng )
-        )
-      )
-    `)
-    .eq("route_id", req.params.routeId)
-    .order("sequence_number");
-
-  if (sErr) return res.status(500).json({ error: sErr.message });
-  res.json({ route, stops: stops || [] });
-});
-
 // ─── POST /api/admin/routes/generate (single technician) ─────────────────────
 
 router.post("/routes/generate", async (req, res) => {
@@ -1083,6 +1053,7 @@ router.post("/routes/:routeId/reorder-stops", async (req, res) => {
   res.json({ success: true, stops: updatedStops, improvement: result.improvement });
 });
 
+// GET /api/admin/routes/:routeId
 // ─── Routing Automation Policy ────────────────────────────────────────────────
 
 // GET /api/admin/routes/automation-settings
@@ -1177,6 +1148,45 @@ router.get("/routes/automation/history", async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ history: data ?? [] });
+});
+
+// GET /api/admin/routes/:routeId
+// Registered last among /routes/* GET routes — Express matches GET routes in
+// registration order, so a single-segment param route like this one would
+// otherwise shadow literal paths registered after it (e.g. GET /routes/day
+// or GET /routes/automation-settings would incorrectly match here with
+// routeId="day"/"automation-settings" and 404 instead of reaching their
+// intended handlers). Pre-existing bug, not introduced by Platform Growth
+// Phase 2 — fixed alongside it since Phase 2's new automation-settings/
+// day-plan UI surfaced it immediately on page load.
+router.get("/routes/:routeId", async (req, res) => {
+  const actor = await getAdminOrEmployeeUserId(req);
+  if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+  const { data: route, error: rErr } = await db
+    .from("routes")
+    .select("*")
+    .eq("id", req.params.routeId)
+    .single();
+  if (rErr || !route) return res.status(404).json({ error: "Route not found" });
+
+  const { data: stops, error: sErr } = await db
+    .from("route_stops")
+    .select(`
+      *,
+      assignments!inner (
+        id, appointment_id,
+        appointments!inner (
+          id, scheduled_at, service_type,
+          properties!inner ( id, address, city, state, zip, lat, lng )
+        )
+      )
+    `)
+    .eq("route_id", req.params.routeId)
+    .order("sequence_number");
+
+  if (sErr) return res.status(500).json({ error: sErr.message });
+  res.json({ route, stops: stops || [] });
 });
 
 export default router;
