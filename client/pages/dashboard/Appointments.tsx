@@ -76,6 +76,7 @@ function RescheduleDialog({
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedWindow, setSelectedWindow] = useState<WindowOption | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showRequestDialog, setShowRequestDialog] = useState(false);
 
   // Fetch 45 days of availability on open
   useEffect(() => {
@@ -159,6 +160,16 @@ function RescheduleDialog({
     }
   };
 
+  if (showRequestDialog) {
+    return (
+      <RescheduleRequestDialog
+        appointment={appointment}
+        onClose={() => setShowRequestDialog(false)}
+        onSubmitted={onClose}
+      />
+    );
+  }
+
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
       <DialogContent className="max-w-lg rounded-[28px] p-0 overflow-hidden border-none shadow-2xl">
@@ -235,6 +246,115 @@ function RescheduleDialog({
             onClick={handleSubmit}
           >
             {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Rescheduling…</> : "Confirm Reschedule"}
+          </Button>
+        </div>
+
+        <div className="px-6 pb-6 -mt-2 text-center">
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline hover:text-primary"
+            onClick={() => setShowRequestDialog(true)}
+          >
+            Don't see a date that works? Request a different one
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Reschedule Request Dialog (additive — for dates not open to instant rebooking) ─
+
+function RescheduleRequestDialog({
+  appointment,
+  onClose,
+  onSubmitted,
+}: {
+  appointment: Appointment;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const { toast } = useToast();
+  const [preferredDate, setPreferredDate] = useState("");
+  const [preferredWindowLabel, setPreferredWindowLabel] = useState("Morning (8AM–12PM)");
+  const [reason, setReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!preferredDate) {
+      toast({ title: "Please select a preferred date", variant: "destructive" });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const resp = await fetch(`/api/appointments/${appointment.id}/reschedule-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+        body: JSON.stringify({ preferredDate, preferredWindowLabel, reason: reason || undefined }),
+      });
+      if (!resp.ok) {
+        const { error } = await resp.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(error);
+      }
+      toast({ title: "Request sent", description: "We'll review your request and email you once it's decided." });
+      onSubmitted();
+    } catch (err: any) {
+      toast({ title: "Failed to send request", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent className="max-w-md rounded-[28px]">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-display font-bold">Request a Different Date</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            We'll review this and email you once it's approved or if we need to follow up. Your current appointment stays as-is until then.
+          </p>
+        </DialogHeader>
+        <div className="space-y-4 px-1">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Preferred Date</p>
+            <input
+              type="date"
+              value={preferredDate}
+              min={format(new Date(), "yyyy-MM-dd")}
+              onChange={(e) => setPreferredDate(e.target.value)}
+              className="w-full h-10 rounded-xl border border-border/60 bg-background px-3 text-sm"
+            />
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Preferred Window</p>
+            <select
+              value={preferredWindowLabel}
+              onChange={(e) => setPreferredWindowLabel(e.target.value)}
+              className="w-full h-10 rounded-xl border border-border/60 bg-background px-3 text-sm"
+            >
+              <option>Morning (8AM–12PM)</option>
+              <option>Afternoon (12PM–4PM)</option>
+              <option>No preference</option>
+            </select>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5">Reason (optional)</p>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              className="w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm"
+              placeholder="Anything we should know?"
+            />
+          </div>
+        </div>
+        <div className="flex gap-3 pt-2">
+          <Button variant="ghost" className="flex-1 rounded-xl h-11" onClick={onClose}>Cancel</Button>
+          <Button className="flex-1 rounded-xl h-11 shadow-brand" disabled={isSubmitting} onClick={handleSubmit}>
+            {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending…</> : "Send Request"}
           </Button>
         </div>
       </DialogContent>

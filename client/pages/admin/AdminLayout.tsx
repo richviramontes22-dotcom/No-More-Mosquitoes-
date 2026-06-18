@@ -27,6 +27,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Field Operations",
     items: [
       { label: "Appointments", to: "/admin/appointments", icon: Calendar },
+      { label: "Reschedule Requests", to: "/admin/reschedule-requests", icon: CalendarDays },
       { label: "Route Planning", to: "/admin/route-planning", icon: Navigation },
       { label: "Visits", to: "/admin/visits", icon: Truck },
       { label: "Service Areas", to: "/admin/service-areas", icon: Globe },
@@ -76,6 +77,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Analytics",
     items: [
       { label: "Reports", to: "/admin/reports", icon: BarChart3 },
+      { label: "Analytics", to: "/admin/analytics", icon: BarChart3 },
     ],
   },
   {

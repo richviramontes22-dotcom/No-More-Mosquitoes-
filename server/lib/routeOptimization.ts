@@ -161,6 +161,48 @@ export function optimizeRoute(
   return routeStops;
 }
 
+// ─── Coordinate resolution + confidence scoring ──────────────────────────────
+// Shared by server/routes/adminRoutes.ts (single-tech + day-plan generation)
+// and server/services/routing/dayPlanGenerator.ts (automated day-plan generation)
+// — moved here so both call sites use one implementation.
+
+export type CoordSource = "property_coordinates" | "mock_fallback";
+
+export interface ResolvedCoord {
+  latitude: number;
+  longitude: number;
+  source: CoordSource;
+}
+
+export function mockGeocodeAddress(address: string, zip: string): { latitude: number; longitude: number } {
+  const zipHash = (zip || "90000")
+    .split("")
+    .reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
+  return {
+    latitude:  33.7 + (zipHash % 100) / 1000,
+    longitude: -117.9 + (zipHash % 100) / 1000,
+  };
+}
+
+export function resolveCoordinates(prop: any): ResolvedCoord {
+  const lat = prop?.lat ?? prop?.latitude;
+  const lng = prop?.lng ?? prop?.longitude;
+  if (typeof lat === "number" && typeof lng === "number" && lat !== 0 && lng !== 0) {
+    return { latitude: lat, longitude: lng, source: "property_coordinates" };
+  }
+  return { ...mockGeocodeAddress(prop?.address ?? "", prop?.zip ?? ""), source: "mock_fallback" };
+}
+
+export function calculateConfidence(
+  totalStops: number,
+  mockCount: number,
+  conflictNotes: string[]
+): "high" | "medium" | "low" {
+  if (mockCount === 0 && conflictNotes.length === 0) return "high";
+  if (mockCount <= 2 && conflictNotes.length <= 1) return "medium";
+  return "low";
+}
+
 /**
  * Validate that assignments have required geo information
  */

@@ -5,6 +5,7 @@ import { getResendClient, getFromEmail, isEmailConfigured } from "../services/no
 import { buildRescheduleEmail } from "../services/notifications/emailTemplates";
 import { logNotification } from "../services/notifications/notificationLogger";
 import { notifyAdmin } from "../services/notifications/adminNotificationService";
+import { createRescheduleRequest } from "../services/appointments/rescheduleRequestService";
 
 // Use service role for server-side reads so RLS doesn't block appointment lookup.
 // User identity is already validated via getAuthenticatedUser() before any query.
@@ -212,6 +213,82 @@ router.post("/appointments/:id/reschedule", async (req, res) => {
     }
 
     return res.json({ success: true, scheduledDate, windowId, windowLabel });
+  } catch (e: any) {
+    return res.status(e.status || 500).json({ error: e.message || "Internal server error" });
+  }
+});
+
+/**
+ * POST /api/appointments/:id/reschedule-request
+ * Additive to the instant self-service reschedule above — for when a
+ * customer wants a date that isn't open for instant rebooking. Creates a
+ * pending request only; an admin must explicitly approve before anything
+ * about the appointment changes.
+ */
+router.post("/appointments/:id/reschedule-request", async (req, res) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    const { id } = req.params;
+    const { preferredDate, preferredWindowLabel, reason } = req.body ?? {};
+
+    if (!preferredDate || !preferredWindowLabel) {
+      return res.status(400).json({ error: "preferredDate and preferredWindowLabel are required" });
+    }
+
+    const { data: appt, error: fetchErr } = await db
+      .from("appointments")
+      .select("id, user_id, status, scheduled_date")
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !appt) return res.status(404).json({ error: "Appointment not found" });
+    if (appt.user_id !== user.id) return res.status(403).json({ error: "Not authorized to modify this appointment" });
+    if (["canceled", "cancelled", "completed"].includes(appt.status)) {
+      return res.status(400).json({ error: "Cannot request a reschedule for a canceled or completed appointment" });
+    }
+
+    const request = await createRescheduleRequest({
+      appointmentId: id,
+      customerId: user.id,
+      currentScheduledDate: appt.scheduled_date ?? null,
+      preferredDate,
+      preferredWindowLabel,
+      reason: reason || null,
+    });
+
+    if (!request) return res.status(500).json({ error: "Failed to create reschedule request" });
+
+    notifyAdmin({
+      event_type: "scheduling.reschedule_requested",
+      severity: "info",
+      title: `Reschedule request — ${preferredDate}`,
+      body: `Customer requested a reschedule for appointment ${id} to ${preferredDate} (${preferredWindowLabel}).`,
+      entity_type: "appointment",
+      entity_id: id,
+      metadata: { request_id: request.id, preferred_date: preferredDate, preferred_window_label: preferredWindowLabel },
+    });
+
+    return res.status(201).json({ success: true, request });
+  } catch (e: any) {
+    return res.status(e.status || 500).json({ error: e.message || "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/appointments/reschedule-requests
+ * Customer's own reschedule request history, for showing pending status in
+ * the dashboard.
+ */
+router.get("/appointments/reschedule-requests", async (req, res) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    const { data, error } = await db
+      .from("appointment_reschedule_requests")
+      .select("*")
+      .eq("customer_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ requests: data ?? [] });
   } catch (e: any) {
     return res.status(e.status || 500).json({ error: e.message || "Internal server error" });
   }

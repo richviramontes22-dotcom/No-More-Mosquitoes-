@@ -21,7 +21,23 @@ interface RouteAutomationSettings {
   block_mock_geo: boolean;
   block_drive_cap_exceeded: boolean;
   enabled: boolean;
+  auto_generate_enabled: boolean;
+  auto_optimize_enabled: boolean;
+  auto_generate_time: string | null;
+  auto_generate_days: string[] | null;
+  require_admin_review_before_publish: boolean;
+  allow_full_auto_publish: boolean;
 }
+
+interface AutomationHistoryEntry {
+  id: string;
+  route_id: string;
+  action: string;
+  metadata: Record<string, any> | null;
+  created_at: string;
+}
+
+const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 interface RouteStop {
   id: string;
@@ -100,6 +116,10 @@ const RoutePlanning = () => {
   const [automationSettings, setAutomationSettings] = useState<RouteAutomationSettings | null>(null);
   const [loadingAutomation, setLoadingAutomation] = useState(false);
   const [savingAutomation, setSavingAutomation] = useState(false);
+  const [runningAutomation, setRunningAutomation] = useState(false);
+  const [automationHistory, setAutomationHistory] = useState<AutomationHistoryEntry[]>([]);
+  const [showAutomationHistory, setShowAutomationHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Load employees on mount
   useEffect(() => {
@@ -226,6 +246,41 @@ const RoutePlanning = () => {
     } finally {
       setSavingAutomation(false);
     }
+  };
+
+  const runAutomationNow = async () => {
+    setRunningAutomation(true);
+    try {
+      const data = await adminApi("/api/admin/routes/automation/run-now", "POST", { date: selectedDate });
+      toast({
+        title: "Automation run complete",
+        description: `Generated ${data.generate.routesGenerated}, optimized ${data.generate.routesOptimized}, published ${data.publish.published}, blocked ${data.publish.blocked}.`,
+      });
+      await loadDay().catch(() => {});
+      if (showAutomationHistory) await loadAutomationHistory();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setRunningAutomation(false);
+    }
+  };
+
+  const loadAutomationHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const data = await adminApi("/api/admin/routes/automation/history?limit=100");
+      setAutomationHistory(data.history || []);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const toggleAutomationHistory = async () => {
+    const next = !showAutomationHistory;
+    setShowAutomationHistory(next);
+    if (next) await loadAutomationHistory();
   };
 
   const handleRebuildDay = async () => {
@@ -1074,8 +1129,64 @@ const RoutePlanning = () => {
                 />
               </div>
 
+              <div className="space-y-2.5 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
+                <Label className="text-sm font-semibold">Generation & Optimization</Label>
+                <p className="text-xs text-muted-foreground -mt-1">Independent of publish mode below — generating/optimizing a route never publishes it.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Auto-generate day plans</span>
+                  <Switch
+                    checked={automationSettings.auto_generate_enabled}
+                    onCheckedChange={(checked) => setAutomationSettings({ ...automationSettings, auto_generate_enabled: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Auto-run Smart Optimize on generated routes</span>
+                  <Switch
+                    checked={automationSettings.auto_optimize_enabled}
+                    onCheckedChange={(checked) => setAutomationSettings({ ...automationSettings, auto_optimize_enabled: checked })}
+                  />
+                </div>
+                {automationSettings.auto_generate_enabled && (
+                  <>
+                    <div className="space-y-1.5 pt-1">
+                      <Label className="text-xs">Generate time (optional)</Label>
+                      <Input
+                        type="time"
+                        value={automationSettings.auto_generate_time ?? ""}
+                        onChange={(e) => setAutomationSettings({ ...automationSettings, auto_generate_time: e.target.value || null })}
+                        className="rounded-xl h-9"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Days allowed (none selected = every day)</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {WEEKDAYS.map((day) => {
+                          const selected = automationSettings.auto_generate_days?.includes(day) ?? false;
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => {
+                                const current = automationSettings.auto_generate_days ?? [];
+                                const next = selected ? current.filter((d) => d !== day) : [...current, day];
+                                setAutomationSettings({ ...automationSettings, auto_generate_days: next.length ? next : null });
+                              }}
+                              className={`rounded-lg px-2 py-1 text-[10px] font-semibold capitalize border ${
+                                selected ? "bg-violet-600 text-white border-violet-600" : "bg-background text-muted-foreground border-border/60"
+                              }`}
+                            >
+                              {day.slice(0, 3)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">Mode</Label>
+                <Label className="text-sm font-semibold">Publish Mode</Label>
                 <select
                   value={automationSettings.mode}
                   onChange={(e) => setAutomationSettings({ ...automationSettings, mode: e.target.value as RouteAutomationSettings["mode"] })}
@@ -1130,6 +1241,28 @@ const RoutePlanning = () => {
                 ))}
               </div>
 
+              <div className="space-y-2.5 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                  Full Auto-Publish Gates
+                </Label>
+                <p className="text-xs text-muted-foreground -mt-1">Both must be set (review off, full-publish on) for automation to ever publish without you clicking Publish.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Require admin review before publish</span>
+                  <Switch
+                    checked={automationSettings.require_admin_review_before_publish}
+                    onCheckedChange={(checked) => setAutomationSettings({ ...automationSettings, require_admin_review_before_publish: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Allow full auto-publish</span>
+                  <Switch
+                    checked={automationSettings.allow_full_auto_publish}
+                    onCheckedChange={(checked) => setAutomationSettings({ ...automationSettings, allow_full_auto_publish: checked })}
+                  />
+                </div>
+              </div>
+
               <div className="flex gap-3 pt-1">
                 <Button
                   className="flex-1 rounded-xl shadow-brand"
@@ -1143,6 +1276,47 @@ const RoutePlanning = () => {
                   Cancel
                 </Button>
               </div>
+
+              <div className="flex gap-3 pt-1 border-t border-border/40">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl mt-3"
+                  disabled={runningAutomation}
+                  onClick={runAutomationNow}
+                >
+                  {runningAutomation ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2 text-violet-600" />}
+                  Run Automation Now ({selectedDate})
+                </Button>
+                <Button variant="ghost" className="rounded-xl mt-3 text-xs" onClick={toggleAutomationHistory}>
+                  {showAutomationHistory ? "Hide" : "View"} History
+                </Button>
+              </div>
+
+              {showAutomationHistory && (
+                <div className="rounded-xl border border-border/60 max-h-64 overflow-y-auto">
+                  {loadingHistory ? (
+                    <div className="flex items-center justify-center py-6 text-muted-foreground text-sm gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
+                    </div>
+                  ) : automationHistory.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-6">No automation activity yet.</p>
+                  ) : (
+                    <div className="divide-y divide-border/30">
+                      {automationHistory.map((h) => (
+                        <div key={h.id} className="px-3 py-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold">{h.action.replace(/_/g, " ")}</span>
+                            <span className="text-muted-foreground">{new Date(h.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                          {h.metadata?.blockers?.length > 0 && (
+                            <p className="text-muted-foreground mt-0.5">{h.metadata.blockers.join("; ")}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

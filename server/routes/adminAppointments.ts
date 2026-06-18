@@ -8,6 +8,7 @@ import { buildCancellationEmail } from "../services/notifications/emailTemplates
 import { logNotification } from "../services/notifications/notificationLogger";
 import { notifyAdmin } from "../services/notifications/adminNotificationService";
 import { notifyEmployeeAssigned, notifyEmployeeAssignmentCancelled } from "../services/notifications/employeeNotificationService";
+import { listRescheduleRequests, approveRescheduleRequest, denyRescheduleRequest } from "../services/appointments/rescheduleRequestService";
 
 const db = supabaseAdmin ?? supabase;
 const router = Router();
@@ -303,6 +304,38 @@ router.post("/assignments", requireAdmin, async (req, res) => {
 
   console.log(`[AdminAssignments] Assigned ${appointment_ids.length} appointment(s) to employee ${employee_id}`);
   return res.json({ assigned: appointment_ids.length });
+});
+
+// ─── Reschedule requests (Platform Growth Phase 2 — additive review queue) ───
+
+router.get("/reschedule-requests", requireAdmin, async (req, res) => {
+  const { status } = req.query as Record<string, string>;
+  const valid = ["pending", "approved", "denied"];
+  const requests = await listRescheduleRequests(status && valid.includes(status) ? (status as any) : undefined);
+  res.json({ requests });
+});
+
+router.post("/reschedule-requests/:id/approve", requireAdmin, async (req, res) => {
+  const { scheduledDate, windowId, windowLabel, windowStart, adminNotes } = req.body ?? {};
+  if (!scheduledDate || !windowId || !windowLabel) {
+    return res.status(400).json({ error: "scheduledDate, windowId, and windowLabel are required" });
+  }
+
+  const result = await approveRescheduleRequest(req.params.id, {
+    scheduledDate, windowId, windowLabel, windowStart,
+    adminId: req.adminUserId ?? null,
+    adminNotes,
+  });
+
+  if (!result.request) return res.status(400).json({ error: result.error || "Failed to approve request" });
+  res.json({ success: true, request: result.request });
+});
+
+router.post("/reschedule-requests/:id/deny", requireAdmin, async (req, res) => {
+  const { adminNotes } = req.body ?? {};
+  const updated = await denyRescheduleRequest(req.params.id, req.adminUserId ?? null, adminNotes);
+  if (!updated) return res.status(404).json({ error: "Request not found or already reviewed" });
+  res.json({ success: true, request: updated });
 });
 
 export default router;

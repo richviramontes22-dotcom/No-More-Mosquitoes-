@@ -1,5 +1,7 @@
 import { supabase } from "../../lib/supabase";
 import { supabaseAdmin } from "../../lib/supabaseAdmin";
+import { generateDayPlan } from "./dayPlanGenerator";
+import { applySmartOptimizeToRoute } from "./smartRoutingOptimizer";
 
 const db = supabaseAdmin ?? supabase;
 
@@ -15,6 +17,14 @@ export interface RouteAutomationSettings {
   block_mock_geo: boolean;
   block_drive_cap_exceeded: boolean;
   enabled: boolean;
+  // Platform Growth Phase 2 — earlier-stage automation, each independently
+  // opt-in and disabled/safe by default.
+  auto_generate_enabled: boolean;
+  auto_optimize_enabled: boolean;
+  auto_generate_time: string | null; // "HH:MM:SS" or null — no restriction
+  auto_generate_days: string[] | null; // lowercase weekday names, e.g. ["monday"] — null/empty = every day
+  require_admin_review_before_publish: boolean;
+  allow_full_auto_publish: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +38,12 @@ const DEFAULT_SETTINGS = {
   block_mock_geo: true,
   block_drive_cap_exceeded: true,
   enabled: false,
+  auto_generate_enabled: false,
+  auto_optimize_enabled: false,
+  auto_generate_time: null,
+  auto_generate_days: null,
+  require_admin_review_before_publish: true,
+  allow_full_auto_publish: false,
 };
 
 /**
@@ -165,7 +181,7 @@ export async function evaluateRouteForAutoPublish(
  */
 export async function logAutomationDecision(params: {
   routeId: string;
-  decision: "auto_approved" | "auto_published" | "blocked";
+  decision: "auto_approved" | "auto_published" | "blocked" | "approved_pending_admin_publish";
   mode: RouteAutomationMode;
   blockers?: string[];
 }): Promise<void> {
@@ -259,10 +275,115 @@ export async function autoPublishEligibleRoutes(date: string): Promise<AutoPubli
       await logAutomationDecision({ routeId: route.id, decision: "auto_approved", mode: settings.mode });
     }
 
+    // Two independent gates must both clear before automation is allowed to
+    // actually publish (vs. stop at approved): require_admin_review_before_publish
+    // defaults TRUE (safe), and allow_full_auto_publish defaults FALSE (safe).
+    // A route can be auto-approved without either of these — only the final
+    // publish step is gated this strictly.
+    const canFullyAutoPublish = !settings.require_admin_review_before_publish && settings.allow_full_auto_publish;
+
+    if (!canFullyAutoPublish) {
+      await logAutomationDecision({
+        routeId: route.id,
+        decision: "approved_pending_admin_publish",
+        mode: settings.mode,
+        blockers: [
+          settings.require_admin_review_before_publish ? "require_admin_review_before_publish is true" : null,
+          !settings.allow_full_auto_publish ? "allow_full_auto_publish is false" : null,
+        ].filter(Boolean) as string[],
+      });
+      continue; // stops at approved — an admin must publish manually
+    }
+
     await db.from("routes").update({ status: "published", published_at: now, locked_at: now }).eq("id", route.id);
     await logAutomationDecision({ routeId: route.id, decision: "auto_published", mode: settings.mode });
     published++;
   }
 
   return { checked: rows.length, published, blocked, skipped, details };
+}
+
+export interface AutoGenerateRunResult {
+  ranAt: string;
+  generatedDates: string[];
+  skippedReason?: "disabled" | "day_not_allowed" | "before_generate_time";
+  routesGenerated: number;
+  routesOptimized: number;
+  errors: string[];
+}
+
+function isAllowedDay(settings: RouteAutomationSettings, now: Date): boolean {
+  if (!settings.auto_generate_days || settings.auto_generate_days.length === 0) return true;
+  const dayName = now.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+  return settings.auto_generate_days.map((d) => d.toLowerCase()).includes(dayName);
+}
+
+function isPastGenerateTime(settings: RouteAutomationSettings, now: Date): boolean {
+  if (!settings.auto_generate_time) return true;
+  const [h, m] = settings.auto_generate_time.split(":").map(Number);
+  const allowed = new Date(now);
+  allowed.setHours(h, m, 0, 0);
+  return now >= allowed;
+}
+
+/**
+ * Auto-generates draft day plans for the given dates (typically "today" and
+ * "tomorrow"), and — if auto_optimize_enabled — immediately runs Smart
+ * Optimize on each freshly-generated route. No-op unless
+ * auto_generate_enabled is true, and further gated by auto_generate_days /
+ * auto_generate_time. Never touches publish status — generated routes land
+ * in 'draft', same as a manual "Generate Day Plan" click; whether they ever
+ * get approved/published is entirely up to autoPublishEligibleRoutes() and
+ * its own independent gates.
+ *
+ * Intended to be called by the same scheduled sweep that calls
+ * autoPublishEligibleRoutes() (see netlify/functions/auto-publish-routes.ts).
+ */
+export async function autoGenerateAndOptimizeDayPlans(dates: string[]): Promise<AutoGenerateRunResult> {
+  const settings = await getRouteAutomationSettings();
+  const now = new Date();
+  const result: AutoGenerateRunResult = {
+    ranAt: now.toISOString(),
+    generatedDates: [],
+    routesGenerated: 0,
+    routesOptimized: 0,
+    errors: [],
+  };
+
+  if (!settings.auto_generate_enabled) {
+    result.skippedReason = "disabled";
+    return result;
+  }
+  if (!isAllowedDay(settings, now)) {
+    result.skippedReason = "day_not_allowed";
+    return result;
+  }
+  if (!isPastGenerateTime(settings, now)) {
+    result.skippedReason = "before_generate_time";
+    return result;
+  }
+
+  for (const date of dates) {
+    try {
+      const generated = await generateDayPlan(date, { actorId: null, actorRole: "system" });
+      if (generated.blocked_reason) continue; // e.g. company blackout — already logged by generateDayPlan
+      result.generatedDates.push(date);
+      result.routesGenerated += generated.routes.length;
+
+      if (settings.auto_optimize_enabled) {
+        for (const route of generated.routes) {
+          try {
+            const optimized = await applySmartOptimizeToRoute(route.id, null, "system");
+            if (optimized.success) result.routesOptimized++;
+          } catch (err: any) {
+            result.errors.push(`optimize route ${route.id}: ${err.message}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      result.errors.push(`generate ${date}: ${err.message}`);
+    }
+  }
+
+  return result;
 }

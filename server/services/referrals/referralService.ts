@@ -5,7 +5,7 @@ const db = supabaseAdmin ?? supabase;
 
 export type ReferralOwnerType = "customer" | "partner";
 export type PartnerType = "hoa" | "property_manager" | "landscaper" | "realtor" | "pest_control" | "other";
-export type ReferralStatus = "pending" | "converted" | "rewarded" | "invalid";
+export type ReferralStatus = "pending" | "conversion_candidate" | "converted" | "rewarded" | "invalid";
 export type RewardType = "account_credit" | "service_credit" | "free_service" | "manual_reward";
 export type RewardStatus = "pending" | "approved" | "issued" | "denied";
 
@@ -226,6 +226,177 @@ export async function updateReferralStatus(
   const { data, error } = await db.from("referrals").update(updates).eq("id", id).select("*").single();
   if (error) {
     console.error("[referralService] updateReferralStatus failed:", error.message);
+    return null;
+  }
+  return data as Referral;
+}
+
+// ─── Conversion detection (Platform Growth Phase 2) ───────────────────────────
+// Read-only observation: flags referrals as 'conversion_candidate' when the
+// underlying lead now has a subscription/converted_customer_id. Never marks a
+// referral 'converted' itself, never creates a reward, never touches Stripe —
+// an admin always makes the actual conversion call. See
+// REFERRAL_AUTOMATION_PHASE2_REPORT.md for the full design rationale.
+
+export interface DetectConversionCandidatesResult {
+  checked: number;
+  flagged: number;
+  flaggedReferralIds: string[];
+}
+
+export async function detectConversionCandidates(): Promise<DetectConversionCandidatesResult> {
+  const { data: pendingReferrals } = await db
+    .from("referrals")
+    .select("id, lead_id")
+    .eq("status", "pending")
+    .not("lead_id", "is", null);
+
+  const rows = pendingReferrals ?? [];
+  if (rows.length === 0) return { checked: 0, flagged: 0, flaggedReferralIds: [] };
+
+  const leadIds = [...new Set(rows.map((r: any) => r.lead_id))];
+  const { data: leads } = await db
+    .from("leads")
+    .select("id, subscription_id, converted_customer_id")
+    .in("id", leadIds);
+
+  const convertedLeadIds = new Set(
+    (leads ?? [])
+      .filter((l: any) => l.subscription_id != null || l.converted_customer_id != null)
+      .map((l: any) => l.id)
+  );
+
+  const toFlag = rows.filter((r: any) => convertedLeadIds.has(r.lead_id)).map((r: any) => r.id);
+
+  if (toFlag.length > 0) {
+    await db.from("referrals").update({ status: "conversion_candidate" }).in("id", toFlag);
+  }
+
+  return { checked: rows.length, flagged: toFlag.length, flaggedReferralIds: toFlag };
+}
+
+// ─── Reward rule settings (singleton) ─────────────────────────────────────────
+
+export interface ReferralRewardSettings {
+  id: string;
+  enabled: boolean;
+  customer_reward_type: RewardType;
+  customer_reward_amount_cents: number | null;
+  partner_reward_type: RewardType;
+  partner_reward_amount_cents: number | null;
+  auto_create_rewards: boolean;
+  require_admin_approval: boolean;
+  updated_by: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+const DEFAULT_REWARD_SETTINGS = {
+  enabled: false,
+  customer_reward_type: "account_credit" as RewardType,
+  customer_reward_amount_cents: null,
+  partner_reward_type: "manual_reward" as RewardType,
+  partner_reward_amount_cents: null,
+  auto_create_rewards: false,
+  require_admin_approval: true,
+};
+
+export async function getRewardSettings(): Promise<ReferralRewardSettings> {
+  const { data } = await db
+    .from("referral_reward_settings")
+    .select("*")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (data) return data as ReferralRewardSettings;
+
+  const { data: created, error } = await db
+    .from("referral_reward_settings")
+    .insert(DEFAULT_REWARD_SETTINGS)
+    .select("*")
+    .single();
+
+  if (error || !created) {
+    return { id: "", ...DEFAULT_REWARD_SETTINGS, updated_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  }
+  return created as ReferralRewardSettings;
+}
+
+export async function updateRewardSettings(
+  updates: Partial<Omit<ReferralRewardSettings, "id" | "created_at" | "updated_at">>
+): Promise<ReferralRewardSettings> {
+  const current = await getRewardSettings();
+  const { data, error } = await db
+    .from("referral_reward_settings")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", current.id)
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Failed to update reward settings");
+  return data as ReferralRewardSettings;
+}
+
+/**
+ * Admin approves a conversion candidate (or any pending referral) as a real
+ * conversion. Optionally creates a single PENDING reward row — never issues
+ * it, never touches Stripe/credits — only when reward automation is both
+ * enabled and configured to auto-create. require_admin_approval on the
+ * reward settings is informational here (issuing a reward is already a
+ * separate, always-manual step via updateRewardStatus); it exists so a
+ * future stricter mode could also gate reward *creation* on a second admin
+ * action, without a schema change.
+ */
+export async function approveConversion(
+  referralId: string,
+  params: { appointmentId?: string; subscriptionId?: string; conversionValueCents?: number; referredCustomerId?: string } = {}
+): Promise<{ referral: Referral | null; reward: ReferralReward | null }> {
+  const { data: referral, error } = await db
+    .from("referrals")
+    .update({
+      status: "converted",
+      appointment_id: params.appointmentId ?? null,
+      subscription_id: params.subscriptionId ?? null,
+      conversion_value_cents: params.conversionValueCents ?? null,
+      referred_customer_id: params.referredCustomerId ?? null,
+    })
+    .eq("id", referralId)
+    .select("*")
+    .single();
+
+  if (error || !referral) {
+    console.error("[referralService] approveConversion failed:", error?.message);
+    return { referral: null, reward: null };
+  }
+
+  const settings = await getRewardSettings();
+  if (!settings.enabled || !settings.auto_create_rewards) {
+    return { referral: referral as Referral, reward: null };
+  }
+
+  const { data: code } = await db
+    .from("referral_codes")
+    .select("owner_type")
+    .eq("id", (referral as any).referral_code_id)
+    .maybeSingle();
+
+  const isPartner = code?.owner_type === "partner";
+  const reward = await createReward({
+    referralId,
+    rewardType: isPartner ? settings.partner_reward_type : settings.customer_reward_type,
+    amountCents: (isPartner ? settings.partner_reward_amount_cents : settings.customer_reward_amount_cents) ?? undefined,
+    notes: "Auto-created pending reward — requires admin approval before issuance.",
+  });
+
+  return { referral: referral as Referral, reward };
+}
+
+/** Admin rejects a conversion candidate — marks the referral invalid, no reward. */
+export async function rejectConversion(referralId: string): Promise<Referral | null> {
+  const { data, error } = await db.from("referrals").update({ status: "invalid" }).eq("id", referralId).select("*").single();
+  if (error) {
+    console.error("[referralService] rejectConversion failed:", error.message);
     return null;
   }
   return data as Referral;

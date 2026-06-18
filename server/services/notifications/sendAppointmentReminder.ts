@@ -1,5 +1,5 @@
 import { getResendClient, getFromEmail, isEmailConfigured } from "./resendClient";
-import { buildReminder24hEmail, buildReminderSameDayEmail } from "./emailTemplates";
+import { buildReminder24hEmail, buildReminderSameDayEmail, buildReminder2hEmail } from "./emailTemplates";
 import { logNotification, isDuplicateNotification, NotificationType } from "./notificationLogger";
 
 export interface ReminderTrigger {
@@ -11,7 +11,7 @@ export interface ReminderTrigger {
   scheduledDate: string;   // "2026-06-02"
   windowLabel: string;     // "Morning (8AM–12PM)"
   serviceType?: string | null;
-  notificationType: "reminder_24h" | "reminder_same_day";
+  notificationType: "reminder_24h" | "reminder_same_day" | "reminder_2h";
 }
 
 /**
@@ -47,9 +47,9 @@ export async function sendAppointmentReminder(trigger: ReminderTrigger): Promise
   };
 
   const { subject, html } =
-    trigger.notificationType === "reminder_24h"
-      ? buildReminder24hEmail(emailData)
-      : buildReminderSameDayEmail(emailData);
+    trigger.notificationType === "reminder_24h" ? buildReminder24hEmail(emailData)
+    : trigger.notificationType === "reminder_2h" ? buildReminder2hEmail(emailData)
+    : buildReminderSameDayEmail(emailData);
 
   const resend = getResendClient()!;
 

@@ -3,8 +3,12 @@ import SectionHeading from "@/components/common/SectionHeading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Bell, CheckCircle2, XCircle, Clock, Mail, AlertCircle, RotateCcw } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Bell, CheckCircle2, XCircle, Clock, Mail, AlertCircle, RotateCcw, Settings2 } from "lucide-react";
 import { adminApi } from "@/lib/adminApi";
+import { useToast } from "@/hooks/use-toast";
 
 interface NotificationRow {
   id: string;
@@ -34,14 +38,49 @@ const TYPE_LABELS: Record<string, string> = {
   appointment_canceled:      "Cancellation",
   appointment_rescheduled:   "Rescheduled",
   technician_enroute:        "Technician En Route",
+  reminder_2h:               "2h Reminder",
+  review_request:            "Review Request",
 };
 
+interface NotificationSettings {
+  reminder_24h_enabled: boolean;
+  reminder_2h_enabled: boolean;
+  review_request_enabled: boolean;
+  review_link_url: string | null;
+}
+
 const Notifications = () => {
+  const { toast } = useToast();
   const [rows, setRows]         = useState<NotificationRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter]     = useState<string>("all");
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const fetchSettings = async () => {
+    try {
+      const data = await adminApi("/api/admin/notification-settings");
+      setSettings(data.settings);
+    } catch (err: any) {
+      toast({ title: "Failed to load notification settings", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const saveSettings = async () => {
+    if (!settings) return;
+    setSavingSettings(true);
+    try {
+      const data = await adminApi("/api/admin/notification-settings", "PATCH", settings);
+      setSettings(data.settings);
+      toast({ title: "Notification settings saved" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const fetchLogs = async () => {
     setIsLoading(true);
@@ -56,7 +95,7 @@ const Notifications = () => {
     }
   };
 
-  useEffect(() => { fetchLogs(); }, []);
+  useEffect(() => { fetchLogs(); fetchSettings(); }, []);
 
   const visible = rows.filter((r) => {
     if (statusFilter !== "all" && r.status !== statusFilter) return false;
@@ -71,6 +110,57 @@ const Notifications = () => {
   return (
     <div className="grid gap-8">
       <SectionHeading eyebrow="Communications" title="Notification Log" description="Track all outbound emails and future SMS notifications. Useful for diagnosing delivery failures." />
+
+      {/* Customer Notification Settings */}
+      <Card className="rounded-[28px] border-border/60 bg-card/95 shadow-soft overflow-hidden">
+        <CardHeader className="bg-muted/20 px-8 py-5 border-b border-border/40">
+          <CardTitle className="text-base font-display font-bold flex items-center gap-2">
+            <Settings2 className="h-5 w-5 text-primary" /> Customer Notification Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 space-y-5">
+          {!settings ? (
+            <div className="flex items-center justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" /></div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-semibold">24-hour reminder email</Label>
+                  <p className="text-xs text-muted-foreground">Already live by default — this lets you pause it without a deploy.</p>
+                </div>
+                <Switch checked={settings.reminder_24h_enabled} onCheckedChange={(c) => setSettings({ ...settings, reminder_24h_enabled: c })} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-semibold">2-hour reminder email</Label>
+                  <p className="text-xs text-muted-foreground">New, optional — sent ~2 hours before the scheduled arrival window. Disabled by default.</p>
+                </div>
+                <Switch checked={settings.reminder_2h_enabled} onCheckedChange={(c) => setSettings({ ...settings, reminder_2h_enabled: c })} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-semibold">Review request email</Label>
+                  <p className="text-xs text-muted-foreground">Sent once per appointment after service is marked completed. Disabled by default, and requires a review link below.</p>
+                </div>
+                <Switch checked={settings.review_request_enabled} onCheckedChange={(c) => setSettings({ ...settings, review_request_enabled: c })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Review link (e.g. Google Business review URL)</Label>
+                <Input
+                  value={settings.review_link_url ?? ""}
+                  onChange={(e) => setSettings({ ...settings, review_link_url: e.target.value || null })}
+                  placeholder="https://g.page/r/your-business/review"
+                  className="rounded-xl"
+                />
+              </div>
+              <Button onClick={saveSettings} disabled={savingSettings} className="rounded-xl shadow-brand">
+                {savingSettings ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Save Settings
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">

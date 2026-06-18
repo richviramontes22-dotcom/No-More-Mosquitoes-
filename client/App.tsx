@@ -70,8 +70,10 @@ import AdminPricing from "./pages/admin/Pricing";
 import AdminWebsiteManager from "./pages/admin/WebsiteManager";
 import AdminPromos from "./pages/admin/Promos";
 import AdminReferrals from "./pages/admin/Referrals";
+import AdminRescheduleRequests from "./pages/admin/RescheduleRequests";
 import AdminServiceAreas from "./pages/admin/ServiceAreas";
 import AdminReports from "./pages/admin/Reports";
+import AdminAnalytics from "./pages/admin/Analytics";
 import AdminRevenue from "./pages/admin/Revenue";
 import AdminSettings from "./pages/admin/Settings";
 import AdminNotifications from "./pages/admin/Notifications";
@@ -195,6 +197,7 @@ const App = () => (
                       <Route path="customers" element={<AdminCustomers />} />
                       <Route path="properties" element={<AdminProperties />} />
                       <Route path="appointments" element={<AdminAppointments />} />
+                      <Route path="reschedule-requests" element={<AdminRescheduleRequests />} />
                       <Route path="visits" element={<AdminVisits />} />
                       <Route path="messages" element={<AdminMessages />} />
                       <Route path="tickets" element={<AdminTickets />} />
@@ -217,6 +220,7 @@ const App = () => (
                       <Route path="workforce/schedules" element={<AdminWorkforceSchedules />} />
                       <Route path="workforce/capacity" element={<AdminWorkforceCapacity />} />
                       <Route path="reports" element={<AdminReports />} />
+                      <Route path="analytics" element={<AdminAnalytics />} />
                       <Route path="business-hours" element={<AdminBusinessHours />} />
                       <Route path="notifications" element={<AdminNotifications />} />
                       <Route path="alerts" element={<AdminAlerts />} />

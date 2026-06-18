@@ -9,6 +9,8 @@ export type NotificationType =
   | "appointment_confirmation"
   | "reminder_24h"
   | "reminder_same_day"
+  | "reminder_2h"
+  | "review_request"
   | "appointment_canceled"
   | "appointment_rescheduled"
   | "technician_enroute"

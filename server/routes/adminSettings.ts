@@ -2,6 +2,7 @@ import express from "express";
 import { supabase } from "../lib/supabase";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { getNotificationSettings, updateNotificationSettings } from "../services/notifications/notificationSettingsService";
 
 const router = express.Router();
 const db = supabaseAdmin ?? supabase;
@@ -100,6 +101,33 @@ router.delete("/settings/:settingKey", requireAdmin, async (req, res) => {
   } catch (err) {
     console.error("[Admin Settings] DELETE error:", err);
     res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ─── Customer notification settings (Platform Growth Phase 2) ────────────────
+
+router.get("/notification-settings", requireAdmin, async (_req, res) => {
+  try {
+    const settings = await getNotificationSettings();
+    res.json({ settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch("/notification-settings", requireAdmin, async (req, res) => {
+  const allowedFields = ["reminder_24h_enabled", "reminder_2h_enabled", "review_request_enabled", "review_link_url"];
+  const updates: Record<string, any> = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+  if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
+
+  try {
+    const settings = await updateNotificationSettings({ ...updates, updated_by: req.adminUserId ?? null });
+    res.json({ success: true, settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

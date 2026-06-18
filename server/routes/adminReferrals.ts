@@ -13,6 +13,11 @@ import {
   createReward,
   updateRewardStatus,
   listRewardsForReferral,
+  detectConversionCandidates,
+  approveConversion,
+  rejectConversion,
+  getRewardSettings,
+  updateRewardSettings,
   type PartnerType,
   type ReferralStatus,
   type RewardStatus,
@@ -95,7 +100,7 @@ router.patch("/admin/referrals/codes/:id", requireAdmin, async (req, res) => {
 
 // ─── Admin: referrals ──────────────────────────────────────────────────────────
 
-const VALID_REFERRAL_STATUSES: ReferralStatus[] = ["pending", "converted", "rewarded", "invalid"];
+const VALID_REFERRAL_STATUSES: ReferralStatus[] = ["pending", "conversion_candidate", "converted", "rewarded", "invalid"];
 
 router.get("/admin/referrals", requireAdmin, async (req, res) => {
   const { status, referral_code_id } = req.query as Record<string, string>;
@@ -121,6 +126,83 @@ router.patch("/admin/referrals/:id", requireAdmin, async (req, res) => {
   });
   if (!updated) return res.status(404).json({ error: "Referral not found or update failed" });
   res.json({ referral: updated });
+});
+
+// ─── Admin: conversion detection (Platform Growth Phase 2) ───────────────────
+// Read-only detection — flags pending referrals as 'conversion_candidate'
+// when their linked lead now has a subscription/converted customer. Never
+// auto-marks 'converted' and never creates a reward; an admin must review
+// and explicitly approve or reject each candidate below.
+
+router.post("/admin/referrals/detect-conversions", requireAdmin, async (_req, res) => {
+  try {
+    const result = await detectConversionCandidates();
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/admin/referrals/:id/approve-conversion", requireAdmin, async (req, res) => {
+  const { appointment_id, subscription_id, conversion_value_cents, referred_customer_id } = req.body ?? {};
+  try {
+    const result = await approveConversion(req.params.id, {
+      appointmentId: appointment_id,
+      subscriptionId: subscription_id,
+      conversionValueCents: conversion_value_cents,
+      referredCustomerId: referred_customer_id,
+    });
+    if (!result.referral) return res.status(400).json({ error: "Failed to approve conversion" });
+    res.json({ success: true, referral: result.referral, reward: result.reward });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/admin/referrals/:id/reject-conversion", requireAdmin, async (req, res) => {
+  const updated = await rejectConversion(req.params.id);
+  if (!updated) return res.status(404).json({ error: "Referral not found or update failed" });
+  res.json({ success: true, referral: updated });
+});
+
+// ─── Admin: reward settings (singleton, disabled by default) ─────────────────
+
+router.get("/admin/referrals/reward-settings", requireAdmin, async (_req, res) => {
+  try {
+    const settings = await getRewardSettings();
+    res.json({ settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const VALID_REWARD_SETTING_TYPES = ["account_credit", "service_credit", "free_service", "manual_reward"];
+
+router.patch("/admin/referrals/reward-settings", requireAdmin, async (req, res) => {
+  const allowedFields = [
+    "enabled", "customer_reward_type", "customer_reward_amount_cents",
+    "partner_reward_type", "partner_reward_amount_cents",
+    "auto_create_rewards", "require_admin_approval",
+  ];
+  const updates: Record<string, any> = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) updates[field] = req.body[field];
+  }
+  if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
+
+  if (updates.customer_reward_type && !VALID_REWARD_SETTING_TYPES.includes(updates.customer_reward_type)) {
+    return res.status(400).json({ error: "Invalid customer_reward_type" });
+  }
+  if (updates.partner_reward_type && !VALID_REWARD_SETTING_TYPES.includes(updates.partner_reward_type)) {
+    return res.status(400).json({ error: "Invalid partner_reward_type" });
+  }
+
+  try {
+    const settings = await updateRewardSettings({ ...updates, updated_by: req.adminUserId ?? null });
+    res.json({ success: true, settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Admin: rewards ─────────────────────────────────────────────────────────────

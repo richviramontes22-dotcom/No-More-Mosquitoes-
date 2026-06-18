@@ -28,6 +28,11 @@
 [functions.auto-publish-routes]
   schedule = "*/15 * * * *"
 
+# Scheduled function: optional 2-hour-before reminder email (no-op unless an
+# admin has enabled it in Customer Notification Settings) — every 30 minutes
+[functions.send-reminders-2h]
+  schedule = "*/30 * * * *"
+
 # Force HTTPS redirect
 [[redirects]]
   from = "http://*"

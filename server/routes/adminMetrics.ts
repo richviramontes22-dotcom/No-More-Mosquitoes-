@@ -10,6 +10,7 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { getReferralAnalytics, getRouteAnalytics, getCrmAnalytics } from "../services/analytics/platformAnalyticsService";
 
 const router = Router();
 const db = supabaseAdmin ?? supabase;
@@ -120,6 +121,23 @@ router.get("/metrics/operations", requireAdmin, async (req: any, res) => {
       },
     },
   });
+});
+
+// GET /api/admin/metrics/platform-analytics
+// Lightweight foundation dashboards (Platform Growth Phase 2) — referral,
+// route, and CRM aggregates. Tables/cards, no charting library additions.
+router.get("/metrics/platform-analytics", requireAdmin, async (req: any, res) => {
+  try {
+    const windowDays = Math.min(parseInt(String(req.query.window_days ?? "30"), 10) || 30, 180);
+    const [referrals, routes, crm] = await Promise.all([
+      getReferralAnalytics(),
+      getRouteAnalytics(windowDays),
+      getCrmAnalytics(),
+    ]);
+    res.json({ referrals, routes, crm });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

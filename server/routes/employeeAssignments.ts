@@ -3,9 +3,10 @@ import { supabase } from "../lib/supabase";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { isEmailConfigured } from "../services/notifications/resendClient";
 import { getEmailProvider, getFromEmail } from "../services/notifications/providers/index";
-import { buildServiceCompletionEmail, buildEnRouteFallbackEmail } from "../services/notifications/emailTemplates";
-import { logNotification } from "../services/notifications/notificationLogger";
+import { buildServiceCompletionEmail, buildEnRouteFallbackEmail, buildReviewRequestEmail } from "../services/notifications/emailTemplates";
+import { logNotification, isDuplicateNotification } from "../services/notifications/notificationLogger";
 import { notifyAdmin } from "../services/notifications/adminNotificationService";
+import { getNotificationSettings } from "../services/notifications/notificationSettingsService";
 
 const router = Router();
 
@@ -414,6 +415,65 @@ router.post("/assignments/:id/status", async (req, res) => {
           }
         } catch (notifyErr: any) {
           console.error("[completion] Notification prep failed:", notifyErr.message);
+        }
+      })();
+    }
+
+    // Optional, admin-toggled review request email — sent once per
+    // appointment, disabled by default. Sibling to the completion email
+    // above, same trigger, independent of it (one failing never blocks the
+    // other).
+    if (status === "completed" && !actor.isTest && isEmailConfigured()) {
+      (async () => {
+        try {
+          const appointmentId = (updated as any)?.appointment_id;
+          if (!appointmentId) return;
+
+          const settings = await getNotificationSettings();
+          if (!settings.review_request_enabled || !settings.review_link_url) return;
+
+          const alreadySent = await isDuplicateNotification(appointmentId, "review_request");
+          if (alreadySent) return;
+
+          const { data: apptData } = await db
+            .from("appointments")
+            .select("user_id, service_type")
+            .eq("id", appointmentId)
+            .maybeSingle();
+          if (!apptData?.user_id) return;
+
+          const { data: profile } = await db
+            .from("profiles")
+            .select("email, name")
+            .eq("id", apptData.user_id)
+            .maybeSingle();
+          if (!profile?.email) return;
+
+          const customerName = (profile as any).name || profile.email.split("@")[0];
+          const dashboardUrl = `${process.env.APP_BASE_URL || "https://nomoremosquitoes.us"}/dashboard/appointments`;
+          const { subject, html } = buildReviewRequestEmail({
+            customerName,
+            serviceType: apptData.service_type || "Mosquito Service",
+            reviewLinkUrl: settings.review_link_url,
+            dashboardUrl,
+          });
+
+          const emailProvider = getEmailProvider();
+          await emailProvider.send({ to: profile.email, from: getFromEmail(), subject, html, text: subject });
+
+          await logNotification({
+            profileId: apptData.user_id,
+            appointmentId,
+            recipientEmail: profile.email,
+            channel: "email",
+            notificationType: "review_request",
+            subject,
+            status: "sent",
+            provider: "resend",
+            sentAt: new Date().toISOString(),
+          });
+        } catch (reviewErr: any) {
+          console.error("[review_request] Failed:", reviewErr.message);
         }
       })();
     }

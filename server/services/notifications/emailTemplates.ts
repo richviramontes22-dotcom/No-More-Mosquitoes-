@@ -199,6 +199,55 @@ export function buildReminderSameDayEmail(data: ReminderEmailData): { subject: s
   return { subject, html };
 }
 
+// ─── Template: reminder_2h (Platform Growth Phase 2 — optional, admin-toggled) ─
+
+export function buildReminder2hEmail(data: ReminderEmailData): { subject: string; html: string } {
+  const subject = `Your technician arrives soon — ${data.windowLabel} today`;
+  const html = layout(
+    `<h1 style="margin:0 0 8px;font-family:${FONT};font-size:26px;color:${BRAND_GREEN};">We'll be there soon!</h1>
+    <p style="margin:0 0 28px;color:${TEXT_MUTED};font-size:15px;">Hi ${data.customerName}, your technician is on track to arrive within your scheduled window today.</p>
+
+    <div style="background:${BRAND_LIGHT};border:2px solid ${BRAND_GREEN};border-radius:10px;padding:24px;text-align:center;margin-bottom:28px;">
+      <p style="margin:0;font-size:12px;text-transform:uppercase;letter-spacing:0.1em;color:${BRAND_GREEN};font-weight:bold;">Arrival Window</p>
+      <p style="margin:8px 0 0;font-family:${FONT};font-size:28px;font-weight:bold;color:${TEXT_DARK};">${data.windowLabel}</p>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
+      ${infoRow("Service", data.serviceType)}
+      ${infoRow("Address", data.propertyAddress)}
+    </table>
+
+    <p style="font-size:14px;color:${TEXT_DARK};margin:0 0 24px;">A last reminder: keep pets indoors and make sure yard/gate access is available.</p>
+
+    ${ctaButton("View Appointment", data.dashboardUrl)}`,
+    `Arriving soon: ${data.windowLabel} today`
+  );
+  return { subject, html };
+}
+
+// ─── Template: review_request (Platform Growth Phase 2 — optional, admin-toggled) ─
+
+export interface ReviewRequestEmailData {
+  customerName: string;
+  serviceType: string;
+  reviewLinkUrl: string;
+  dashboardUrl: string;
+}
+
+export function buildReviewRequestEmail(data: ReviewRequestEmailData): { subject: string; html: string } {
+  const subject = "How did we do?";
+  const html = layout(
+    `<h1 style="margin:0 0 8px;font-family:${FONT};font-size:26px;color:${BRAND_GREEN};">Thanks for choosing us!</h1>
+    <p style="margin:0 0 28px;color:${TEXT_MUTED};font-size:15px;">Hi ${data.customerName}, we hope you're happy with your recent ${data.serviceType.toLowerCase()}. If you have a minute, a quick review helps other homeowners in your area find us.</p>
+
+    ${ctaButton("Leave a Review", data.reviewLinkUrl)}
+
+    <p style="font-size:13px;color:${TEXT_MUTED};margin-top:24px;">Have a question or concern instead? <a href="${data.dashboardUrl}" style="color:${BRAND_GREEN};">Visit your dashboard</a> or reply to this email — we read every message.</p>`,
+    "How did we do? Quick review request"
+  );
+  return { subject, html };
+}
+
 // ─── Template: appointment_canceled ──────────────────────────────────────────
 
 export interface CancelEmailData {

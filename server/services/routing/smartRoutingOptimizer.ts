@@ -1,4 +1,8 @@
 import { calculateDistance, GeoLocation } from "../../lib/routeOptimization";
+import { supabase } from "../../lib/supabase";
+import { supabaseAdmin } from "../../lib/supabaseAdmin";
+
+const db = supabaseAdmin ?? supabase;
 
 export interface SmartStop {
   assignmentId: string;
@@ -202,4 +206,129 @@ export function smartOptimizeRoute(input: SmartOptimizeInput): SmartOptimizeResu
       percentImprovement: Math.round(pctImprovement * 10) / 10,
     },
   };
+}
+
+export interface ApplySmartOptimizeResult {
+  success: boolean;
+  reason?: string;
+  improvement?: SmartOptimizeResult["improvement"];
+}
+
+/**
+ * Fetches a route's stops, runs smartOptimizeRoute, and writes the new order
+ * back — the exact logic POST /api/admin/routes/:routeId/reorder-stops uses
+ * for a manual "Apply" click, extracted here so the Platform Growth Phase 2
+ * auto-optimize sweep (routeAutomationPolicy.ts) can reuse it on freshly
+ * auto-generated draft routes. Only acts on draft/approved routes, same as
+ * the manual endpoint's guard.
+ */
+export async function applySmartOptimizeToRoute(
+  routeId: string,
+  actorId: string | null,
+  actorRole: "admin" | "system",
+): Promise<ApplySmartOptimizeResult> {
+  const { data: route } = await db
+    .from("routes")
+    .select("id, status, employee_id, date")
+    .eq("id", routeId)
+    .maybeSingle();
+
+  if (!route) return { success: false, reason: "route_not_found" };
+  if (!["draft", "approved"].includes((route as any).status)) {
+    return { success: false, reason: "not_draft_or_approved" };
+  }
+
+  const { data: stops } = await db
+    .from("route_stops")
+    .select("id, assignment_id, estimated_duration_minutes, sequence_number")
+    .eq("route_id", routeId)
+    .order("sequence_number");
+
+  const orderedStops = stops ?? [];
+  if (orderedStops.length === 0) return { success: false, reason: "no_stops" };
+
+  const assignmentIds = orderedStops.map((s: any) => s.assignment_id);
+  const { data: assignments } = await db
+    .from("assignments")
+    .select("id, appointments!inner(property_id)")
+    .in("id", assignmentIds);
+
+  const propIds = [
+    ...new Set((assignments || []).map((a: any) => a.appointments?.property_id).filter(Boolean)),
+  ];
+  const { data: props } = propIds.length
+    ? await db.from("properties").select("id, lat, lng").in("id", propIds)
+    : { data: [] };
+
+  const propMap: Record<string, any> = {};
+  (props || []).forEach((p: any) => { propMap[p.id] = p; });
+  const apptMap: Record<string, any> = {};
+  (assignments || []).forEach((a: any) => { apptMap[a.id] = a; });
+
+  const { data: capProfile } = await db
+    .from("technician_capacity_profiles")
+    .select("home_base_lat, home_base_lng, max_drive_minutes_per_day")
+    .eq("employee_id", (route as any).employee_id)
+    .maybeSingle();
+
+  const depotGeo =
+    capProfile?.home_base_lat != null && capProfile?.home_base_lng != null
+      ? { latitude: capProfile.home_base_lat, longitude: capProfile.home_base_lng }
+      : undefined;
+
+  const smartStops: SmartStop[] = orderedStops.map((s: any) => {
+    const assignment = apptMap[s.assignment_id] ?? {};
+    const propId = assignment.appointments?.property_id;
+    const prop = propId ? propMap[propId] : null;
+    const hasRealGeo = prop?.lat != null && prop?.lng != null;
+    return {
+      assignmentId: s.assignment_id,
+      appointmentId: assignment.appointment_id ?? "",
+      address: "",
+      geo: hasRealGeo ? { latitude: prop.lat, longitude: prop.lng } : undefined,
+      estimatedServiceMinutes: s.estimated_duration_minutes ?? 45,
+      isMockGeo: !hasRealGeo,
+    };
+  });
+
+  const startTime = new Date(`${(route as any).date}T08:00:00`);
+  const result = smartOptimizeRoute({
+    stops: smartStops,
+    depotGeo,
+    startTime,
+    maxDriveMinutes: capProfile?.max_drive_minutes_per_day ?? undefined,
+  });
+
+  const updates = result.stops.map((rs, i) => {
+    const stop = orderedStops[i] as any;
+    return db.from("route_stops").update({
+      sequence_number: rs.sequenceNumber,
+      arrival_eta: rs.arrivalEta,
+      departure_eta: rs.departureEta,
+      distance_from_prev_miles: rs.distanceFromPrevMiles,
+      duration_from_prev_minutes: Math.round(rs.driveMinutesFromPrev),
+    }).eq("id", stop.id);
+  });
+  await Promise.all(updates);
+
+  await db.from("routes").update({
+    total_distance_miles: Math.round(result.totalDistanceMiles * 10) / 10,
+    total_duration_minutes: Math.round(result.totalDriveMinutes + result.totalServiceMinutes),
+    algorithm_version: result.algorithmVersion,
+  }).eq("id", routeId);
+
+  await db.from("route_audit_log").insert({
+    route_id: routeId,
+    actor_id: actorId,
+    actor_role: actorRole,
+    action: actorRole === "system" ? "automation_smart_reorder" : "smart_reorder",
+    metadata: {
+      stop_count: result.stops.length,
+      distance_saved_miles: result.improvement.distanceSavedMiles,
+      time_saved_minutes: result.improvement.timeSavedMinutes,
+      depot_geo_used: !!depotGeo,
+    },
+  });
+
+  return { success: true, improvement: result.improvement };
 }
