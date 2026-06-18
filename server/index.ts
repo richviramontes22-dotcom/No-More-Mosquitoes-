@@ -45,6 +45,8 @@ import employeeOnboardingRouter from "./routes/employeeOnboarding";
 import adminWorkforceRouter from "./routes/adminWorkforce";
 import adminDebugRouter from "./routes/adminDebug";
 import adminMetricsRouter from "./routes/adminMetrics";
+import adminTerritoryIntelligenceRouter from "./routes/adminTerritoryIntelligence";
+import adminWorkforceOptimizationRouter from "./routes/adminWorkforceOptimization";
 import healthRouter from "./routes/health";
 import { requestIdMiddleware } from "./middleware/requestId";
 
@@ -140,6 +142,8 @@ export function createServer() {
 
   // Admin Metrics API (operational counts)
   app.use("/api/admin", adminMetricsRouter);
+  app.use("/api/admin", adminTerritoryIntelligenceRouter);
+  app.use("/api/admin", adminWorkforceOptimizationRouter);
 
   // Health endpoints (public lightweight + provider status)
   app.use("/api", healthRouter);

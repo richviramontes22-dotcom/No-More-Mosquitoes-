@@ -78,6 +78,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Reports", to: "/admin/reports", icon: BarChart3 },
       { label: "Analytics", to: "/admin/analytics", icon: BarChart3 },
+      { label: "Territory Intelligence", to: "/admin/territory-intelligence", icon: Map },
+      { label: "Workforce Optimization", to: "/admin/workforce-optimization", icon: Users },
     ],
   },
   {

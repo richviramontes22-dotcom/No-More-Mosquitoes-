@@ -74,6 +74,8 @@ import AdminRescheduleRequests from "./pages/admin/RescheduleRequests";
 import AdminServiceAreas from "./pages/admin/ServiceAreas";
 import AdminReports from "./pages/admin/Reports";
 import AdminAnalytics from "./pages/admin/Analytics";
+import AdminTerritoryIntelligence from "./pages/admin/TerritoryIntelligence";
+import AdminWorkforceOptimization from "./pages/admin/WorkforceOptimization";
 import AdminRevenue from "./pages/admin/Revenue";
 import AdminSettings from "./pages/admin/Settings";
 import AdminNotifications from "./pages/admin/Notifications";
@@ -221,6 +223,8 @@ const App = () => (
                       <Route path="workforce/capacity" element={<AdminWorkforceCapacity />} />
                       <Route path="reports" element={<AdminReports />} />
                       <Route path="analytics" element={<AdminAnalytics />} />
+                      <Route path="territory-intelligence" element={<AdminTerritoryIntelligence />} />
+                      <Route path="workforce-optimization" element={<AdminWorkforceOptimization />} />
                       <Route path="business-hours" element={<AdminBusinessHours />} />
                       <Route path="notifications" element={<AdminNotifications />} />
                       <Route path="alerts" element={<AdminAlerts />} />
