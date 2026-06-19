@@ -195,7 +195,7 @@ router.post("/promos/validate", async (req, res) => {
 
   const { data: promo, error } = await db
     .from("promo_codes")
-    .select("id, code, discount_type, discount_value, min_order_cents, max_uses, used_count, expires_at, active, description, promo_code_id, stripe_promotion_code_id")
+    .select("id, code, discount_type, discount_value, min_order_cents, max_uses, used_count, expires_at, active, description, stripe_promotion_code_id")
     .eq("code", normalizedCode)
     .eq("active", true)
     .maybeSingle();
