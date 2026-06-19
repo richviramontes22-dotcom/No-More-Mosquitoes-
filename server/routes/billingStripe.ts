@@ -496,12 +496,47 @@ router.post("/create-payment-intent", async (req, res) => {
       return body;
     };
 
-    let sub: any;
+    // ── Reuse or clean up existing "incomplete" subscriptions ───────────────────
+    //
+    // Without this, every retry after a card decline (or just re-opening the
+    // checkout tab) creates a brand-new Subscription + Invoice, orphaning the
+    // previous incomplete one. Stripe auto-expires those after ~23h, but
+    // there's no reason to leave them sitting in the Dashboard until then —
+    // reuse the existing one when it's for the same plan, or cancel it
+    // outright when it's stale (different plan/promo from a past attempt).
+    let sub: any | undefined;
     try {
-      sub = await stripeFetch("/subscriptions", {
-        method: "POST",
-        body: buildSubBody({ "items[0][price]": plan.stripePriceId }).toString(),
-      });
+      const existingSubs = await stripeFetch(
+        `/subscriptions?customer=${customerId}&status=incomplete&limit=10`,
+      );
+      const matchesThisCheckout = (s: any) =>
+        s.metadata?.property_id === propertyId &&
+        s.metadata?.tier_key === plan.id &&
+        s.metadata?.cadence_days === String(cadenceDays) &&
+        (s.metadata?.stripe_promotion_code_id || "") === (stripePromotionCodeId || "");
+
+      for (const existingSub of existingSubs.data ?? []) {
+        if (!sub && matchesThisCheckout(existingSub)) {
+          sub = existingSub;
+          console.log(`[create-payment-intent] Reusing incomplete subscription ${sub.id}`);
+        } else {
+          console.log(`[create-payment-intent] Cancelling stale incomplete subscription ${existingSub.id}`);
+          await stripeFetch(`/subscriptions/${existingSub.id}`, { method: "DELETE" }).catch((cancelErr: any) =>
+            console.warn(`[create-payment-intent] Failed to cancel ${existingSub.id}: ${cancelErr.message}`),
+          );
+        }
+      }
+    } catch (listErr: any) {
+      console.warn(`[create-payment-intent] Failed to list existing incomplete subscriptions: ${listErr.message}`);
+    }
+
+    try {
+      if (!sub) {
+        sub = await stripeFetch("/subscriptions", {
+          method: "POST",
+          body: buildSubBody({ "items[0][price]": plan.stripePriceId }).toString(),
+        });
+      }
     } catch (subErr: any) {
       // "No such price" means the price ID doesn't exist in the current key mode
       // (test/live mismatch, or the test price was never provisioned in this account).
