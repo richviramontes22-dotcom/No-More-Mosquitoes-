@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { requireCustomerService } from "../middleware/requireRole";
 import { supabase } from "../lib/supabase";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { sendEnRouteSMS } from "../services/notifications/sendEnRouteSMS";
@@ -308,14 +309,18 @@ router.post("/assignments", requireAdmin, async (req, res) => {
 
 // ─── Reschedule requests (Platform Growth Phase 2 — additive review queue) ───
 
-router.get("/reschedule-requests", requireAdmin, async (req, res) => {
+// Gated by requireCustomerService (admin OR customer_service) — reschedule
+// review is explicitly a customer-service responsibility, not an
+// admin-only one. requireCustomerService still excludes every other role
+// (sales, technician, customer).
+router.get("/reschedule-requests", requireCustomerService, async (req, res) => {
   const { status } = req.query as Record<string, string>;
   const valid = ["pending", "approved", "denied"];
   const requests = await listRescheduleRequests(status && valid.includes(status) ? (status as any) : undefined);
   res.json({ requests });
 });
 
-router.post("/reschedule-requests/:id/approve", requireAdmin, async (req, res) => {
+router.post("/reschedule-requests/:id/approve", requireCustomerService, async (req, res) => {
   const { scheduledDate, windowId, windowLabel, windowStart, adminNotes } = req.body ?? {};
   if (!scheduledDate || !windowId || !windowLabel) {
     return res.status(400).json({ error: "scheduledDate, windowId, and windowLabel are required" });
@@ -323,7 +328,7 @@ router.post("/reschedule-requests/:id/approve", requireAdmin, async (req, res) =
 
   const result = await approveRescheduleRequest(req.params.id, {
     scheduledDate, windowId, windowLabel, windowStart,
-    adminId: req.adminUserId ?? null,
+    adminId: req.staffUserId ?? null,
     adminNotes,
   });
 
@@ -331,9 +336,9 @@ router.post("/reschedule-requests/:id/approve", requireAdmin, async (req, res) =
   res.json({ success: true, request: result.request });
 });
 
-router.post("/reschedule-requests/:id/deny", requireAdmin, async (req, res) => {
+router.post("/reschedule-requests/:id/deny", requireCustomerService, async (req, res) => {
   const { adminNotes } = req.body ?? {};
-  const updated = await denyRescheduleRequest(req.params.id, req.adminUserId ?? null, adminNotes);
+  const updated = await denyRescheduleRequest(req.params.id, req.staffUserId ?? null, adminNotes);
   if (!updated) return res.status(404).json({ error: "Request not found or already reviewed" });
   res.json({ success: true, request: updated });
 });

@@ -13,7 +13,6 @@ import CheckoutLayout from "@/components/layout/CheckoutLayout";
 import RequireAuth from "@/components/auth/RequireAuth";
 import RequireAdmin from "@/components/auth/RequireAdmin";
 import RequireCustomerService from "@/components/auth/RequireCustomerService";
-import RequireSales from "@/components/auth/RequireSales";
 import RequireCustomer from "@/components/auth/RequireCustomer";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
@@ -79,8 +78,6 @@ import AdminAnalytics from "./pages/admin/Analytics";
 import AdminTerritoryIntelligence from "./pages/admin/TerritoryIntelligence";
 import AdminWorkforceOptimization from "./pages/admin/WorkforceOptimization";
 import AdminSatisfaction from "./pages/admin/Satisfaction";
-import CustomerServiceDashboard from "./pages/admin/CustomerServiceDashboard";
-import SalesDashboard from "./pages/admin/SalesDashboard";
 import AdminRevenue from "./pages/admin/Revenue";
 import AdminSettings from "./pages/admin/Settings";
 import AdminNotifications from "./pages/admin/Notifications";
@@ -243,29 +240,6 @@ const App = () => (
                       <Route path="settings" element={<AdminSettings />} />
                     </Route>
 
-                    {/* Customer Service and Sales — separate, scoped role
-                        dashboards. Deliberately NOT nested under the /admin
-                        RequireAdmin block above: each has its own narrower
-                        guard (RequireCustomerService / RequireSales), so a
-                        customer_service or sales profile never gains access
-                        to anything under the admin-only tree. */}
-                    <Route
-                      path="/admin/customer-service"
-                      element={
-                        <RequireCustomerService>
-                          <CustomerServiceDashboard />
-                        </RequireCustomerService>
-                      }
-                    />
-                    <Route
-                      path="/admin/sales"
-                      element={
-                        <RequireSales>
-                          <SalesDashboard />
-                        </RequireSales>
-                      }
-                    />
-
                     <Route path="/employee/login" element={<EmployeeLogin />} />
 
                     <Route
@@ -284,6 +258,14 @@ const App = () => (
                       <Route path="profile" element={<EmployeeProfile />} />
                       <Route path="onboarding" element={<EmployeeOnboarding />} />
                       <Route path="route" element={<EmployeeRoute />} />
+                      {/* Customer service tools — RequireEmployee above
+                          already confirms "some kind of staff"; this inner
+                          guard narrows to admin OR customer_service only, so
+                          a technician/dispatcher/sales login can't reach
+                          these even by typing the URL directly. */}
+                      <Route path="tickets" element={<RequireCustomerService><AdminTickets /></RequireCustomerService>} />
+                      <Route path="satisfaction" element={<RequireCustomerService><AdminSatisfaction /></RequireCustomerService>} />
+                      <Route path="reschedule-requests" element={<RequireCustomerService><AdminRescheduleRequests /></RequireCustomerService>} />
                     </Route>
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/terms" element={<Terms />} />

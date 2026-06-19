@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, MessageSquare, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useProfile } from "@/hooks/useProfile";
 import { AdminOwnershipBadge, AdminOwnershipNote } from "@/components/admin/AdminOwnershipBadge";
 
 type TicketStatus = "open" | "in_progress" | "pending_customer" | "pending_staff" | "escalated" | "resolved" | "closed";
@@ -44,6 +45,8 @@ const CATEGORY_LABELS: Record<TicketCategory, string> = {
 };
 
 const Tickets = () => {
+  const { data: profile } = useProfile();
+  const isAdmin = profile?.role === "admin";
   const [items, setItems] = useState<Ticket[]>([]);
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -195,9 +198,11 @@ const Tickets = () => {
           <option value="all">All Categories</option>
           {categories.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
         </select>
-        <Button variant="outline" size="sm" className="rounded-xl" asChild>
-          <Link to="/admin/customers">Customer Database</Link>
-        </Button>
+        {isAdmin && (
+          <Button variant="outline" size="sm" className="rounded-xl" asChild>
+            <Link to="/admin/customers">Customer Database</Link>
+          </Button>
+        )}
       </AdminOwnershipNote>
 
       {totalTickets === 0 ? (

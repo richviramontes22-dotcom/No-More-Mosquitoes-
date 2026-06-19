@@ -5,10 +5,32 @@ import SectionHeading from "@/components/common/SectionHeading";
 import { ClockWidget } from "@/components/employee/ClockWidget";
 import { useEmployee } from "@/hooks/employee/useEmployee";
 import { useEmployeeAssignments } from "@/hooks/employee/useEmployeeAssignments";
+import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
+import { CustomerServicePanel } from "./CustomerServicePanel";
+import { SalesPanel } from "./SalesPanel";
 
 const Dashboard = () => {
+  const { data: profile, isLoading: profileLoading } = useProfile();
+
+  // customer_service and sales never have an employees table row (no field
+  // work, no route/assignment data) — route them to their own dashboard
+  // before touching anything that depends on one.
+  if (profileLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (profile?.role === "customer_service") return <CustomerServicePanel />;
+  if (profile?.role === "sales") return <SalesPanel />;
+
+  return <TechnicianDashboard />;
+};
+
+const TechnicianDashboard = () => {
   const { data: employee, isLoading: empLoading } = useEmployee();
   const { data: assignments = [], isLoading: assignLoading } = useEmployeeAssignments(employee?.id);
   const [shiftId, setShiftId] = useState<string | null>(null);
