@@ -10,7 +10,7 @@ const router = Router();
 // Read-only. Reuses the existing leads/referrals tables directly rather
 // than duplicating their logic — this is a narrower, sales-scoped read
 // view, not a parallel CRM.
-router.get("/sales/dashboard", requireSales, async (_req, res) => {
+router.get("/admin/sales/dashboard", requireSales, async (_req, res) => {
   try {
     const [{ data: leads }, { data: followups }, { data: codes }, { data: referrals }] = await Promise.all([
       db.from("leads").select("id, status, source, name, email, acreage, created_at").order("created_at", { ascending: false }).limit(50),

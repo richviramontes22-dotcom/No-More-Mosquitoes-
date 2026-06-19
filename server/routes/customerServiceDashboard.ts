@@ -9,7 +9,7 @@ const router = Router();
 // GET /api/admin/customer-service/dashboard
 // Read-only. Composes existing data (tickets, satisfaction detractors,
 // reschedule requests) — no new tables, no duplicated business logic.
-router.get("/customer-service/dashboard", requireCustomerService, async (_req, res) => {
+router.get("/admin/customer-service/dashboard", requireCustomerService, async (_req, res) => {
   try {
     const [
       { data: openTickets },
@@ -38,7 +38,7 @@ router.get("/customer-service/dashboard", requireCustomerService, async (_req, r
 });
 
 // GET /api/admin/customer-service/customers?search=
-router.get("/customer-service/customers", requireCustomerService, async (req, res) => {
+router.get("/admin/customer-service/customers", requireCustomerService, async (req, res) => {
   // Strip characters with structural meaning in PostgREST's .or() filter
   // syntax (comma separates clauses, parens group, period separates
   // column.operator.value) so a search string can never inject additional
