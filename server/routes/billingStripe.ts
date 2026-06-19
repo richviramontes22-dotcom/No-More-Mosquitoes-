@@ -417,7 +417,12 @@ router.post("/create-payment-intent", async (req, res) => {
         currency:    "usd",
         customer:    customerId,
         description: "Annual Mosquito Service Plan",
-        "automatic_payment_methods[enabled]": "true",
+        // Explicit 'card' instead of automatic_payment_methods — Apple Pay/
+        // Google Pay still work (they ride on the card type via the
+        // PaymentElement's wallet config), this just excludes Stripe Link,
+        // which otherwise auto-surfaces its own "save your email" prompt —
+        // redundant with this site's own per-customer saved-card flow.
+        "payment_method_types[0]": "card",
       });
       if (autoTaxEnabled()) body.append("automatic_tax[enabled]", "true");
       for (const [k, v] of Object.entries(meta)) body.append(`metadata[${k}]`, v);
@@ -443,7 +448,8 @@ router.post("/create-payment-intent", async (req, res) => {
         currency:    "usd",
         customer:    customerId,
         description: "One-Time Mosquito Treatment",
-        "automatic_payment_methods[enabled]": "true",
+        // See annual branch above for why 'card' instead of automatic_payment_methods.
+        "payment_method_types[0]": "card",
       });
       if (autoTaxEnabled()) body.append("automatic_tax[enabled]", "true");
       for (const [k, v] of Object.entries(meta)) body.append(`metadata[${k}]`, v);
@@ -473,6 +479,11 @@ router.post("/create-payment-intent", async (req, res) => {
         customer:         customerId,
         payment_behavior: "default_incomplete",
         "payment_settings[save_default_payment_method]": "on_subscription",
+        // Restrict to card (Apple Pay/Google Pay still work via the
+        // PaymentElement's wallet config) to exclude Stripe Link's own
+        // "save your email" prompt — redundant with save_default_payment_method
+        // above, which already saves the card to this customer for renewals.
+        "payment_settings[payment_method_types][0]": "card",
         ...priceParam,
       });
       if (autoTaxEnabled()) body.append("automatic_tax[enabled]", "true");

@@ -304,7 +304,10 @@ router.post("/create-payment-intent", async (req, res) => {
       amount: chargeAmount.toString(),
       currency: "usd",
       customer: customerId,
-      "automatic_payment_methods[enabled]": "true",
+      // 'card' instead of automatic_payment_methods — Apple Pay/Google Pay
+      // still work, this just excludes Stripe Link's own "save your email"
+      // prompt (see server/routes/billingStripe.ts for the full rationale).
+      "payment_method_types[0]": "card",
       "metadata[user_id]": user.id,
       "metadata[purchase_type]": "marketplace",
       "metadata[appointment_id]": appointmentId || "unscheduled",

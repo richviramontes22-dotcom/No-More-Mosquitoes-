@@ -525,7 +525,12 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
     };
 
     fetch_();
-  }, [step, appliedPromo]); // eslint-disable-line react-hooks/exhaustive-deps
+    // paymentClientSecret is intentionally in this array: clicking "Retry"
+    // after a decline sets it to null, which must re-trigger this effect to
+    // fetch a fresh PaymentIntent. The `if (paymentClientSecret) return;`
+    // guard above makes the reverse transition (null -> secret, which also
+    // re-fires this effect) a no-op, so this can't loop or double-fetch.
+  }, [step, appliedPromo, paymentClientSecret]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── After Stripe confirms payment — create appointment + finalize ─────────────
 
