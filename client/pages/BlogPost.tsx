@@ -1,9 +1,11 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { blogPosts } from "@/data/blog";
+import { supabase } from "@/lib/supabase";
 import Seo from "@/components/seo/Seo";
 import { CtaBand } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Calendar, Clock } from "lucide-react";
+import { ChevronLeft, Calendar, Clock, Loader2 } from "lucide-react";
 
 // Blog post content mapping - in a real app, this would come from a CMS
 const blogContent: Record<string, { content: string; author: string }> = {
@@ -417,8 +419,46 @@ const BlogPostDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
-  const post = blogPosts.find(p => p.slug === slug);
-  const content = slug ? blogContent[slug] : null;
+  // DB-first, same pattern as client/pages/Blog.tsx's listing query — a
+  // post created via the admin CMS is fully renderable here, not just in
+  // the /blog list. Falls back to the static content map below if no
+  // published DB row matches this slug.
+  const { data: dbPost, isLoading: dbLoading } = useQuery({
+    queryKey: ["blog_post_detail", slug],
+    queryFn: async () => {
+      if (!slug) return null;
+      const { data, error } = await supabase
+        .from("blog_posts")
+        .select("title, excerpt, body, author, published_at, reading_time_minutes")
+        .eq("slug", slug)
+        .eq("published", true)
+        .maybeSingle();
+      if (error || !data) return null;
+      return data;
+    },
+    enabled: !!slug,
+    staleTime: 5 * 60 * 1000,
+    retry: 0,
+    refetchOnWindowFocus: false,
+  });
+
+  const staticPost = blogPosts.find(p => p.slug === slug);
+  const staticContent = slug ? blogContent[slug] : null;
+
+  const post = dbPost
+    ? { title: dbPost.title, excerpt: dbPost.excerpt || "", publishedAt: dbPost.published_at, readingTimeMinutes: dbPost.reading_time_minutes || 3 }
+    : staticPost;
+  const content = dbPost
+    ? { author: dbPost.author || "No More Mosquitoes", content: dbPost.body || "" }
+    : staticContent;
+
+  if (dbLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/40" />
+      </div>
+    );
+  }
 
   if (!post || !content) {
     return (

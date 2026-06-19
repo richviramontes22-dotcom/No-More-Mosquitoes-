@@ -30,16 +30,38 @@ import { useToast } from "@/hooks/use-toast";
 import { useMessages, Thread } from "@/hooks/dashboard/useMessages";
 import { cn } from "@/lib/utils";
 
+type TicketCategory = "billing" | "scheduling" | "service_quality" | "retreatment_request" | "property_access" | "pesticide_question" | "general";
+type TicketStatus = "open" | "in_progress" | "pending_customer" | "pending_staff" | "escalated" | "resolved" | "closed";
+type TicketPriority = "low" | "medium" | "high" | "urgent";
+
 interface SupportTicket {
   id: string;
   subject: string;
   description: string;
-  status: "open" | "in_progress" | "resolved" | "closed";
-  priority: "low" | "medium" | "high";
+  status: TicketStatus;
+  priority: TicketPriority;
+  category: TicketCategory;
   created_at: string;
 }
 
-const ticketSelectFields = "id, subject, description, status, priority, created_at, updated_at";
+interface TicketMessage {
+  id: string;
+  body: string;
+  sender_role: "customer" | "staff";
+  created_at: string;
+}
+
+const ticketSelectFields = "id, subject, description, status, priority, category, created_at, updated_at";
+
+const CATEGORY_LABELS: Record<TicketCategory, string> = {
+  billing: "Billing",
+  scheduling: "Scheduling",
+  service_quality: "Service Quality",
+  retreatment_request: "Retreatment Request",
+  property_access: "Property Access",
+  pesticide_question: "Pesticide Question",
+  general: "General",
+};
 
 const normalizeTicket = (t: any): SupportTicket => ({
   id: t.id,
@@ -47,18 +69,21 @@ const normalizeTicket = (t: any): SupportTicket => ({
   description: t.description || "",
   status: t.status || "open",
   priority: t.priority || "medium",
+  category: t.category || "general",
   created_at: t.created_at,
 });
 
 const statusIcon = (status: string) => {
   if (status === "resolved" || status === "closed") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-  if (status === "in_progress") return <Clock className="h-4 w-4 text-blue-500" />;
+  if (status === "escalated") return <AlertCircle className="h-4 w-4 text-red-500" />;
+  if (status === "in_progress" || status === "pending_staff") return <Clock className="h-4 w-4 text-blue-500" />;
   return <AlertCircle className="h-4 w-4 text-amber-500" />;
 };
 
 const statusColor = (status: string) => {
   if (status === "resolved") return "text-green-600";
-  if (status === "in_progress") return "text-blue-600";
+  if (status === "escalated") return "text-red-600";
+  if (status === "in_progress" || status === "pending_staff") return "text-blue-600";
   if (status === "closed") return "text-muted-foreground";
   return "text-amber-600";
 };
@@ -106,6 +131,15 @@ const Help = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [category, setCategory] = useState<TicketCategory>("general");
+  const [priority, setPriority] = useState<TicketPriority>("medium");
+
+  // ── Ticket detail/reply state ─────────────────────────────────────────────
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>([]);
+  const [loadingTicketMessages, setLoadingTicketMessages] = useState(false);
+  const [ticketReplyText, setTicketReplyText] = useState("");
+  const [sendingTicketReply, setSendingTicketReply] = useState(false);
 
   // ── Messages state ────────────────────────────────────────────────────────
   const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
@@ -232,16 +266,54 @@ const Help = () => {
     try {
       const { data, error } = await supabase
         .from("tickets")
-        .insert({ user_id: user.id, subject: subject.trim(), description: body.trim(), priority: "medium", status: "open" })
+        .insert({ user_id: user.id, subject: subject.trim(), description: body.trim(), priority, category, status: "open" })
         .select();
       if (error) throw error;
       if (data?.[0]) setTickets((prev) => [normalizeTicket(data[0]), ...prev]);
-      setSubject(""); setBody(""); setShowCreateForm(false);
+      setSubject(""); setBody(""); setCategory("general"); setPriority("medium"); setShowCreateForm(false);
       toast({ title: "Ticket Created", description: "Our team will respond shortly." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // ── Ticket detail/reply actions ───────────────────────────────────────────
+  const openTicket = async (ticket: SupportTicket) => {
+    setSelectedTicket(ticket);
+    setLoadingTicketMessages(true);
+    setTicketMessages([]);
+    try {
+      const { data } = await supabase
+        .from("ticket_messages")
+        .select("id, body, sender_role, created_at")
+        .eq("ticket_id", ticket.id)
+        .order("created_at", { ascending: true });
+      setTicketMessages(data || []);
+    } catch {
+      // non-fatal — ticket detail still shows subject/description/status
+    } finally {
+      setLoadingTicketMessages(false);
+    }
+  };
+
+  const sendTicketReply = async () => {
+    if (!ticketReplyText.trim() || !selectedTicket || !user) return;
+    setSendingTicketReply(true);
+    try {
+      const { data, error } = await supabase
+        .from("ticket_messages")
+        .insert({ ticket_id: selectedTicket.id, body: ticketReplyText.trim(), sender_role: "customer", sender_id: user.id })
+        .select()
+        .single();
+      if (error) throw error;
+      setTicketMessages((prev) => [...prev, data]);
+      setTicketReplyText("");
+    } catch (err: any) {
+      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingTicketReply(false);
     }
   };
 
@@ -345,6 +417,36 @@ const Help = () => {
                       disabled={isSubmitting}
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="ticket-category">Category</Label>
+                      <select
+                        id="ticket-category"
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value as TicketCategory)}
+                        disabled={isSubmitting}
+                        className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                      >
+                        {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="ticket-priority">Priority (optional)</Label>
+                      <select
+                        id="ticket-priority"
+                        value={priority}
+                        onChange={(e) => setPriority(e.target.value as TicketPriority)}
+                        disabled={isSubmitting}
+                        className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                  </div>
                   <div className="flex gap-3">
                     <Button type="submit" disabled={isSubmitting || !subject.trim() || !body.trim()} className="rounded-xl">
                       {isSubmitting ? "Submitting…" : "Submit Ticket"}
@@ -397,7 +499,8 @@ const Help = () => {
                 {tickets.map((ticket) => (
                   <div
                     key={ticket.id}
-                    className="flex items-center justify-between rounded-2xl border border-border/60 bg-card p-5 shadow-sm hover:shadow-md transition-shadow"
+                    onClick={() => openTicket(ticket)}
+                    className="flex items-center justify-between rounded-2xl border border-border/60 bg-card p-5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                   >
                     <div className="flex items-start gap-4">
                       <div className="mt-1">{statusIcon(ticket.status)}</div>
@@ -408,11 +511,16 @@ const Help = () => {
                           <span>•</span>
                           <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
                           <span>•</span>
+                          <Badge variant="outline" className="h-auto py-0 text-[9px] uppercase bg-muted">
+                            {CATEGORY_LABELS[ticket.category] || ticket.category}
+                          </Badge>
+                          <span>•</span>
                           <Badge
                             variant="outline"
                             className={cn(
                               "h-auto py-0 text-[9px] uppercase",
-                              ticket.priority === "high" ? "bg-red-50 text-red-700 border-red-200"
+                              ticket.priority === "urgent" ? "bg-red-50 text-red-700 border-red-200"
+                              : ticket.priority === "high" ? "bg-red-50 text-red-700 border-red-200"
                               : ticket.priority === "medium" ? "bg-amber-50 text-amber-700 border-amber-200"
                               : "bg-blue-50 text-blue-700 border-blue-200"
                             )}
@@ -423,7 +531,7 @@ const Help = () => {
                       </div>
                     </div>
                     <span className={cn("text-xs font-semibold", statusColor(ticket.status))}>
-                      {ticket.status.replace("_", " ")}
+                      {ticket.status.replace(/_/g, " ")}
                     </span>
                   </div>
                 ))}
@@ -491,6 +599,84 @@ const Help = () => {
           )}
         </div>
       )}
+
+      {/* ── Ticket detail/reply sheet ────────────────────────────────────── */}
+      <Sheet
+        open={!!selectedTicket}
+        onOpenChange={(open) => {
+          if (!open) { setSelectedTicket(null); setTicketReplyText(""); }
+        }}
+      >
+        <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-0">
+          <SheetHeader className="px-6 py-4 border-b border-border/40">
+            <SheetTitle className="flex items-center gap-2">
+              <LifeBuoy className="h-5 w-5 text-primary" />
+              {selectedTicket?.subject || "Ticket"}
+            </SheetTitle>
+          </SheetHeader>
+
+          {selectedTicket && (
+            <div className="px-6 py-4 border-b border-border/40 space-y-2">
+              <p className="text-sm text-muted-foreground">{selectedTicket.description}</p>
+              <div className="flex items-center gap-2 text-[11px] uppercase font-semibold tracking-wider">
+                <span className={statusColor(selectedTicket.status)}>{selectedTicket.status.replace(/_/g, " ")}</span>
+                <span className="text-muted-foreground">•</span>
+                <span className="text-muted-foreground">{CATEGORY_LABELS[selectedTicket.category]}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-0">
+            {loadingTicketMessages ? (
+              <div className="flex justify-center pt-12">
+                <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
+              </div>
+            ) : ticketMessages.length === 0 ? (
+              <div className="text-center pt-12 text-muted-foreground text-sm">
+                No replies yet. Our team will respond here.
+              </div>
+            ) : (
+              ticketMessages.map((msg) => (
+                <div key={msg.id} className={`flex ${msg.sender_role === "customer" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
+                      msg.sender_role === "customer"
+                        ? "bg-primary text-primary-foreground rounded-br-sm"
+                        : "bg-muted text-foreground rounded-bl-sm"
+                    }`}
+                  >
+                    <p>{msg.body}</p>
+                    <p className={`text-[10px] mt-1 ${msg.sender_role === "customer" ? "text-primary-foreground/70 text-right" : "text-muted-foreground"}`}>
+                      {new Date(msg.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {selectedTicket && !["closed", "resolved"].includes(selectedTicket.status) && (
+            <div className="border-t border-border/40 px-6 py-4 space-y-3">
+              <Textarea
+                placeholder="Add a reply…"
+                value={ticketReplyText}
+                onChange={(e) => setTicketReplyText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTicketReply(); } }}
+                className="resize-none rounded-xl"
+                rows={3}
+              />
+              <Button
+                onClick={sendTicketReply}
+                disabled={!ticketReplyText.trim() || sendingTicketReply}
+                className="w-full rounded-xl shadow-brand"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {sendingTicketReply ? "Sending…" : "Send Reply"}
+              </Button>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* ── Thread sheet ─────────────────────────────────────────────────── */}
       <Sheet

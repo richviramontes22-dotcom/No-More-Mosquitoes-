@@ -198,7 +198,7 @@ router.post("/assignments/:id/status", async (req, res) => {
   if (!actor) return res.status(401).json({ error: "Unauthorized" });
 
   const { id } = req.params;
-  const { status, latitude, longitude, accuracy } = req.body ?? {};
+  const { status, latitude, longitude, accuracy, technician_notes } = req.body ?? {};
 
   if (!status || !VALID_STATUSES.includes(status as AssignmentStatus)) {
     return res.status(400).json({ error: `status must be one of: ${VALID_STATUSES.join(", ")}` });
@@ -219,6 +219,11 @@ router.post("/assignments/:id/status", async (req, res) => {
 
     const now = new Date().toISOString();
     const update: Record<string, string | null> = { status };
+    // Optional reason when marking blocked/unable to service (no_show/skipped)
+    // — stored in the same technician_notes field used for treatment notes.
+    if (typeof technician_notes === "string" && technician_notes.trim()) {
+      update.technician_notes = technician_notes.trim();
+    }
 
     // Set lifecycle timestamps only on first transition — never overwrite
     if (status === "en_route"    && !current.en_route_at)  update.en_route_at  = now;
@@ -618,6 +623,44 @@ router.post("/assignments/:id/status", async (req, res) => {
   } catch (err: any) {
     return res.status(500).json({ error: "Internal server error" });
   }
+});
+
+/**
+ * PATCH /api/employee/assignments/:id/notes
+ * Saves the technician's own treatment notes for a job — independent of
+ * status, so notes can be jotted down at any point (before, during, or
+ * after marking the job complete) without forcing a status transition.
+ */
+router.patch("/assignments/:id/notes", async (req, res) => {
+  const actor = await getAuthenticatedEmployee(req);
+  if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+  const { id } = req.params;
+  const { technician_notes } = req.body ?? {};
+  if (typeof technician_notes !== "string") {
+    return res.status(400).json({ error: "technician_notes (string) is required" });
+  }
+
+  const { data: current, error: fetchErr } = await db
+    .from("assignments")
+    .select("id, employee_id")
+    .eq("id", id)
+    .single();
+
+  if (fetchErr || !current) return res.status(404).json({ error: "Assignment not found" });
+  if (current.employee_id !== actor.employeeId) {
+    return res.status(403).json({ error: "Not authorized to update this assignment" });
+  }
+
+  const { data: updated, error: updateErr } = await db
+    .from("assignments")
+    .update({ technician_notes: technician_notes.trim() || null })
+    .eq("id", id)
+    .select("id, technician_notes")
+    .single();
+
+  if (updateErr) return res.status(500).json({ error: "Failed to save notes" });
+  res.json({ ok: true, assignment: updated });
 });
 
 /**

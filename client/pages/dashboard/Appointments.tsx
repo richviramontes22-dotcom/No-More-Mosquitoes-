@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { format, isBefore, startOfDay, parseISO } from "date-fns";
 import { VideoRecapGrid } from "@/components/dashboard/VideoRecapGrid";
+import { SatisfactionPrompt } from "@/components/dashboard/SatisfactionPrompt";
 import SectionHeading from "@/components/common/SectionHeading";
 import { Button } from "@/components/ui/button";
 import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
@@ -772,13 +773,14 @@ const Appointments = () => {
                   <th className="px-6 py-4 font-semibold text-muted-foreground">Job ID</th>
                   <th className="px-6 py-4 font-semibold text-muted-foreground">Program</th>
                   <th className="px-6 py-4 font-semibold text-muted-foreground">Technician</th>
+                  <th className="px-6 py-4 font-semibold text-muted-foreground">Feedback</th>
                   <th className="px-6 py-4 font-semibold text-right">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
                 {isPageLoading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic">
+                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground italic">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-primary/40" />
                       Loading history...
                     </td>
@@ -795,6 +797,9 @@ const Appointments = () => {
                         </div>
                         {visit.technician}
                       </td>
+                      <td className="px-6 py-4">
+                        {visit.status === "Completed" && <SatisfactionPrompt appointmentId={visit.id} />}
+                      </td>
                       <td className="px-6 py-4 text-right">
                         <Badge variant="outline" className="bg-green-500/5 text-green-600 border-green-500/20 gap-1">
                           <CheckCircle2 className="h-3 w-3" />
@@ -805,7 +810,7 @@ const Appointments = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground italic">
+                    <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground italic">
                       No past visits on record.
                     </td>
                   </tr>

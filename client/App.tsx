@@ -12,6 +12,8 @@ import MainLayout from "@/components/layout/MainLayout";
 import CheckoutLayout from "@/components/layout/CheckoutLayout";
 import RequireAuth from "@/components/auth/RequireAuth";
 import RequireAdmin from "@/components/auth/RequireAdmin";
+import RequireCustomerService from "@/components/auth/RequireCustomerService";
+import RequireSales from "@/components/auth/RequireSales";
 import RequireCustomer from "@/components/auth/RequireCustomer";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
@@ -76,6 +78,9 @@ import AdminReports from "./pages/admin/Reports";
 import AdminAnalytics from "./pages/admin/Analytics";
 import AdminTerritoryIntelligence from "./pages/admin/TerritoryIntelligence";
 import AdminWorkforceOptimization from "./pages/admin/WorkforceOptimization";
+import AdminSatisfaction from "./pages/admin/Satisfaction";
+import CustomerServiceDashboard from "./pages/admin/CustomerServiceDashboard";
+import SalesDashboard from "./pages/admin/SalesDashboard";
 import AdminRevenue from "./pages/admin/Revenue";
 import AdminSettings from "./pages/admin/Settings";
 import AdminNotifications from "./pages/admin/Notifications";
@@ -209,6 +214,10 @@ const App = () => (
                       <Route path="employee-tracking" element={<AdminEmployeeTracking />} />
                       <Route path="website-manager" element={<AdminWebsiteManager />} />
                       <Route path="content" element={<AdminContent />} />
+                      {/* /admin/blog is an alias — the blog editor lives in
+                          the Content tab (same redirect convention as
+                          /dashboard/support -> /dashboard/help) */}
+                      <Route path="blog" element={<Navigate to="/admin/content" replace />} />
                       <Route path="pricing" element={<AdminPricing />} />
                       <Route path="promos" element={<AdminPromos />} />
                       <Route path="referrals" element={<AdminReferrals />} />
@@ -225,6 +234,7 @@ const App = () => (
                       <Route path="analytics" element={<AdminAnalytics />} />
                       <Route path="territory-intelligence" element={<AdminTerritoryIntelligence />} />
                       <Route path="workforce-optimization" element={<AdminWorkforceOptimization />} />
+                      <Route path="satisfaction" element={<AdminSatisfaction />} />
                       <Route path="business-hours" element={<AdminBusinessHours />} />
                       <Route path="notifications" element={<AdminNotifications />} />
                       <Route path="alerts" element={<AdminAlerts />} />
@@ -232,6 +242,29 @@ const App = () => (
                       <Route path="leads/:id" element={<AdminLeadDetail />} />
                       <Route path="settings" element={<AdminSettings />} />
                     </Route>
+
+                    {/* Customer Service and Sales — separate, scoped role
+                        dashboards. Deliberately NOT nested under the /admin
+                        RequireAdmin block above: each has its own narrower
+                        guard (RequireCustomerService / RequireSales), so a
+                        customer_service or sales profile never gains access
+                        to anything under the admin-only tree. */}
+                    <Route
+                      path="/admin/customer-service"
+                      element={
+                        <RequireCustomerService>
+                          <CustomerServiceDashboard />
+                        </RequireCustomerService>
+                      }
+                    />
+                    <Route
+                      path="/admin/sales"
+                      element={
+                        <RequireSales>
+                          <SalesDashboard />
+                        </RequireSales>
+                      }
+                    />
 
                     <Route path="/employee/login" element={<EmployeeLogin />} />
 

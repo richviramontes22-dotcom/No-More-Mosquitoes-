@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, Home, Calendar, Truck, MessageSquare,
   Ticket, Map, Navigation, CreditCard, BarChart3, FileText,
   Settings, ShieldCheck, Zap, Globe, Tag, Layers, UserCog, ChevronRight, Bell, Scale, CalendarDays,
-  UserPlus, Gift,
+  UserPlus, Gift, Smile,
 } from "lucide-react";
 
 type NavItem = { label: string; to: string; icon: React.ElementType };
@@ -50,6 +50,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Messages", to: "/admin/messages", icon: MessageSquare },
       { label: "Tickets", to: "/admin/tickets", icon: Ticket },
+      { label: "Satisfaction", to: "/admin/satisfaction", icon: Smile },
       { label: "Email Management", to: "/admin/email-management", icon: MessageSquare },
     ],
   },

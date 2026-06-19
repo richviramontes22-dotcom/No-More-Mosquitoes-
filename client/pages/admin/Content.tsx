@@ -31,6 +31,8 @@ async function adminFetch(path: string, method = "GET", body?: unknown) {
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface BlogPost {
   id: string; slug: string; title: string; excerpt: string;
+  body?: string; tags?: string[]; featured_image_url?: string | null;
+  seo_title?: string | null; seo_description?: string | null;
   published: boolean; published_at: string | null;
   reading_time_minutes: number; author: string;
 }
@@ -50,6 +52,7 @@ const Content = () => {
   const { toast } = useToast();
 
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [faqs, setFaqs] = useState<Faq[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,6 +189,9 @@ const Content = () => {
                       <Switch checked={p.published} onCheckedChange={() => togglePostPublished(p)} />
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingPost(p)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deletePost(p.id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -195,6 +201,17 @@ const Content = () => {
               </TableBody>
             </Table>
           </div>
+          {editingPost && (
+            <EditBlogPostDialog
+              post={editingPost}
+              onClose={() => setEditingPost(null)}
+              onSaved={(updated) => {
+                setPosts((p) => p.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)));
+                setEditingPost(null);
+                toast({ title: "Post saved" });
+              }}
+            />
+          )}
         </TabsContent>
 
         {/* ── FAQ ── */}
@@ -297,6 +314,9 @@ const NewBlogPostDialog = ({ onCreated }: { onCreated: (post: BlogPost) => void 
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState(""); const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState(""); const [author, setAuthor] = useState("No More Mosquitoes");
+  const [body, setBody] = useState(""); const [tags, setTags] = useState("");
+  const [featuredImageUrl, setFeaturedImageUrl] = useState("");
+  const [seoTitle, setSeoTitle] = useState(""); const [seoDescription, setSeoDescription] = useState("");
   const [reading, setReading] = useState(3);
 
   const autoSlug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -306,10 +326,17 @@ const NewBlogPostDialog = ({ onCreated }: { onCreated: (post: BlogPost) => void 
     try {
       const res = await adminFetch("/api/admin/content/blog", "POST", {
         title: title.trim(), slug: slug.trim() || autoSlug(title), excerpt: excerpt.trim(),
+        body: body.trim() || undefined,
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        featured_image_url: featuredImageUrl.trim() || undefined,
+        seo_title: seoTitle.trim() || undefined,
+        seo_description: seoDescription.trim() || undefined,
         author, reading_time_minutes: reading, published: false,
       });
       onCreated(res.post);
-      setOpen(false); setTitle(""); setSlug(""); setExcerpt("");
+      setOpen(false);
+      setTitle(""); setSlug(""); setExcerpt(""); setBody(""); setTags("");
+      setFeaturedImageUrl(""); setSeoTitle(""); setSeoDescription("");
     } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
     finally { setSaving(false); }
   };
@@ -319,18 +346,79 @@ const NewBlogPostDialog = ({ onCreated }: { onCreated: (post: BlogPost) => void 
       <DialogTrigger asChild>
         <Button className="rounded-xl shadow-brand"><Plus className="mr-2 h-4 w-4" />New Post</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>New Blog Post</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div><Label>Title *</Label><Input value={title} onChange={(e) => { setTitle(e.target.value); setSlug(autoSlug(e.target.value)); }} /></div>
           <div><Label>Slug</Label><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
           <div><Label>Excerpt</Label><Textarea value={excerpt} onChange={(e) => setExcerpt(e.target.value)} rows={2} /></div>
+          <div><Label>Content</Label><Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} placeholder="Markdown or plain text" /></div>
+          <div><Label>Featured Image URL</Label><Input value={featuredImageUrl} onChange={(e) => setFeaturedImageUrl(e.target.value)} placeholder="https://…" /></div>
+          <div><Label>Tags (comma-separated)</Label><Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="mosquitoes, prevention" /></div>
+          <div><Label>SEO Title</Label><Input value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} /></div>
+          <div><Label>SEO Description</Label><Textarea value={seoDescription} onChange={(e) => setSeoDescription(e.target.value)} rows={2} /></div>
           <div><Label>Author</Label><Input value={author} onChange={(e) => setAuthor(e.target.value)} /></div>
           <div><Label>Reading time (minutes)</Label><Input type="number" min={1} value={reading} onChange={(e) => setReading(parseInt(e.target.value || "1", 10))} /></div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={!title.trim() || saving}>{saving ? "Saving…" : "Create Post"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const EditBlogPostDialog = ({
+  post, onClose, onSaved,
+}: { post: BlogPost; onClose: () => void; onSaved: (post: BlogPost) => void }) => {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [title, setTitle] = useState(post.title);
+  const [slug, setSlug] = useState(post.slug);
+  const [excerpt, setExcerpt] = useState(post.excerpt || "");
+  const [body, setBody] = useState(post.body || "");
+  const [tags, setTags] = useState((post.tags || []).join(", "));
+  const [featuredImageUrl, setFeaturedImageUrl] = useState(post.featured_image_url || "");
+  const [seoTitle, setSeoTitle] = useState(post.seo_title || "");
+  const [seoDescription, setSeoDescription] = useState(post.seo_description || "");
+  const [author, setAuthor] = useState(post.author);
+  const [reading, setReading] = useState(post.reading_time_minutes);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await adminFetch(`/api/admin/content/blog/${post.id}`, "PUT", {
+        title: title.trim(), slug: slug.trim(), excerpt: excerpt.trim(), body: body.trim(),
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        featured_image_url: featuredImageUrl.trim() || null,
+        seo_title: seoTitle.trim() || null, seo_description: seoDescription.trim() || null,
+        author, reading_time_minutes: reading,
+      });
+      onSaved(res.post);
+    } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Edit Blog Post</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div><Label>Title *</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+          <div><Label>Slug</Label><Input value={slug} onChange={(e) => setSlug(e.target.value)} /></div>
+          <div><Label>Excerpt</Label><Textarea value={excerpt} onChange={(e) => setExcerpt(e.target.value)} rows={2} /></div>
+          <div><Label>Content</Label><Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} /></div>
+          <div><Label>Featured Image URL</Label><Input value={featuredImageUrl} onChange={(e) => setFeaturedImageUrl(e.target.value)} /></div>
+          <div><Label>Tags (comma-separated)</Label><Input value={tags} onChange={(e) => setTags(e.target.value)} /></div>
+          <div><Label>SEO Title</Label><Input value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} /></div>
+          <div><Label>SEO Description</Label><Textarea value={seoDescription} onChange={(e) => setSeoDescription(e.target.value)} rows={2} /></div>
+          <div><Label>Author</Label><Input value={author} onChange={(e) => setAuthor(e.target.value)} /></div>
+          <div><Label>Reading time (minutes)</Label><Input type="number" min={1} value={reading} onChange={(e) => setReading(parseInt(e.target.value || "1", 10))} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!title.trim() || saving}>{saving ? "Saving…" : "Save Changes"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

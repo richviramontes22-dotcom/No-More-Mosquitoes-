@@ -39,8 +39,17 @@ const AdminLogin = () => {
       console.log("[AdminLogin] User is admin, redirecting to /admin");
       return <Navigate to={from ?? "/admin"} replace />;
     }
-    // If user is not admin, redirect to customer dashboard (not authorized for admin panel)
-    console.log("[AdminLogin] User is not admin, redirecting to /dashboard");
+    if (canonicalRole === "customer_service") {
+      console.log("[AdminLogin] User is customer_service, redirecting to /admin/customer-service");
+      return <Navigate to={from ?? "/admin/customer-service"} replace />;
+    }
+    if (canonicalRole === "sales") {
+      console.log("[AdminLogin] User is sales, redirecting to /admin/sales");
+      return <Navigate to={from ?? "/admin/sales"} replace />;
+    }
+    // Unknown/unrecognized role — safest fallback is the customer dashboard,
+    // not the admin panel.
+    console.log("[AdminLogin] User role not recognized for staff portals, redirecting to /dashboard");
     return <Navigate to="/dashboard" replace />;
   }
 

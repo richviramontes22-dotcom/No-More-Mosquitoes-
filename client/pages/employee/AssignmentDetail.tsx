@@ -4,7 +4,8 @@ import SectionHeading from "@/components/common/SectionHeading";
 import MiniMap from "@/components/employee/MiniMap";
 import { navUrl } from "@/lib/employee/deepLinks";
 import { Button } from "@/components/ui/button";
-import { Loader2, Phone, MapPin, Camera, Video, X, Navigation } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Phone, MapPin, Camera, Video, X, Navigation, Ban } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useEmployee } from "@/hooks/employee/useEmployee";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +28,7 @@ interface AssignmentDetail {
   lng: number | null;
   service_type: string | null;
   notes: string | null;
+  technician_notes: string | null;
   appointment_id: string | null;
 }
 
@@ -80,6 +82,17 @@ const AssignmentDetail = () => {
   const [checklist, setChecklist] = useState<boolean[]>(CHECKLIST_LABELS.map(() => false));
   const [checklistSaving, setChecklistSaving] = useState(false);
   const [blockingForms, setBlockingForms] = useState<string[] | null>(null);
+  const [showBlockedForm, setShowBlockedForm] = useState(false);
+  const [blockedReason, setBlockedReason] = useState("");
+  const [treatmentNotes, setTreatmentNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+
+  // Sync the notes textarea once per assignment load — does not re-sync on
+  // every partial update from updateStatus(), so it never clobbers
+  // in-progress typing.
+  useEffect(() => {
+    if (assignment) setTreatmentNotes(assignment.technician_notes || "");
+  }, [assignment?.id]);
 
   const loadAssignment = async () => {
     if (!id) return;
@@ -104,7 +117,7 @@ const AssignmentDetail = () => {
 
       const { data: row, error } = await supabase
         .from("assignments")
-        .select("id, status, en_route_at, arrived_at, started_at, completed_at, appointment_id")
+        .select("id, status, en_route_at, arrived_at, started_at, completed_at, appointment_id, technician_notes")
         .eq("id", id)
         .single();
 
@@ -112,7 +125,7 @@ const AssignmentDetail = () => {
 
       const apptId = row.appointment_id;
       if (!apptId) {
-        setAssignment({ id: row.id, status: row.status, en_route_at: row.en_route_at ?? null, arrived_at: row.arrived_at ?? null, started_at: row.started_at ?? null, completed_at: row.completed_at ?? null, customer_name: null, customer_phone: null, address: null, city: null, zip: null, lat: null, lng: null, service_type: null, notes: null, appointment_id: null });
+        setAssignment({ id: row.id, status: row.status, en_route_at: row.en_route_at ?? null, arrived_at: row.arrived_at ?? null, started_at: row.started_at ?? null, completed_at: row.completed_at ?? null, customer_name: null, customer_phone: null, address: null, city: null, zip: null, lat: null, lng: null, service_type: null, notes: null, technician_notes: row.technician_notes ?? null, appointment_id: null });
         return;
       }
 
@@ -144,6 +157,7 @@ const AssignmentDetail = () => {
         lng: typeof propRes.data?.lng === "number" ? propRes.data.lng : null,
         service_type: appt?.service_type ?? null,
         notes: appt?.notes ?? null,
+        technician_notes: row.technician_notes ?? null,
       });
     } finally {
       setIsLoading(false);
@@ -278,7 +292,7 @@ const AssignmentDetail = () => {
     loadChecklist();
   }, [id]);
 
-  const updateStatus = async (newStatus: string) => {
+  const updateStatus = async (newStatus: string, reason?: string) => {
     if (!assignment) return;
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
@@ -294,7 +308,7 @@ const AssignmentDetail = () => {
       const res = await fetch(`/api/employee/assignments/${assignment.id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status: newStatus, ...geo }),
+        body: JSON.stringify({ status: newStatus, ...geo, ...(reason ? { technician_notes: reason } : {}) }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Unknown error" }));
@@ -306,8 +320,37 @@ const AssignmentDetail = () => {
       if (newStatus === "completed") {
         toast({ title: "Job completed", description: "Appointment marked complete." });
       }
+      if (newStatus === "no_show" || newStatus === "skipped") {
+        setShowBlockedForm(false);
+        setBlockedReason("");
+        toast({ title: "Marked as blocked", description: "Office has been notified." });
+      }
     } catch {
       toast({ title: "Status update failed", variant: "destructive" });
+    }
+  };
+
+  const saveTreatmentNotes = async () => {
+    if (!assignment) return;
+    setSavingNotes(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch(`/api/employee/assignments/${assignment.id}/notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ technician_notes: treatmentNotes }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        toast({ title: "Failed to save notes", description: err.error, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Treatment notes saved" });
+    } catch {
+      toast({ title: "Failed to save notes", variant: "destructive" });
+    } finally {
+      setSavingNotes(false);
     }
   };
 
@@ -428,7 +471,56 @@ const AssignmentDetail = () => {
               <Button size="sm" variant="outline" disabled={assignment.status === "en_route"} onClick={() => updateStatus("en_route")}>En Route</Button>
               <Button size="sm" variant="outline" disabled={assignment.status === "in_progress"} onClick={() => updateStatus("in_progress")}>Arrive</Button>
               <Button size="sm" disabled={assignment.status === "completed"} onClick={() => updateStatus("completed")}>Complete</Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-red-300 text-red-700 hover:bg-red-50"
+                disabled={assignment.status === "no_show" || assignment.status === "skipped"}
+                onClick={() => setShowBlockedForm((v) => !v)}
+              >
+                <Ban className="h-3.5 w-3.5 mr-1.5" /> Blocked / Unable to Service
+              </Button>
             </div>
+          </div>
+
+          {showBlockedForm && (
+            <div className="rounded-2xl border border-red-200 bg-red-50/60 p-5 space-y-3">
+              <p className="text-sm font-semibold text-red-800">Can't complete this job?</p>
+              <Textarea
+                placeholder="Reason (e.g. locked gate, dog in yard, no one home)…"
+                value={blockedReason}
+                onChange={(e) => setBlockedReason(e.target.value)}
+                rows={2}
+                className="resize-none bg-white"
+              />
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="border-red-300" onClick={() => updateStatus("no_show", blockedReason)}>
+                  Mark No-Show
+                </Button>
+                <Button size="sm" variant="outline" className="border-red-300" onClick={() => updateStatus("skipped", blockedReason)}>
+                  Mark Skipped
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setShowBlockedForm(false); setBlockedReason(""); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Treatment Notes */}
+          <div className="rounded-2xl border border-border/70 bg-card/95 p-5 space-y-3">
+            <p className="text-sm font-semibold">Treatment Notes</p>
+            <p className="text-xs text-muted-foreground">Your own notes about this visit — what you treated, conditions found, anything for the next technician.</p>
+            <Textarea
+              placeholder="e.g. Treated front and back yard, standing water near fence removed…"
+              value={treatmentNotes}
+              onChange={(e) => setTreatmentNotes(e.target.value)}
+              rows={3}
+              className="resize-none"
+            />
+            <Button size="sm" variant="outline" disabled={savingNotes} onClick={saveTreatmentNotes}>
+              {savingNotes ? "Saving…" : "Save Notes"}
+            </Button>
           </div>
 
           {/* Map */}

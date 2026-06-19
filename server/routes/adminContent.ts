@@ -12,28 +12,42 @@ const db = supabaseAdmin ?? supabase;
 router.get("/content/blog", requireAdmin, async (_req, res) => {
   const { data, error } = await db
     .from("blog_posts")
-    .select("id, slug, title, excerpt, author, tags, published, published_at, reading_time_minutes, created_at, updated_at")
+    .select("id, slug, title, excerpt, body, author, author_id, tags, published, published_at, reading_time_minutes, featured_image_url, seo_title, seo_description, created_at, updated_at")
     .order("created_at", { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ posts: data || [] });
 });
 
+router.get("/content/blog/:id", requireAdmin, async (req, res) => {
+  const { data, error } = await db.from("blog_posts").select("*").eq("id", req.params.id).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Post not found" });
+  res.json({ post: data });
+});
+
 router.post("/content/blog", requireAdmin, async (req, res) => {
-  const { slug, title, excerpt, body, author, tags, published, seo_title, seo_description, reading_time_minutes } = req.body;
+  const {
+    slug, title, excerpt, body, author, author_id, tags, published,
+    seo_title, seo_description, reading_time_minutes, featured_image_url,
+  } = req.body;
   if (!slug || !title) return res.status(400).json({ error: "slug and title are required" });
 
   const { data, error } = await db
     .from("blog_posts")
     .insert({
       slug, title, excerpt, body, author: author || "No More Mosquitoes",
+      author_id: author_id || req.adminUserId || null,
       tags: tags || [], published: published ?? false,
       published_at: published ? new Date().toISOString() : null,
-      seo_title, seo_description,
+      seo_title, seo_description, featured_image_url,
       reading_time_minutes: reading_time_minutes || 3,
     })
     .select()
     .single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    if (error.code === "23505") return res.status(409).json({ error: "A post with this slug already exists" });
+    return res.status(500).json({ error: error.message });
+  }
   res.status(201).json({ post: data });
 });
 
@@ -44,7 +58,10 @@ router.put("/content/blog/:id", requireAdmin, async (req, res) => {
 
   const { data, error } = await db
     .from("blog_posts").update(updates).eq("id", id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    if (error.code === "23505") return res.status(409).json({ error: "A post with this slug already exists" });
+    return res.status(500).json({ error: error.message });
+  }
   res.json({ post: data });
 });
 

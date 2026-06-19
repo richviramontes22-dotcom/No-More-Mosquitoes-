@@ -11,7 +11,18 @@ function randomId(): string {
   return `id-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function createFakeSupabase(initialTables: Record<string, Row[]> = {}) {
+/**
+ * uniqueColumns: optional, e.g. { blog_posts: ["slug"] } — opt-in per table,
+ * so existing tests that don't pass this are completely unaffected. When a
+ * configured column collides with an existing row on insert, returns a
+ * Postgres-shaped { code: "23505" } error instead of inserting, matching
+ * real unique-constraint-violation behavior closely enough for application
+ * code that branches on error.code.
+ */
+export function createFakeSupabase(
+  initialTables: Record<string, Row[]> = {},
+  uniqueColumns: Record<string, string[]> = {},
+) {
   const tables: Record<string, Row[]> = {};
   for (const [name, rows] of Object.entries(initialTables)) {
     tables[name] = rows.map((row) => ({ ...row }));
@@ -33,9 +44,20 @@ export function createFakeSupabase(initialTables: Record<string, Row[]> = {}) {
       return filters.every((f) => f(row));
     }
 
-    function execute(): { data: any; error: null; count?: number } {
+    function execute(): { data: any; error: any; count?: number } {
       if (mode === "insert") {
         const items = Array.isArray(payload) ? payload : [payload as Row];
+        const uniqueCols = uniqueColumns[table] ?? [];
+        for (const item of items) {
+          for (const col of uniqueCols) {
+            if (item[col] != null && rows.some((r) => r[col] === item[col])) {
+              return {
+                data: null,
+                error: { code: "23505", message: `duplicate key value violates unique constraint on ${table}.${col}` },
+              };
+            }
+          }
+        }
         const inserted = items.map((item) => {
           const now = new Date().toISOString();
           const row: Row = { id: randomId(), created_at: now, updated_at: now, ...item };
@@ -146,6 +168,7 @@ export function createFakeSupabase(initialTables: Record<string, Row[]> = {}) {
       async single() {
         wantsData = true;
         const { data, error } = execute();
+        if (error) return { data: null, error };
         const arr = Array.isArray(data) ? data : data ? [data] : [];
         if (arr.length === 0) return { data: null, error: { message: "No rows found" } };
         return { data: arr[0], error: null };

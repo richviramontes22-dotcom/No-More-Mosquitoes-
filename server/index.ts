@@ -47,6 +47,9 @@ import adminDebugRouter from "./routes/adminDebug";
 import adminMetricsRouter from "./routes/adminMetrics";
 import adminTerritoryIntelligenceRouter from "./routes/adminTerritoryIntelligence";
 import adminWorkforceOptimizationRouter from "./routes/adminWorkforceOptimization";
+import satisfactionRouter from "./routes/satisfaction";
+import salesDashboardRouter from "./routes/salesDashboard";
+import customerServiceDashboardRouter from "./routes/customerServiceDashboard";
 import healthRouter from "./routes/health";
 import { requestIdMiddleware } from "./middleware/requestId";
 
@@ -199,6 +202,9 @@ export function createServer() {
   // path internally (unlike most admin*.ts files), and /referrals/validate +
   // /referrals/my-code are customer/public-facing — single mount at /api covers all.
   app.use("/api", adminReferralsRouter);
+  app.use("/api", satisfactionRouter);
+  app.use("/api", salesDashboardRouter);
+  app.use("/api", customerServiceDashboardRouter);
 
   // Legal Documents — admin endpoints are defined with an /admin/legal/* path
   // internally; /legal/status, /legal/documents/:type, /legal/acceptances are
