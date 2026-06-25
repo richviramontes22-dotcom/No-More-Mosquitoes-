@@ -61,28 +61,29 @@ const Visits = () => {
         const userIds = [...new Set(appointments.map((a: any) => a.user_id).filter(Boolean))];
         const propertyIds = [...new Set(appointments.map((a: any) => a.property_id).filter(Boolean))];
 
+        // Guard each call against an empty id list — same reasoning as the
+        // null-filtering above: .in("id", []) sends "id=in.()", which
+        // PostgREST rejects with a 400 rather than just returning zero
+        // rows, taking down this entire load with it.
         const [
           { data: profiles },
           { data: properties },
           { data: assignments },
         ] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, name, email")
-            .in("id", userIds),
-          supabase
-            .from("properties")
-            .select("id, address, city")
-            .in("id", propertyIds),
-          supabase
-            .from("assignments")
-            .select("id, appointment_id, employee_id")
-            .in("appointment_id", appointmentIds),
+          userIds.length > 0
+            ? supabase.from("profiles").select("id, name, email").in("id", userIds)
+            : { data: [] as any[] },
+          propertyIds.length > 0
+            ? supabase.from("properties").select("id, address, city").in("id", propertyIds)
+            : { data: [] as any[] },
+          appointmentIds.length > 0
+            ? supabase.from("assignments").select("id, appointment_id, employee_id").in("appointment_id", appointmentIds)
+            : { data: [] as any[] },
         ]);
 
         // Build lookup maps
-        const profileMap = new Map(profiles?.map((p: any) => [p.id, p]) || []);
-        const propertyMap = new Map(properties?.map((p: any) => [p.id, p]) || []);
+        const profileMap = new Map<string, any>(profiles?.map((p: any): [string, any] => [p.id, p]) || []);
+        const propertyMap = new Map<string, any>(properties?.map((p: any): [string, any] => [p.id, p]) || []);
         const assignmentsByAppt = new Map<string, any[]>();
         assignments?.forEach((a: any) => {
           if (!assignmentsByAppt.has(a.appointment_id)) {
@@ -91,9 +92,16 @@ const Visits = () => {
           assignmentsByAppt.get(a.appointment_id)!.push(a);
         });
 
-        // Fetch technician profiles and all job media (not limited to 1)
-        const assignmentIds = assignments?.map((a: any) => a.id) || [];
-        const technicianIds = assignments?.map((a: any) => a.employee_id) || [];
+        // Fetch technician profiles and all job media (not limited to 1).
+        // employee_id is nullable (an assignment can exist before a
+        // technician is assigned) — filter nulls out same as the id lists
+        // above, for the same reason: a literal null in an .in() list is
+        // invalid UUID syntax and fails the whole query with a 400, not
+        // just that one entry. Confirmed live: every completed-appointment
+        // assignment in production currently has employee_id = null, which
+        // was breaking this exact query on every /admin/visits load.
+        const assignmentIds = assignments?.map((a: any) => a.id).filter(Boolean) || [];
+        const technicianIds = [...new Set(assignments?.map((a: any) => a.employee_id).filter(Boolean) || [])];
 
         const [
           { data: techProfiles },
@@ -164,6 +172,10 @@ const Visits = () => {
 
   const filtered = useMemo(() => {
     return visits.filter((v) => {
+      // A completed appointment should always have scheduled_at set, but a
+      // null here shouldn't crash the whole page for every admin — treat
+      // it as never matching a date filter rather than throwing.
+      if (!v.date) return techFilter === "all" || v.technician_name === techFilter;
       const date = v.date.slice(0, 10);
       const after = !from || date >= from;
       const before = !to || date <= to;
@@ -243,7 +255,10 @@ const Visits = () => {
                 {filtered.map((v) => (
                   <TableRow key={v.id} className="hover:bg-muted/20 border-border/40">
                     <TableCell className="font-medium text-sm">
-                      {new Date(v.date).toLocaleDateString()}
+                      {/* v.date null shows as the 1970 epoch via new Date(null)
+                          rather than throwing -- still misleading to an admin
+                          reading it as a real date, so show it plainly instead. */}
+                      {v.date ? new Date(v.date).toLocaleDateString() : <span className="text-muted-foreground">No date</span>}
                     </TableCell>
                     <TableCell>
                       <div className="text-sm font-medium">{v.customer_name}</div>
