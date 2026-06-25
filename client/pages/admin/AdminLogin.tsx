@@ -39,13 +39,12 @@ const AdminLogin = () => {
       console.log("[AdminLogin] User is admin, redirecting to /admin");
       return <Navigate to={from ?? "/admin"} replace />;
     }
-    if (canonicalRole === "customer_service") {
-      console.log("[AdminLogin] User is customer_service, redirecting to /admin/customer-service");
-      return <Navigate to={from ?? "/admin/customer-service"} replace />;
-    }
-    if (canonicalRole === "sales") {
-      console.log("[AdminLogin] User is sales, redirecting to /admin/sales");
-      return <Navigate to={from ?? "/admin/sales"} replace />;
+    if (canonicalRole === "customer_service" || canonicalRole === "sales" || canonicalRole === "technician" || canonicalRole === "dispatcher" || canonicalRole === "employee") {
+      // These roles all live in the employee portal now, not a standalone
+      // admin-tree page — /admin/customer-service and /admin/sales were
+      // removed when that portal was unified.
+      console.log(`[AdminLogin] User is ${canonicalRole}, redirecting to /employee`);
+      return <Navigate to={from ?? "/employee"} replace />;
     }
     // Unknown/unrecognized role — safest fallback is the customer dashboard,
     // not the admin panel.

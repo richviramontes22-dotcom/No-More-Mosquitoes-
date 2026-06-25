@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import SectionHeading from "@/components/common/SectionHeading";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Clock, Navigation, Trash2, Users, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, TrendingDown, Settings2 } from "lucide-react";
+import { MapPin, Map as MapIcon, Clock, Navigation, Trash2, Users, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, TrendingDown, Settings2, ShieldCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { adminApi, AdminApiError } from "@/lib/adminApi";
@@ -89,7 +90,20 @@ const RoutePlanning = () => {
     status: string; confidence: string | null; conflict_notes: string[] | null;
     stop_count: number; completed_count: number;
     total_distance_miles: number | null; approved_at: string | null; published_at: string | null;
+    estimated_service_minutes?: number; estimated_drive_minutes?: number;
   }>>([]);
+  const [safetyCheck, setSafetyCheck] = useState<{ routeId: string; loading: boolean; result: { valid: boolean; severity: string; warnings: Array<{ message: string }>; blockers: Array<{ message: string }> } | null } | null>(null);
+
+  const runSafetyCheck = async (routeId: string) => {
+    setSafetyCheck({ routeId, loading: true, result: null });
+    try {
+      const result = await adminApi(`/api/admin/routes/${routeId}/safety-check`);
+      setSafetyCheck({ routeId, loading: false, result });
+    } catch (err: any) {
+      toast({ title: "Safety check failed", description: err.message, variant: "destructive" });
+      setSafetyCheck(null);
+    }
+  };
   const [dayUnassigned, setDayUnassigned] = useState<any[]>([]);
   const [generatingDay, setGeneratingDay] = useState(false);
   const [loadingDay, setLoadingDay] = useState(false);
@@ -588,6 +602,15 @@ const RoutePlanning = () => {
                         <span className="text-muted-foreground">{r.total_distance_miles.toFixed(1)} mi</span>
                       )}
                     </div>
+                    {/* Drive vs. service time — summed from the per-stop
+                        figures the routing engine already computes (see
+                        ROUTE_REVIEW_UX_REPORT.md); not a new estimate. */}
+                    {((r.estimated_drive_minutes ?? 0) > 0 || (r.estimated_service_minutes ?? 0) > 0) && (
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>Drive ~{r.estimated_drive_minutes ?? 0}m</span>
+                        <span>Service ~{r.estimated_service_minutes ?? 0}m</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 flex-wrap">
                       {confidenceBadge(r.confidence)}
                       {r.completed_count > 0 && (
@@ -602,7 +625,46 @@ const RoutePlanning = () => {
                         <span>{r.conflict_notes.length} coordinate warning{r.conflict_notes.length > 1 ? "s" : ""}</span>
                       </div>
                     )}
+
+                    {/* Safety blockers — on-demand, not proactive for
+                        every route on every load (validateRouteForWorkforce
+                        does real DB lookups; eagerly running it for every
+                        route card would multiply this page's load cost).
+                        Previously only visible reactively, after a blocked
+                        publish attempt — see ROUTE_REVIEW_UX_REPORT.md. */}
+                    {safetyCheck?.routeId === r.id && safetyCheck.result && (
+                      <div className={`rounded-lg border p-2 text-xs space-y-1 ${safetyCheck.result.blockers.length > 0 ? "bg-red-50 border-red-200 text-red-800" : "bg-green-50 border-green-200 text-green-800"}`}>
+                        {safetyCheck.result.blockers.length === 0 && safetyCheck.result.warnings.length === 0 && (
+                          <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> No safety blockers</span>
+                        )}
+                        {safetyCheck.result.blockers.map((b, i) => (
+                          <p key={`b${i}`} className="flex items-start gap-1.5"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {b.message}</p>
+                        ))}
+                        {safetyCheck.result.warnings.map((w, i) => (
+                          <p key={`w${i}`} className="flex items-start gap-1.5 text-amber-700"><AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {w.message}</p>
+                        ))}
+                      </div>
+                    )}
+
                     <div className="flex gap-2 pt-1 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-lg h-8 text-xs"
+                        disabled={safetyCheck?.routeId === r.id && safetyCheck.loading}
+                        onClick={() => runSafetyCheck(r.id)}
+                      >
+                        {safetyCheck?.routeId === r.id && safetyCheck.loading
+                          ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          : <ShieldCheck className="h-3 w-3 mr-1" />}
+                        Safety Check
+                      </Button>
+                      <Link
+                        to="/admin/operations"
+                        className="inline-flex items-center rounded-lg border border-border/60 h-8 px-3 text-xs font-semibold text-muted-foreground hover:bg-muted/50 transition"
+                      >
+                        <MapIcon className="h-3 w-3 mr-1" /> Map View
+                      </Link>
                       {(r.status === "draft" || r.status === "approved") && (
                         <Button
                           size="sm"

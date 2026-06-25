@@ -77,6 +77,54 @@ describe("submitSurvey — detractor alert/ticket creation", () => {
   });
 });
 
+describe("submitSurvey — detractor follow-up task (assignment + due date)", () => {
+  it("sets a due date roughly 48 hours out, and leaves the ticket unassigned (admin queue) when no customer_service profile exists", async () => {
+    const before = Date.now();
+    await submitSurvey({ appointmentId: "appt-cs-1", profileId: "cust-1", rating: 4 });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const ticket = fakeDb.tables.tickets[0];
+    expect(ticket.assigned_to).toBeNull();
+    const dueAt = new Date(ticket.due_at).getTime();
+    expect(dueAt).toBeGreaterThan(before + 47 * 60 * 60 * 1000);
+    expect(dueAt).toBeLessThan(before + 49 * 60 * 60 * 1000);
+  });
+
+  it("assigns the ticket to an active customer_service profile when one exists", async () => {
+    await fakeDb.from("profiles").insert({ id: "cs-agent-1", name: "Pat (CS)", role: "customer_service" });
+
+    await submitSurvey({ appointmentId: "appt-cs-2", profileId: "cust-1", rating: 4 });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const ticket = fakeDb.tables.tickets[0];
+    expect(ticket.assigned_to).toBe("cs-agent-1");
+  });
+
+  it("never assigns to a non-customer_service profile", async () => {
+    await fakeDb.from("profiles").insert({ id: "admin-1", name: "An Admin", role: "admin" });
+
+    await submitSurvey({ appointmentId: "appt-cs-3", profileId: "cust-1", rating: 4 });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const ticket = fakeDb.tables.tickets[0];
+    expect(ticket.assigned_to).toBeNull();
+  });
+});
+
+describe("getSatisfactionDashboard — pending detractors carry their ticket's due date and assignee", () => {
+  it("enriches each pending detractor with the linked ticket's due_at and assignee name", async () => {
+    await fakeDb.from("profiles").insert({ id: "cs-agent-2", name: "Sam (CS)", role: "customer_service" });
+    await submitSurvey({ appointmentId: "appt-cs-4", profileId: "cust-1", rating: 5 });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const dashboard = await getSatisfactionDashboard();
+    expect(dashboard.detractors_pending).toHaveLength(1);
+    expect(dashboard.detractors_pending[0].assigned_to).toBe("cs-agent-2");
+    expect(dashboard.detractors_pending[0].assigned_to_name).toBe("Sam (CS)");
+    expect(dashboard.detractors_pending[0].due_at).not.toBeNull();
+  });
+});
+
 describe("getSatisfactionDashboard — NPS score calculation", () => {
   it("returns null (not 0) when there are zero responses", async () => {
     const dashboard = await getSatisfactionDashboard();

@@ -136,6 +136,13 @@ export function createFakeSupabase(
         filters.push((row) => vals.includes(row[col]));
         return builder;
       },
+      // .is("col", null) -> col IS NULL (PostgREST's null/boolean equality
+      // filter — .eq() doesn't handle null correctly in real Postgres, so
+      // application code uses .is() for it; this mirrors that here).
+      is(col: string, val: null | boolean) {
+        filters.push((row) => (row[col] ?? null) === val);
+        return builder;
+      },
       // Supports the two patterns actually used in this codebase:
       //   .not("col", "is", null)   -> col IS NOT NULL
       //   .not("col", "in", "(\"a\",\"b\")") -> col NOT IN (a, b)

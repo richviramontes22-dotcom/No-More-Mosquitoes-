@@ -2,6 +2,7 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { upsertLeadFromOutOfArea, recordServiceAreaDemandEvent } from "../services/leads/leadService";
 
 const router = Router();
 const db = supabaseAdmin ?? supabase;
@@ -148,6 +149,54 @@ router.get("/service-areas/check", async (req, res) => {
     capacity: data?.capacity ?? null,
     reason: data ? null : "not_in_service_area",
   });
+});
+
+/**
+ * POST /api/service-areas/waitlist
+ * Public — captures "notify me" interest for an address outside the active
+ * service area. Creates/updates an out_of_area lead and records a
+ * service_area_demand_event so admins can see where expansion demand is
+ * concentrated. Best-effort lead capture; the demand event is the source of
+ * truth for "should we expand here."
+ */
+router.post("/service-areas/waitlist", async (req, res) => {
+  const { email, address, city, state, zip, name } = req.body ?? {};
+
+  if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return res.status(400).json({ error: "A valid email address is required." });
+  }
+
+  const cleanZip = normalizeZip(zip);
+  if (!/^\d{5}$/.test(cleanZip)) {
+    return res.status(400).json({ error: "A valid ZIP code is required." });
+  }
+
+  try {
+    let leadId: string | null = null;
+    if (typeof address === "string" && address.trim()) {
+      const lead = await upsertLeadFromOutOfArea({
+        address: address.trim(),
+        city: typeof city === "string" ? city.trim() : null,
+        state: typeof state === "string" ? state.trim() : null,
+        zip: cleanZip,
+        outOfAreaReason: "Waitlist signup",
+      });
+      leadId = lead?.id ?? null;
+    }
+
+    await recordServiceAreaDemandEvent({
+      zip: cleanZip,
+      eventType: "waitlist_signup",
+      leadId,
+      email: email.trim().toLowerCase(),
+      name: typeof name === "string" && name.trim() ? name.trim() : null,
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("[service-areas/waitlist] failed:", err.message);
+    res.status(500).json({ error: "Could not save your waitlist signup. Please try again." });
+  }
 });
 
 export default router;

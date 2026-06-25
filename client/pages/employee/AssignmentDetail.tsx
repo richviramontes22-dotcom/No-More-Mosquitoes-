@@ -5,10 +5,13 @@ import MiniMap from "@/components/employee/MiniMap";
 import { navUrl } from "@/lib/employee/deepLinks";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Phone, MapPin, Camera, Video, X, Navigation, Ban } from "lucide-react";
+import { Loader2, Phone, MapPin, Camera, Video, X, Navigation, Ban, WifiOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useEmployee } from "@/hooks/employee/useEmployee";
 import { useToast } from "@/hooks/use-toast";
+import { cacheAssignmentDetail, getCachedAssignmentDetail } from "@/lib/employee/offlineCache";
+import { useActionQueue } from "@/hooks/employee/useActionQueue";
+import type { SyncResult } from "@/lib/employee/actionQueue";
 
 const JOB_MEDIA_BUCKET = "job-media";
 
@@ -72,6 +75,7 @@ const AssignmentDetail = () => {
   const { data: employee } = useEmployee();
   const { toast } = useToast();
   const [assignment, setAssignment] = useState<AssignmentDetail | null>(null);
+  const [isFromCache, setIsFromCache] = useState(false);
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [body, setBody] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -86,6 +90,16 @@ const AssignmentDetail = () => {
   const [blockedReason, setBlockedReason] = useState("");
   const [treatmentNotes, setTreatmentNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+
+  const handleSyncResult = (result: SyncResult) => {
+    if (result.succeeded.length > 0) {
+      toast({ title: `Synced ${result.succeeded.length} update${result.succeeded.length > 1 ? "s" : ""}`, description: "Queued changes are now saved." });
+    }
+    for (const { error } of result.failed) {
+      toast({ title: "A queued update was rejected", description: error, variant: "destructive" });
+    }
+  };
+  const { pendingCount, enqueue: enqueueQueuedAction } = useActionQueue(employee?.id, handleSyncResult);
 
   // Sync the notes textarea once per assignment load — does not re-sync on
   // every partial update from updateStatus(), so it never clobbers
@@ -121,11 +135,27 @@ const AssignmentDetail = () => {
         .eq("id", id)
         .single();
 
-      if (error || !row) return;
+      if (error || !row) {
+        // Network failure (or any other fetch error): fall back to the
+        // last cached copy of this exact assignment rather than leaving
+        // the page blank — this is a job a technician may well be
+        // standing at right now with no signal.
+        if (employee?.id) {
+          const cached = getCachedAssignmentDetail<AssignmentDetail>(employee.id, id);
+          if (cached) {
+            setAssignment(cached.data);
+            setIsFromCache(true);
+          }
+        }
+        return;
+      }
 
       const apptId = row.appointment_id;
       if (!apptId) {
-        setAssignment({ id: row.id, status: row.status, en_route_at: row.en_route_at ?? null, arrived_at: row.arrived_at ?? null, started_at: row.started_at ?? null, completed_at: row.completed_at ?? null, customer_name: null, customer_phone: null, address: null, city: null, zip: null, lat: null, lng: null, service_type: null, notes: null, technician_notes: row.technician_notes ?? null, appointment_id: null });
+        const minimal: AssignmentDetail = { id: row.id, status: row.status, en_route_at: row.en_route_at ?? null, arrived_at: row.arrived_at ?? null, started_at: row.started_at ?? null, completed_at: row.completed_at ?? null, customer_name: null, customer_phone: null, address: null, city: null, zip: null, lat: null, lng: null, service_type: null, notes: null, technician_notes: row.technician_notes ?? null, appointment_id: null };
+        setAssignment(minimal);
+        setIsFromCache(false);
+        if (employee?.id) cacheAssignmentDetail(employee.id, id, minimal);
         return;
       }
 
@@ -140,7 +170,7 @@ const AssignmentDetail = () => {
         appt?.property_id ? supabase.from("properties").select("address, city, zip, lat, lng").eq("id", appt.property_id).single() : Promise.resolve({ data: null }),
       ]);
 
-      setAssignment({
+      const full: AssignmentDetail = {
         id: row.id,
         status: row.status,
         en_route_at:    row.en_route_at ?? null,
@@ -158,7 +188,11 @@ const AssignmentDetail = () => {
         service_type: appt?.service_type ?? null,
         notes: appt?.notes ?? null,
         technician_notes: row.technician_notes ?? null,
-      });
+      };
+      setAssignment(full);
+      setIsFromCache(false);
+      // Own data only (employee.id), keyed by this specific assignment.
+      if (employee?.id) cacheAssignmentDetail(employee.id, id, full);
     } finally {
       setIsLoading(false);
     }
@@ -206,6 +240,17 @@ const AssignmentDetail = () => {
 
     setIsUploading(true);
     try {
+      // The file upload itself stays online-only by design (see
+      // TECHNICIAN_EXPERIENCE_AUDIT.md / OFFLINE_ACTION_QUEUE_REPORT.md) —
+      // queueing a binary blob in localStorage indefinitely risks quietly
+      // filling a technician's phone storage with no clear "did this
+      // actually upload" signal. If there's no connection at all, fail
+      // here, before ever touching Storage.
+      if (!navigator.onLine) {
+        toast({ title: "Upload requires a connection", description: "Try again once you have signal — your notes and status updates will still sync.", variant: "destructive" });
+        return;
+      }
+
       const ext = file.name.split(".").pop() ?? "jpg";
       const path = `assignments/${assignment.id}/${Date.now()}.${ext}`;
       const { error: storageErr } = await supabase.storage
@@ -216,20 +261,32 @@ const AssignmentDetail = () => {
 
       const { data: urlData } = supabase.storage.from(JOB_MEDIA_BUCKET).getPublicUrl(path);
       const mediaType: "photo" | "video" = file.type.startsWith("video/") ? "video" : "photo";
+      const metadata = { url: urlData.publicUrl, media_type: mediaType };
 
-      const res = await fetch(`/api/employee/assignments/${assignment.id}/media`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ url: urlData.publicUrl, media_type: mediaType }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error);
+      try {
+        const res = await fetch(`/api/employee/assignments/${assignment.id}/media`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(metadata),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Unknown error" }));
+          throw new Error(err.error);
+        }
+        toast({ title: `${mediaType === "video" ? "Video" : "Photo"} uploaded` });
+        await loadMedia();
+      } catch (metaErr: any) {
+        // The file itself is already safely in Storage — only the
+        // metadata record (which job it belongs to, photo vs. video)
+        // failed to save. That's exactly the kind of small, safe, idempotent
+        // write worth queueing rather than losing, per this sprint's scope.
+        if (employee?.id) {
+          enqueueQueuedAction("media_metadata", assignment.id, metadata);
+          toast({ title: `${mediaType === "video" ? "Video" : "Photo"} uploaded — saving record offline`, description: "Will finish syncing once you're back online." });
+        } else {
+          throw metaErr;
+        }
       }
-
-      toast({ title: `${mediaType === "video" ? "Video" : "Photo"} uploaded` });
-      await loadMedia();
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
@@ -303,12 +360,31 @@ const AssignmentDetail = () => {
 
     // Capture GPS snapshot (non-blocking — GPS denied does not prevent status update)
     const geo = await capturePosition();
+    const payload = { status: newStatus, ...geo, ...(reason ? { technician_notes: reason } : {}) };
+
+    const queueIt = () => {
+      if (!employee?.id) return;
+      enqueueQueuedAction("status_update", assignment.id, payload);
+      // Optimistic update — the technician needs to see the status they
+      // just set, not the pre-update one, while it's pending sync.
+      setAssignment((prev) => prev ? { ...prev, status: newStatus, ...(reason ? { technician_notes: reason } : {}) } : prev);
+      if (newStatus === "no_show" || newStatus === "skipped") {
+        setShowBlockedForm(false);
+        setBlockedReason("");
+      }
+      toast({ title: "Saved offline", description: "Will sync automatically once you're back online." });
+    };
+
+    if (!navigator.onLine) {
+      queueIt();
+      return;
+    }
 
     try {
       const res = await fetch(`/api/employee/assignments/${assignment.id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status: newStatus, ...geo, ...(reason ? { technician_notes: reason } : {}) }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Unknown error" }));
@@ -326,13 +402,28 @@ const AssignmentDetail = () => {
         toast({ title: "Marked as blocked", description: "Office has been notified." });
       }
     } catch {
-      toast({ title: "Status update failed", variant: "destructive" });
+      // fetch itself threw — a real connectivity failure, not a server
+      // rejection (those resolve with !res.ok above, not a throw).
+      queueIt();
     }
   };
 
   const saveTreatmentNotes = async () => {
     if (!assignment) return;
     setSavingNotes(true);
+
+    const queueIt = () => {
+      if (!employee?.id) return;
+      enqueueQueuedAction("treatment_notes", assignment.id, { technician_notes: treatmentNotes });
+      toast({ title: "Notes saved offline", description: "Will sync automatically once you're back online." });
+    };
+
+    if (!navigator.onLine) {
+      queueIt();
+      setSavingNotes(false);
+      return;
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -348,7 +439,7 @@ const AssignmentDetail = () => {
       }
       toast({ title: "Treatment notes saved" });
     } catch {
-      toast({ title: "Failed to save notes", variant: "destructive" });
+      queueIt();
     } finally {
       setSavingNotes(false);
     }
@@ -357,6 +448,17 @@ const AssignmentDetail = () => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assignment || !body.trim() || !employee) return;
+
+    // Messaging stays online-only by design (see
+    // TECHNICIAN_EXPERIENCE_AUDIT.md / OFFLINE_ACTION_QUEUE_REPORT.md) — a
+    // message that silently sends hours later could look like the
+    // technician ignored dispatch or the customer. Fail clearly and
+    // immediately instead, so there's no ambiguity about whether it sent.
+    if (!navigator.onLine) {
+      toast({ title: "No signal", description: "Messages need a connection to send — try again once you're back online.", variant: "destructive" });
+      return;
+    }
+
     setIsSending(true);
 
     try {
@@ -388,7 +490,11 @@ const AssignmentDetail = () => {
       setBody("");
       await loadMessages();
     } catch {
-      toast({ title: "Failed to send message", variant: "destructive" });
+      toast({
+        title: navigator.onLine ? "Failed to send message" : "No signal",
+        description: navigator.onLine ? undefined : "Try again once you're back online.",
+        variant: "destructive",
+      });
     } finally {
       setIsSending(false);
     }
@@ -445,6 +551,21 @@ const AssignmentDetail = () => {
         description="Navigate, message, checklist, and complete the job."
       />
 
+      {isFromCache && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800">
+          <WifiOff className="h-3.5 w-3.5 shrink-0" />
+          Offline / Cached Data — showing this job's last-known details. Status updates and notes will sync
+          once you're back online.
+        </div>
+      )}
+
+      {pendingCount > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-blue-800">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          {pendingCount} update{pendingCount > 1 ? "s" : ""} waiting to sync — will send automatically once you're back online.
+        </div>
+      )}
+
       {assignment && (
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Customer & Status */}
@@ -467,14 +588,15 @@ const AssignmentDetail = () => {
                 <p className="mt-2 text-sm text-muted-foreground">Service: {assignment.service_type}</p>
               )}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" disabled={assignment.status === "en_route"} onClick={() => updateStatus("en_route")}>En Route</Button>
-              <Button size="sm" variant="outline" disabled={assignment.status === "in_progress"} onClick={() => updateStatus("in_progress")}>Arrive</Button>
-              <Button size="sm" disabled={assignment.status === "completed"} onClick={() => updateStatus("completed")}>Complete</Button>
+            {/* min-h-11 (44px) on every action here — these are tapped
+                standing up, often one-handed, sometimes gloved. */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              <Button className="min-h-11" variant="outline" disabled={assignment.status === "en_route"} onClick={() => updateStatus("en_route")}>En Route</Button>
+              <Button className="min-h-11" variant="outline" disabled={assignment.status === "in_progress"} onClick={() => updateStatus("in_progress")}>Arrive</Button>
+              <Button className="min-h-11" disabled={assignment.status === "completed"} onClick={() => updateStatus("completed")}>Complete</Button>
               <Button
-                size="sm"
                 variant="outline"
-                className="border-red-300 text-red-700 hover:bg-red-50"
+                className="min-h-11 border-red-300 text-red-700 hover:bg-red-50"
                 disabled={assignment.status === "no_show" || assignment.status === "skipped"}
                 onClick={() => setShowBlockedForm((v) => !v)}
               >
@@ -493,14 +615,14 @@ const AssignmentDetail = () => {
                 rows={2}
                 className="resize-none bg-white"
               />
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="border-red-300" onClick={() => updateStatus("no_show", blockedReason)}>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="min-h-11 border-red-300" onClick={() => updateStatus("no_show", blockedReason)}>
                   Mark No-Show
                 </Button>
-                <Button size="sm" variant="outline" className="border-red-300" onClick={() => updateStatus("skipped", blockedReason)}>
+                <Button variant="outline" className="min-h-11 border-red-300" onClick={() => updateStatus("skipped", blockedReason)}>
                   Mark Skipped
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setShowBlockedForm(false); setBlockedReason(""); }}>
+                <Button variant="ghost" className="min-h-11" onClick={() => { setShowBlockedForm(false); setBlockedReason(""); }}>
                   Cancel
                 </Button>
               </div>
@@ -558,13 +680,13 @@ const AssignmentDetail = () => {
         </div>
         <form className="flex gap-2" onSubmit={handleSendMessage}>
           <input
-            className="flex-1 h-10 rounded-xl border border-input bg-background px-3 text-sm"
+            className="flex-1 h-11 rounded-xl border border-input bg-background px-3 text-sm"
             placeholder="Type a message…"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             disabled={isSending}
           />
-          <Button type="submit" disabled={isSending || !body.trim()}>
+          <Button className="min-h-11" type="submit" disabled={isSending || !body.trim()}>
             {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
           </Button>
         </form>
@@ -633,13 +755,16 @@ const AssignmentDetail = () => {
             <span>{checklist.filter(Boolean).length}/{CHECKLIST_LABELS.length} complete</span>
           </div>
         </div>
-        <ul className="grid gap-2 sm:grid-cols-3 text-sm">
+        <ul className="grid gap-1 sm:grid-cols-3 text-sm">
           {CHECKLIST_LABELS.map((label, i) => (
             <li key={label}>
-              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+              {/* The whole row is the tap target (min-h-11), not just the
+                  16px checkbox itself — the smallest tap target on this
+                  page before this change. */}
+              <label className="flex min-h-11 items-center gap-2.5 cursor-pointer select-none rounded-lg px-1 active:bg-muted/40">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded"
+                  className="h-5 w-5 shrink-0 rounded"
                   checked={checklist[i]}
                   onChange={() => toggleChecklist(i)}
                 />
@@ -673,9 +798,11 @@ const AssignmentDetail = () => {
               onChange={handleMediaUpload}
               disabled={isUploading}
             />
+            {/* Photo is the primary action — most job documentation is a
+                quick camera shot, not picking an existing file. min-h-11
+                throughout for one-handed, gloved-hands use. */}
             <Button
-              size="sm"
-              variant="outline"
+              className="min-h-11"
               disabled={isUploading}
               onClick={() => document.getElementById("media-photo")?.click()}
             >
@@ -683,7 +810,7 @@ const AssignmentDetail = () => {
               <span className="ml-1.5">Photo</span>
             </Button>
             <Button
-              size="sm"
+              className="min-h-11"
               variant="outline"
               disabled={isUploading}
               onClick={() => document.getElementById("media-file")?.click()}

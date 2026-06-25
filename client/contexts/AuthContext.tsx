@@ -1,6 +1,7 @@
 ﻿import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
+import { clearEmployeeCache } from "@/lib/employee/offlineCache";
 
 export type UserRole = "admin" | "support" | "customer";
 
@@ -242,6 +243,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           localStorage.removeItem("sb-auth-session");
           localStorage.removeItem("sb-qamfxqbtvwwlzlmqrqbh-auth-token");
           sessionStorage.clear();
+          // Technician offline cache — never leave a previous employee's
+          // cached route/assignment data reachable by whoever signs in next
+          // on this device.
+          clearEmployeeCache();
         } catch (e) {
           console.warn("Could not clear auth storage:", e);
         }

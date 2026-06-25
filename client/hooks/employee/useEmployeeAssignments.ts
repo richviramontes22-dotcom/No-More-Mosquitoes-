@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
+import { cacheAssignments, getCachedAssignments } from "@/lib/employee/offlineCache";
 
 export interface AssignmentRow {
   id: string;
@@ -23,6 +24,10 @@ const fetchAssignments = async (employeeId: string, date: string): Promise<Assig
   const dayStart = `${date}T00:00:00`;
   const dayEnd = `${date}T23:59:59`;
 
+  // PostgREST has no syntax to order parent rows by an embedded resource's
+  // column — "appointments.scheduled_at" as an .order() column name is
+  // parsed as a single (invalid) column, not a cross-table sort, and fails
+  // with PGRST100. Fetch unordered and sort client-side below instead.
   const { data, error } = await supabase
     .from("assignments")
     .select(`
@@ -41,11 +46,30 @@ const fetchAssignments = async (employeeId: string, date: string): Promise<Assig
     `)
     .eq("employee_id", employeeId)
     .gte("appointments.scheduled_at", dayStart)
-    .lte("appointments.scheduled_at", dayEnd)
-    .order("appointments.scheduled_at", { ascending: true });
+    .lte("appointments.scheduled_at", dayEnd);
 
-  if (error) throw error;
-  if (!data || data.length === 0) return [];
+  if (error) {
+    // Offline (or any other failure): fall back to the last successfully
+    // fetched list for this employee + date rather than throwing — React
+    // Query's retry:0 + no persistence means a throw here would otherwise
+    // surface as "no assignments" on every reload with no network.
+    const cached = getCachedAssignments<AssignmentRow[]>(employeeId, date);
+    if (cached) return cached.data;
+    throw error;
+  }
+  if (!data || data.length === 0) {
+    // A genuine "no assignments today" is real data, not an absence of
+    // it — cache it so offline doesn't show a stale, non-empty cache from
+    // a previous day instead of correctly showing nothing.
+    cacheAssignments(employeeId, date, []);
+    return [];
+  }
+
+  (data as any[]).sort((a, b) => {
+    const aTime = a.appointments?.scheduled_at ? new Date(a.appointments.scheduled_at).getTime() : 0;
+    const bTime = b.appointments?.scheduled_at ? new Date(b.appointments.scheduled_at).getTime() : 0;
+    return aTime - bTime;
+  });
 
   // Enrich with customer + property data
   const userIds = [...new Set((data as any[]).map((r: any) => r.appointments?.user_id).filter(Boolean))];
@@ -70,7 +94,7 @@ const fetchAssignments = async (employeeId: string, date: string): Promise<Assig
     propMap[p.id] = { address: p.address, city: p.city, zip: p.zip };
   });
 
-  return (data as any[]).map((row: any) => {
+  const rows = (data as any[]).map((row: any) => {
     const appt = row.appointments || {};
     const profile: { name?: string; phone?: string | null } = profileMap[appt.user_id] ?? {};
     const prop: { address?: string; city?: string | null; zip?: string } = propMap[appt.property_id] ?? {};
@@ -90,6 +114,12 @@ const fetchAssignments = async (employeeId: string, date: string): Promise<Assig
       customer_phone: profile.phone || null,
     } as AssignmentRow;
   });
+
+  // Own data only (employeeId), today's date only — caching here (rather
+  // than relying on React Query's in-memory cache) is what survives a full
+  // page reload with no network.
+  cacheAssignments(employeeId, date, rows);
+  return rows;
 };
 
 export const useEmployeeAssignments = (employeeId?: string, date?: string) => {

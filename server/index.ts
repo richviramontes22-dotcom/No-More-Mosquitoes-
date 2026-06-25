@@ -47,6 +47,7 @@ import adminDebugRouter from "./routes/adminDebug";
 import adminMetricsRouter from "./routes/adminMetrics";
 import adminTerritoryIntelligenceRouter from "./routes/adminTerritoryIntelligence";
 import adminWorkforceOptimizationRouter from "./routes/adminWorkforceOptimization";
+import adminOperationsRouter from "./routes/adminOperations";
 import satisfactionRouter from "./routes/satisfaction";
 import salesDashboardRouter from "./routes/salesDashboard";
 import customerServiceDashboardRouter from "./routes/customerServiceDashboard";
@@ -147,6 +148,7 @@ export function createServer() {
   app.use("/api/admin", adminMetricsRouter);
   app.use("/api/admin", adminTerritoryIntelligenceRouter);
   app.use("/api/admin", adminWorkforceOptimizationRouter);
+  app.use("/api/admin", adminOperationsRouter);
 
   // Health endpoints (public lightweight + provider status)
   app.use("/api", healthRouter);

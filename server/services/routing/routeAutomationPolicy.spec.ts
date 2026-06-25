@@ -194,3 +194,53 @@ describe("autoPublishEligibleRoutes — full auto-publish gating", () => {
     expect(route.status).toBe("draft");
   });
 });
+
+describe("autoPublishEligibleRoutes — review_window timing", () => {
+  // Every other test in this file uses mode: "fully_automatic" (no wait) or an
+  // artificially ancient created_at that incidentally clears any window —
+  // the review_window mode's actual "is this route still too new" branch had
+  // no dedicated coverage.
+  const reviewWindowSettings = {
+    mode: "review_window" as const, enabled: true,
+    review_window_minutes: 60, auto_publish_cutoff_time: null,
+    require_smart_optimize: true, block_low_confidence: true, block_mock_geo: true, block_drive_cap_exceeded: true,
+    auto_generate_enabled: false, auto_optimize_enabled: false, auto_generate_time: null, auto_generate_days: null,
+    require_admin_review_before_publish: false, allow_full_auto_publish: true,
+  };
+
+  it("skips a route still inside the review window, leaving it untouched", async () => {
+    await fakeDb.from("route_automation_settings").insert(reviewWindowSettings);
+    await fakeDb.from("routes").insert({
+      id: "route-too-new", status: "draft", date: "2026-06-19", employee_id: "tech-1",
+      confidence: "high", conflict_notes: [], total_duration_minutes: 100,
+      algorithm_version: "smart-nearest-neighbor-v1",
+      created_at: new Date().toISOString(), // created "now" — well inside a 60-minute window
+    });
+
+    const result = await autoPublishEligibleRoutes("2026-06-19");
+
+    expect(result.skipped).toBe(1);
+    expect(result.published).toBe(0);
+    expect(result.blocked).toBe(0);
+    const route = fakeDb.tables.routes.find((r: any) => r.id === "route-too-new");
+    expect(route.status).toBe("draft"); // untouched
+  });
+
+  it("publishes a route once it has aged past the review window", async () => {
+    await fakeDb.from("route_automation_settings").insert(reviewWindowSettings);
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
+    await fakeDb.from("routes").insert({
+      id: "route-aged-out", status: "draft", date: "2026-06-19", employee_id: "tech-1",
+      confidence: "high", conflict_notes: [], total_duration_minutes: 100,
+      algorithm_version: "smart-nearest-neighbor-v1",
+      created_at: twoHoursAgo, // 2h old, past the 60-minute window
+    });
+
+    const result = await autoPublishEligibleRoutes("2026-06-19");
+
+    expect(result.skipped).toBe(0);
+    expect(result.published).toBe(1);
+    const route = fakeDb.tables.routes.find((r: any) => r.id === "route-aged-out");
+    expect(route.status).toBe("published");
+  });
+});

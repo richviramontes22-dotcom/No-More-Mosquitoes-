@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, AlertTriangle, MapPin, ShieldAlert } from "lucide-react";
+import { Loader2, AlertTriangle, MapPin, ShieldAlert, ShieldOff, ShieldQuestion } from "lucide-react";
 import SectionHeading from "@/components/common/SectionHeading";
 import { ClockWidget } from "@/components/employee/ClockWidget";
 import { useEmployee } from "@/hooks/employee/useEmployee";
 import { useEmployeeAssignments } from "@/hooks/employee/useEmployeeAssignments";
+import { useLocationTracking } from "@/hooks/employee/useLocationTracking";
 import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
@@ -34,9 +35,42 @@ const TechnicianDashboard = () => {
   const { data: employee, isLoading: empLoading } = useEmployee();
   const { data: assignments = [], isLoading: assignLoading } = useEmployeeAssignments(employee?.id);
   const [shiftId, setShiftId] = useState<string | null>(null);
+  // Real, server-known clock state — not just "did I click Clock In during
+  // this page session," since that resets to false on every reload even
+  // with a genuinely open shift. GPS tracking gates on this, so it has to
+  // be right immediately on load, not just after a fresh click.
+  const [clockedIn, setClockedIn] = useState(false);
+  const [clockStateLoading, setClockStateLoading] = useState(true);
+
+  useEffect(() => {
+    if (!employee) return;
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setClockStateLoading(false); return; }
+      try {
+        const res = await fetch("/api/employee/shifts/current", { headers: { Authorization: `Bearer ${token}` } });
+        if (cancelled) return;
+        if (res.ok) {
+          const { shift } = await res.json();
+          if (shift?.id) { setShiftId(shift.id); setClockedIn(true); }
+        }
+      } finally {
+        if (!cancelled) setClockStateLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [employee?.id]);
 
   const completed = assignments.filter((a) => a.status === "completed").length;
   const next = assignments.find((a) => a.status !== "completed" && a.status !== "no_show" && a.status !== "skipped");
+
+  // GPS tracking — only while genuinely clocked in AND consented. The
+  // server independently re-verifies both on every ping regardless; this is
+  // just what decides whether the client even tries.
+  const trackingEnabled = clockedIn && !!employee?.gps_consent_at;
+  const trackingStatus = useLocationTracking(trackingEnabled);
 
   const handleClockIn = async (geo?: GeolocationPosition) => {
     if (!employee) return;
@@ -51,7 +85,7 @@ const TechnicianDashboard = () => {
     });
     if (res.ok) {
       const { shift } = await res.json();
-      if (shift?.id) setShiftId(shift.id);
+      if (shift?.id) { setShiftId(shift.id); setClockedIn(true); }
     }
   };
 
@@ -67,6 +101,7 @@ const TechnicianDashboard = () => {
       body: JSON.stringify(shiftId ? { shift_id: shiftId } : {}),
     });
     setShiftId(null);
+    setClockedIn(false);
   };
 
   if (empLoading) {
@@ -127,7 +162,7 @@ const TechnicianDashboard = () => {
             <MapPin className="h-5 w-5 text-blue-600 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-blue-800">GPS Tracking Not Enabled</p>
-              <p className="text-xs text-blue-700">Enable location tracking in your profile to improve route accuracy.</p>
+              <p className="text-xs text-blue-700">Enable location tracking in your profile to share your position with dispatch while you're clocked in.</p>
             </div>
           </div>
           <Link
@@ -139,14 +174,47 @@ const TechnicianDashboard = () => {
         </div>
       )}
 
-      {/* GPS active indicator */}
+      {/* Location Tracking indicator — reflects the real, current tracking
+          state, not just whether consent has ever been granted. Tracking
+          only runs while clocked in; clocking out (or revoking consent)
+          stops it immediately. */}
       {employee.gps_consent_at && (
-        <div className="flex items-center gap-3 rounded-2xl border border-green-200 bg-green-50 px-5 py-3">
-          <ShieldAlert className="h-4 w-4 text-green-600 shrink-0" />
-          <p className="text-xs text-green-800 font-medium">
-            GPS tracking active — location captured during active assignments only.
-          </p>
-        </div>
+        <>
+          {trackingStatus === "active" && (
+            <div className="flex items-center gap-3 rounded-2xl border border-green-200 bg-green-50 px-5 py-3">
+              <ShieldAlert className="h-4 w-4 text-green-600 shrink-0" />
+              <p className="text-xs text-green-800 font-medium">
+                Location Tracking: On — your location is shared with dispatch every minute while you're
+                clocked in.
+              </p>
+            </div>
+          )}
+          {trackingStatus === "off" && !clockStateLoading && (
+            <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/40 px-5 py-3">
+              <ShieldOff className="h-4 w-4 text-muted-foreground shrink-0" />
+              <p className="text-xs text-muted-foreground font-medium">
+                Location Tracking: Off — {clockedIn ? "starting…" : "will turn on automatically when you clock in."}
+              </p>
+            </div>
+          )}
+          {trackingStatus === "permission_denied" && (
+            <div className="flex items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-3">
+              <ShieldQuestion className="h-4 w-4 text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-800 font-medium">
+                Location Tracking: Blocked — your browser denied location access. Enable location permission
+                for this site in your browser settings to share your route position with dispatch.
+              </p>
+            </div>
+          )}
+          {trackingStatus === "unsupported" && (
+            <div className="flex items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-3">
+              <ShieldQuestion className="h-4 w-4 text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-800 font-medium">
+                Location Tracking: Unavailable — this browser doesn't support location sharing.
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       <SectionHeading
@@ -155,7 +223,7 @@ const TechnicianDashboard = () => {
         description="Clock in, review your stops, and message dispatch."
       />
 
-      <ClockWidget onClockIn={handleClockIn} onClockOut={handleClockOut} />
+      <ClockWidget onClockIn={handleClockIn} onClockOut={handleClockOut} initialOnDuty={clockedIn} />
 
       <div className="grid gap-6 sm:grid-cols-3">
         <div className="rounded-2xl border border-border/70 bg-card/95 p-6">

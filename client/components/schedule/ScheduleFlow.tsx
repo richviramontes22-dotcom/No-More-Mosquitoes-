@@ -39,6 +39,7 @@ import { PropertyQuestionnaireData } from "@/components/page/PropertyQuestionnai
 import { AddPropertyDialog } from "@/components/dashboard/properties/AddPropertyDialog";
 import PaymentStep from "@/components/schedule/PaymentStep";
 import { cn } from "@/lib/utils";
+import { formatCents } from "@/lib/formatCents";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/hooks/useProfile";
@@ -169,6 +170,13 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
   const [paymentSubscriptionId,setPaymentSubscriptionId]= useState<string | null>(null);
   const [isLoadingPayment,     setIsLoadingPayment]     = useState(false);
   const [paymentError,         setPaymentError]         = useState<string | null>(null);
+  // Set when the server's final service-area gate blocks checkout — shows a
+  // friendly message + waitlist signup instead of the generic payment-error
+  // box with a (useless, here) Retry button.
+  const [outOfServiceArea,     setOutOfServiceArea]     = useState(false);
+  const [waitlistEmail,        setWaitlistEmail]        = useState("");
+  const [waitlistSubmitted,    setWaitlistSubmitted]    = useState(false);
+  const [waitlistSubmitting,   setWaitlistSubmitting]   = useState(false);
 
   // ── Promo code (applied before the payment intent is created) ────────────────
   const [promoInput,   setPromoInput]   = useState("");
@@ -471,6 +479,7 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
     const fetch_ = async () => {
       setIsLoadingPayment(true);
       setPaymentError(null);
+      setOutOfServiceArea(false);
       try {
         if (!selectedProperty) throw new Error("No property selected. Please go back and select your service address.");
         if (!selectedProperty.acreage || selectedProperty.acreage <= 0) throw new Error("The selected property has no lot size on record. Please update its acreage in your dashboard before checking out.");
@@ -512,7 +521,13 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
         }), 12000, "Payment intent");
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Failed to initialize payment");
+        if (!response.ok) {
+          if (data.code === "OUT_OF_SERVICE_AREA") {
+            setOutOfServiceArea(true);
+            return;
+          }
+          throw new Error(data.error || "Failed to initialize payment");
+        }
 
         setPaymentClientSecret(data.clientSecret);
         setPaymentIntentId(data.intentId);
@@ -590,10 +605,7 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
   const subPriceCents     = lookupCadenceCents(selectedCadenceDays);
   const annualPriceCents  = acreage ? lookupAnnualCents(acreage) : null;
   const onetimePriceCents = acreage ? lookupOneTimeCents(acreage) : null;
-  const fmtCents = (cents: number) =>
-    cents >= 100000
-      ? `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-      : `$${(cents / 100).toFixed(0)}`;
+  const fmtCents = formatCents;
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -1625,6 +1637,67 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
                     <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground rounded-[24px] border border-dashed border-border/60 bg-card">
                       <Loader2 className="h-7 w-7 animate-spin text-primary/50" />
                       <span className="text-sm font-medium">Setting up secure checkout…</span>
+                    </div>
+                  )}
+
+                  {outOfServiceArea && !isLoadingPayment && (
+                    <div className="rounded-2xl border border-border/70 bg-muted/60 p-5 space-y-3">
+                      <p className="text-sm font-bold text-foreground">We're not currently servicing this area yet.</p>
+                      <p className="text-xs text-muted-foreground">
+                        We'd love to know there's demand near you — join the waitlist and we'll email you the
+                        moment we expand to your area.
+                      </p>
+                      {waitlistSubmitted ? (
+                        <div className="rounded-xl border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
+                          You're on the list — we'll email you when we launch in your area.
+                        </div>
+                      ) : (
+                        <form
+                          className="flex items-end gap-3"
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!waitlistEmail || waitlistSubmitting) return;
+                            setWaitlistSubmitting(true);
+                            try {
+                              const res = await fetch("/api/service-areas/waitlist", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  email: waitlistEmail,
+                                  address: selectedProperty?.address,
+                                  zip: selectedProperty?.zip,
+                                }),
+                              });
+                              if (!res.ok) {
+                                const body = await res.json().catch(() => ({}));
+                                throw new Error(body.error || "Could not save your waitlist signup.");
+                              }
+                              setWaitlistSubmitted(true);
+                            } catch (err: any) {
+                              toast({ title: "Waitlist signup failed", description: err.message, variant: "destructive" });
+                            } finally {
+                              setWaitlistSubmitting(false);
+                            }
+                          }}
+                        >
+                          <div className="flex-1 space-y-1">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                              Email address
+                            </label>
+                            <input
+                              type="email"
+                              value={waitlistEmail}
+                              onChange={(e) => setWaitlistEmail(e.target.value)}
+                              placeholder="you@example.com"
+                              required
+                              className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition"
+                            />
+                          </div>
+                          <Button type="submit" disabled={waitlistSubmitting} className="h-11 rounded-xl font-bold shrink-0">
+                            {waitlistSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Notify Me"}
+                          </Button>
+                        </form>
+                      )}
                     </div>
                   )}
 

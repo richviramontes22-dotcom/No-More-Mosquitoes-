@@ -66,12 +66,23 @@ const HeroSection = () => {
           objectFit="cover"
         />
 
-        {/* Header Spacer — matches fixed header height (no band — band is in page flow below) */}
-        <div className="pt-[92px] sm:pt-[106px] md:pt-[122px]" />
+        {/* Header Spacer — matches fixed header height (no band — band is in page flow below).
+            Measured via the actual rendered <header> bounding box per breakpoint (136.5px below
+            640px — header content wraps to an extra line at narrow widths — 109px at sm, 124px
+            at md+). The previous values (92/106/122px) undershot the real mobile height by ~44px,
+            which was invisible while the band itself was invisible, but now causes the band to
+            render under the header instead of below it. */}
+        <div className="pt-[140px] sm:pt-[110px] md:pt-[126px]" />
 
-        {/* Announcement band — in page flow so it scrolls behind the fixed header */}
-        <div className="relative z-10 py-1.5 bg-secondary/10 backdrop-blur-sm border-b border-secondary/15">
-          <p className="text-center text-[10px] sm:text-[11px] font-black uppercase tracking-[0.4em] text-secondary-foreground/55">
+        {/* Announcement band — in page flow so it scrolls behind the fixed header.
+            Near-opaque bg-primary so contrast holds regardless of which carousel
+            image is behind it (was bg-secondary/10 + 55%-opacity text — nearly
+            invisible against the photo). */}
+        <div className="relative z-10 py-2.5 bg-primary/90 backdrop-blur-sm border-b border-primary-foreground/15">
+          <p
+            className="text-center text-xs sm:text-sm font-black uppercase tracking-[0.15em] text-primary-foreground"
+            style={{ textShadow: "0 1px 3px rgba(0,0,0,0.45)" }}
+          >
             {t("hero.eyebrow")}
           </p>
         </div>

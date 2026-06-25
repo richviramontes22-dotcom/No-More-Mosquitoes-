@@ -99,7 +99,26 @@ router.post("/quote", async (req: Request, res: Response) => {
     return res.status(status).json({ ok: false, code: result.errorCode, message: result.message });
   }
 
-  const quote = result.acreage != null ? buildPricingQuote(result.acreage) : null;
+  // Service-area check is now synchronous (was fire-and-forget-only, so the
+  // frontend never knew an address was uncovered — it always got a full quote
+  // and could proceed straight to checkout regardless of coverage). Failure
+  // here defaults to "covered" rather than blocking a real quote on a
+  // transient DB error.
+  let outOfServiceArea = false;
+  try {
+    const leadDb = supabaseAdmin ?? supabase;
+    const saResult = await leadDb
+      .from("service_areas")
+      .select("id")
+      .eq("zip", cleanZip)
+      .eq("is_active", true)
+      .maybeSingle();
+    outOfServiceArea = !saResult.data;
+  } catch (err) {
+    console.error("[parcelQuote] service area check failed:", err);
+  }
+
+  const quote = !outOfServiceArea && result.acreage != null ? buildPricingQuote(result.acreage) : null;
 
   // Properties whose parcel acreage exceeds the priced range (e.g. a condo/HOA
   // shared parcel, or any large lot) can't be quoted from raw GIS acreage —
@@ -137,22 +156,13 @@ router.post("/quote", async (req: Request, res: Response) => {
     },
   });
 
-  // Check if this ZIP is in our service area, then capture the lead accordingly.
-  // Covered ZIPs → normal "new" lead. Uncovered ZIPs → "out_of_area" lead +
-  // demand event so admins can track where expansion interest is highest.
-  // Best-effort, never blocks the customer-facing quote response.
+  // Capture the lead accordingly using the service-area check already run
+  // above. Covered ZIPs -> normal "new" lead. Uncovered ZIPs -> "out_of_area"
+  // lead + demand event so admins can track where expansion interest is
+  // highest. Best-effort, never blocks the customer-facing quote response.
   void (async () => {
     try {
-      const leadDb = supabaseAdmin ?? supabase;
-      const saResult = await leadDb
-        .from("service_areas")
-        .select("id")
-        .eq("zip", cleanZip)
-        .eq("is_active", true)
-        .maybeSingle();
-      const serviceArea = saResult.data;
-
-      if (serviceArea) {
+      if (!outOfServiceArea) {
         await upsertLeadFromQuote({
           address: address.trim(),
           city: city?.trim(),
@@ -184,6 +194,7 @@ router.post("/quote", async (req: Request, res: Response) => {
 
   return res.json({
     ok: true,
+    outOfServiceArea,
     normalizedAddress: result.normalizedAddress,
     county: result.county,
     apn: result.apn,

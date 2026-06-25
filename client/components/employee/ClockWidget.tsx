@@ -1,7 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-export function ClockWidget({ onClockIn, onClockOut }: { onClockIn: (geo?: GeolocationPosition) => void; onClockOut: (geo?: GeolocationPosition) => void; }) {
-  const [onDuty, setOnDuty] = useState(false);
+export function ClockWidget({
+  onClockIn, onClockOut, initialOnDuty = false,
+}: {
+  onClockIn: (geo?: GeolocationPosition) => void;
+  onClockOut: (geo?: GeolocationPosition) => void;
+  /** The real, server-known clocked-in state (an open shift exists today) —
+   * without this, the widget always starts "Off Duty" on page load/reload
+   * even when a shift is genuinely still open, which would also make
+   * GPS tracking (gated on this same state) fail to resume. */
+  initialOnDuty?: boolean;
+}) {
+  const [onDuty, setOnDuty] = useState(initialOnDuty);
+
+  useEffect(() => {
+    setOnDuty(initialOnDuty);
+  }, [initialOnDuty]);
 
   const requestGeo = () => new Promise<GeolocationPosition | undefined>((resolve) => {
     if (!("geolocation" in navigator)) return resolve(undefined);

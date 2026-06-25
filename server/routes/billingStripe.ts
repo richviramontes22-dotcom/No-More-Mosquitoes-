@@ -15,6 +15,37 @@ import { lookupAnnualCents, lookupOneTimeCents } from "../../shared/pricing";
 const router = Router();
 const STRIPE_API = "https://api.stripe.com/v1";
 
+/**
+ * Final, server-side service-area gate. The public quote widgets block
+ * out-of-area addresses before a customer can even reach plan selection
+ * (see server/routes/parcelQuote.ts), but AddPropertyDialog still allows a
+ * customer to *save* an out-of-area property to their own account (for
+ * record-keeping — it's not a quote/checkout flow). Without this check here,
+ * that property could still reach checkout and appointment creation. Returns
+ * an error string if blocked, or null if the property's ZIP is an active
+ * service area.
+ */
+export async function assertPropertyInServiceArea(propertyId: string): Promise<string | null> {
+  const db = supabaseAdmin ?? supabase;
+  const { data: property } = await db.from("properties").select("zip").eq("id", propertyId).maybeSingle();
+  const cleanZip = String(property?.zip || "").trim().replace(/\D/g, "").slice(0, 5);
+  if (!/^\d{5}$/.test(cleanZip)) {
+    return "This property has no valid ZIP code on file. Please update it before scheduling.";
+  }
+
+  const { data: serviceArea } = await db
+    .from("service_areas")
+    .select("id")
+    .eq("zip", cleanZip)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!serviceArea) {
+    return "We're not currently servicing this area yet.";
+  }
+  return null;
+}
+
 // When STRIPE_AUTO_TAX=true in env, automatic Stripe Tax is requested on all charges.
 // Requires Stripe Tax to be configured in the Stripe Dashboard.
 const autoTaxEnabled = () => process.env.STRIPE_AUTO_TAX === "true";
@@ -360,6 +391,11 @@ router.post("/create-payment-intent", async (req, res) => {
       return res.status(400).json({
         error: `Invalid acreage (${acreage}). Property must have a valid lot size set before checkout.`,
       });
+    }
+
+    const serviceAreaError = await assertPropertyInServiceArea(propertyId);
+    if (serviceAreaError) {
+      return res.status(403).json({ error: serviceAreaError, code: "OUT_OF_SERVICE_AREA" });
     }
 
     const user       = await getAuthenticatedUser(req);
@@ -739,6 +775,17 @@ router.post("/confirm-booking", async (req, res) => {
     checkpoint(requestId, CP.BILLING_START, { program, hasScheduledDate: !!scheduledDate });
 
     if (!paymentIntentId) throw Object.assign(new Error("paymentIntentId required"), { status: 400 });
+
+    // Defense in depth — create-payment-intent already blocks out-of-area
+    // properties, so this should be unreachable in the normal flow. Guards
+    // against a PaymentIntent created before this check existed, or any
+    // other path that reaches confirm-booking directly.
+    if (propertyId) {
+      const serviceAreaError = await assertPropertyInServiceArea(propertyId);
+      if (serviceAreaError) {
+        return res.status(403).json({ error: serviceAreaError, code: "OUT_OF_SERVICE_AREA" });
+      }
+    }
 
     const user = await getAuthenticatedUser(req);
 

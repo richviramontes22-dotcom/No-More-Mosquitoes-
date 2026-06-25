@@ -31,6 +31,7 @@ export const AddPropertyDialog = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acreageDetected, setAcreageDetected] = useState(false);
   const [lookupFailed, setLookupFailed] = useState(false);
+  const [outOfServiceArea, setOutOfServiceArea] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
   const [address, setAddress]   = useState("");
@@ -72,6 +73,7 @@ export const AddPropertyDialog = ({
     } else {
       setAddress(""); setCity(""); setStateVal("CA"); setZip("");
       setAcreage(""); setAcreageDetected(false); setLookupFailed(false);
+      setOutOfServiceArea(false);
       setGateCode(""); setHasPets(false); setPetDetails("");
       setHasChildren(false); setStandingWater(false); setNotes("");
       setShowDetails(false);
@@ -93,12 +95,24 @@ export const AddPropertyDialog = ({
       toast({ title: "Missing details", description: "Enter street address and ZIP to auto-detect lot size.", variant: "destructive" });
       return;
     }
+    setOutOfServiceArea(false);
     const result = await lookup(address, zip, city, stateVal, lat, lng, placeId);
     if (result) {
       setAcreage(result.acreage.toString());
       setAcreageDetected(true);
       setLookupFailed(false);
-      toast({ title: "Property found", description: `Lot size: ${result.acreage} acres — pricing updated.` });
+      if (result.outOfServiceArea) {
+        // Still let them save the property for their own records — this is
+        // account/property management, not a checkout flow — but they need
+        // to know upfront that we can't schedule service there yet.
+        setOutOfServiceArea(true);
+        toast({
+          title: "Outside our service area",
+          description: "We're not servicing this address yet — you can still save it, but scheduling won't be available until we expand here.",
+        });
+      } else {
+        toast({ title: "Property found", description: `Lot size: ${result.acreage} acres — pricing updated.` });
+      }
     } else {
       setLookupFailed(true);
     }
@@ -245,6 +259,13 @@ export const AddPropertyDialog = ({
                 </span>
               )}
             </div>
+
+            {outOfServiceArea && (
+              <div className="rounded-xl border border-border/70 bg-muted/60 px-4 py-2.5 text-xs text-muted-foreground">
+                We're not servicing this address yet — you can still save it for your records, but scheduling
+                won't be available until we expand to this area.
+              </div>
+            )}
 
             {/* Manual acreage fallback */}
             {!acreageDetected && (

@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
+import { format } from "date-fns";
 import SectionHeading from "@/components/common/SectionHeading";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, MapPin, Navigation, Clock, ChevronRight, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, MapPin, Navigation, Clock, ChevronRight, RefreshCw, WifiOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { navUrl } from "@/lib/employee/deepLinks";
 import { Link } from "react-router-dom";
+import { useEmployee } from "@/hooks/employee/useEmployee";
+import { cacheRoute, getCachedRoute } from "@/lib/employee/offlineCache";
 
 interface RouteStop {
   id: string;
@@ -45,11 +48,14 @@ const STOP_STATUS_COLORS: Record<string, string> = {
 };
 
 const EmployeeRoute = () => {
+  const { data: employee } = useEmployee();
   const [route, setRoute] = useState<RouteData | null>(null);
   const [stops, setStops] = useState<RouteStop[]>([]);
   const [hasRoute, setHasRoute] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
+  const [isFromCache, setIsFromCache] = useState(false);
+  const today = format(new Date(), "yyyy-MM-dd");
 
   const getToken = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -69,13 +75,32 @@ const EmployeeRoute = () => {
       setStops(data.stops || []);
       setHasRoute(data.has_route);
       setLastLoaded(new Date());
+      setIsFromCache(false);
+      // Own data only (employee.id), today's date only — yesterday's cached
+      // route never shows up labeled as today's.
+      if (employee?.id) cacheRoute(employee.id, today, data);
     } catch (err: any) {
-      // Route endpoint may not be available — show fallback assignment list
-      setHasRoute(false);
+      // Network failure (or the route endpoint genuinely being unavailable)
+      // — fall back to the last cached copy of today's route rather than
+      // just giving up and showing the "no route" empty state.
+      if (employee?.id) {
+        const cached = getCachedRoute<{ route: RouteData | null; stops: RouteStop[]; has_route: boolean }>(employee.id, today);
+        if (cached && !cached.isExpired) {
+          setRoute(cached.data.route);
+          setStops(cached.data.stops || []);
+          setHasRoute(cached.data.has_route);
+          setLastLoaded(new Date(cached.cachedAt));
+          setIsFromCache(true);
+        } else {
+          setHasRoute(false);
+        }
+      } else {
+        setHasRoute(false);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [employee?.id, today]);
 
   useEffect(() => {
     loadRoute();
@@ -106,6 +131,13 @@ const EmployeeRoute = () => {
           <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh
         </Button>
       </div>
+
+      {isFromCache && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800">
+          <WifiOff className="h-3.5 w-3.5 shrink-0" />
+          Offline / Cached Data — showing your route as of {lastLoaded?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+        </div>
+      )}
 
       {!hasRoute ? (
         // No published route — fallback to assignments list link
@@ -197,24 +229,25 @@ const EmployeeRoute = () => {
                       )}
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex flex-col gap-1.5 shrink-0">
+                    {/* Actions — min-h-11 (44px) keeps these comfortably
+                        tappable one-handed, not just visually present. */}
+                    <div className="flex flex-col gap-2 shrink-0">
                       {hasCoords && !isDone && !isSkipped && (
                         <a
                           href={navUrl(stop.lat!, stop.lng!)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-lg bg-primary/10 text-primary px-3 py-1.5 text-xs font-semibold hover:bg-primary/20 transition"
+                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-primary/10 text-primary px-3.5 text-xs font-semibold active:bg-primary/20 transition"
                         >
-                          <Navigation className="h-3 w-3" />
+                          <Navigation className="h-3.5 w-3.5" />
                           Navigate
                         </a>
                       )}
                       <Link
                         to={`/employee/assignments/${stop.assignment_id}`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/50 transition"
+                        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border/60 px-3.5 text-xs font-semibold text-muted-foreground active:bg-muted/50 transition"
                       >
-                        Detail <ChevronRight className="h-3 w-3" />
+                        Detail <ChevronRight className="h-3.5 w-3.5" />
                       </Link>
                     </div>
                   </div>
@@ -231,8 +264,50 @@ const EmployeeRoute = () => {
               </p>
             </div>
           )}
+
+          {/* Sticky next-stop action bar — the #1 pain point from
+              TECHNICIAN_EXPERIENCE_AUDIT.md: after scrolling down to read a
+              stop's notes, there was no way to act without scrolling back
+              up. Pinned to the bottom (thumb-reachable, one-handed) with
+              just the two things worth a single tap from here — Navigate
+              and jumping to the full detail page for status/notes/photos.
+              Padding-bottom on the page content (below) keeps this from
+              covering the last stop card. Right padding clears
+              ChatWidget.tsx's floating launcher (fixed bottom-4/6 right-4/6,
+              h-14 w-14, z-40 — confirmed it would otherwise sit on top of
+              and obscure this bar's rightmost button). */}
+          {nextStop && (
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-card/98 py-3 pl-4 pr-20 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur sm:pl-6 sm:pr-24">
+              <div className="mx-auto flex max-w-6xl items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-primary">Next Stop</p>
+                  <p className="truncate text-sm font-semibold">{nextStop.customer_name ?? "Customer"}</p>
+                </div>
+                {nextStop.lat != null && nextStop.lng != null && (
+                  <a
+                    href={navUrl(nextStop.lat, nextStop.lng)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex h-12 shrink-0 items-center gap-1.5 rounded-xl bg-primary/10 px-4 text-sm font-semibold text-primary active:bg-primary/20"
+                  >
+                    <Navigation className="h-4 w-4" /> Navigate
+                  </a>
+                )}
+                <Link
+                  to={`/employee/assignments/${nextStop.assignment_id}`}
+                  className="flex h-12 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground active:bg-primary/90"
+                >
+                  Open <ChevronRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+          )}
         </>
       )}
+
+      {/* Reserves space so the sticky bar above never overlaps the last
+          stop card. */}
+      {nextStop && <div className="h-20" aria-hidden="true" />}
     </div>
   );
 };

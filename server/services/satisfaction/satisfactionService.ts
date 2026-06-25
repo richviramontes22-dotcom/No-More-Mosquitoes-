@@ -104,18 +104,43 @@ export async function submitSurvey(
   return { survey };
 }
 
+// A detractor follow-up is time-sensitive — the customer is unhappy right
+// after service, not next week. 48 hours is a reasonable SLA for a first
+// outreach; not configurable today since nothing else in this codebase has
+// asked for that yet.
+const DETRACTOR_FOLLOWUP_SLA_HOURS = 48;
+
 async function handleDetractor(survey: SatisfactionSurvey): Promise<void> {
   try {
     const { data: profile } = await db.from("profiles").select("name, email").eq("id", survey.profile_id).maybeSingle();
+
+    // Assign to customer_service staff if any exist; otherwise the ticket
+    // stays unassigned and falls into the admin queue — notifyAdmin() below
+    // is what "admin queue" means in practice, since there's no dedicated
+    // unassigned-ticket inbox separate from admin notifications today.
+    // customer_service staff are profiles-only (no employees table row —
+    // see Dashboard.tsx's own comment on this), so this looks up profiles
+    // directly, not employees. No workload-balancing exists; picks
+    // whichever active customer_service profile sorts first, which is fine
+    // at the realistic scale of "zero or one" today.
+    const { data: csProfile } = await db
+      .from("profiles")
+      .select("id, name")
+      .eq("role", "customer_service")
+      .order("id", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const dueAt = new Date(Date.now() + DETRACTOR_FOLLOWUP_SLA_HOURS * 60 * 60 * 1000).toISOString();
 
     notifyAdmin({
       event_type: "satisfaction.detractor_reported",
       severity: "warning",
       title: `Detractor satisfaction rating (${survey.rating}/10)`,
-      body: `${profile?.name || "A customer"} rated a completed service ${survey.rating}/10.${survey.comment ? ` Comment: "${survey.comment}"` : ""}`,
+      body: `${profile?.name || "A customer"} rated a completed service ${survey.rating}/10.${survey.comment ? ` Comment: "${survey.comment}"` : ""} ${csProfile ? `Assigned to ${csProfile.name}.` : "No customer service staff available — routed to admin queue."} Due ${new Date(dueAt).toLocaleString()}.`,
       entity_type: "customer_satisfaction_survey",
       entity_id: survey.id,
-      metadata: { appointment_id: survey.appointment_id, rating: survey.rating, issue_category: survey.issue_category },
+      metadata: { appointment_id: survey.appointment_id, rating: survey.rating, issue_category: survey.issue_category, assigned_to: csProfile?.id ?? null, due_at: dueAt },
     });
 
     const { data: ticket, error: ticketErr } = await db
@@ -127,6 +152,8 @@ async function handleDetractor(survey: SatisfactionSurvey): Promise<void> {
         category: "service_quality",
         priority: "high",
         status: "open",
+        assigned_to: csProfile?.id ?? null,
+        due_at: dueAt,
       })
       .select("id")
       .single();
@@ -134,6 +161,11 @@ async function handleDetractor(survey: SatisfactionSurvey): Promise<void> {
     if (!ticketErr && ticket) {
       await db.from("customer_satisfaction_surveys").update({ ticket_id: ticket.id }).eq("id", survey.id);
     }
+
+    // This function only ever creates an internal ticket and an admin
+    // notification — it must never message the customer directly. If that
+    // ever changes, it needs to be a deliberate, separate, staff-initiated
+    // action, not something that happens automatically here.
   } catch (err: any) {
     console.error("[satisfactionService] handleDetractor failed:", err.message);
   }
@@ -154,13 +186,19 @@ export async function resolveSatisfactionIssue(
   return data as SatisfactionSurvey;
 }
 
+export interface DetractorPending extends SatisfactionSurvey {
+  due_at: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+}
+
 export interface SatisfactionDashboard {
   nps_score: number | null;
   total_responses: number;
   promoter_count: number;
   passive_count: number;
   detractor_count: number;
-  detractors_pending: SatisfactionSurvey[];
+  detractors_pending: DetractorPending[];
 }
 
 /**
@@ -179,7 +217,34 @@ export async function getSatisfactionDashboard(): Promise<SatisfactionDashboard>
 
   const npsScore = total > 0 ? Math.round(((promoterCount - detractorCount) / total) * 100) : null;
 
-  const detractorsPending = rows.filter((r) => r.satisfaction_type === "detractor" && r.followup_required && !r.resolved_at);
+  const pendingRows = rows.filter((r) => r.satisfaction_type === "detractor" && r.followup_required && !r.resolved_at);
+
+  // Enrich with the linked ticket's due date and assignee — the
+  // "follow-up task" half of this isn't on the survey row itself, it's on
+  // the ticket handleDetractor() created alongside it.
+  const ticketIds = pendingRows.map((r) => r.ticket_id).filter((id): id is string => !!id);
+  const ticketMap: Record<string, { due_at: string | null; assigned_to: string | null }> = {};
+  if (ticketIds.length > 0) {
+    const { data: tickets } = await db.from("tickets").select("id, due_at, assigned_to").in("id", ticketIds);
+    (tickets ?? []).forEach((t: any) => { ticketMap[t.id] = { due_at: t.due_at, assigned_to: t.assigned_to }; });
+  }
+
+  const assigneeIds = [...new Set(Object.values(ticketMap).map((t) => t.assigned_to).filter((id): id is string => !!id))];
+  const assigneeNames: Record<string, string> = {};
+  if (assigneeIds.length > 0) {
+    const { data: assignees } = await db.from("profiles").select("id, name").in("id", assigneeIds);
+    (assignees ?? []).forEach((a: any) => { assigneeNames[a.id] = a.name; });
+  }
+
+  const detractorsPending: DetractorPending[] = pendingRows.map((r) => {
+    const ticket = r.ticket_id ? ticketMap[r.ticket_id] : null;
+    return {
+      ...r,
+      due_at: ticket?.due_at ?? null,
+      assigned_to: ticket?.assigned_to ?? null,
+      assigned_to_name: ticket?.assigned_to ? assigneeNames[ticket.assigned_to] ?? null : null,
+    };
+  });
 
   return {
     nps_score: npsScore,

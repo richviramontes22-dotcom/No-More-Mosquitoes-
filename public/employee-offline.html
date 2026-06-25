@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Offline — No More Mosquitoes Technician</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #0f172a;
+        padding: 24px;
+      }
+      .card {
+        max-width: 360px;
+        text-align: center;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 24px;
+        padding: 32px 24px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      }
+      img { width: 64px; height: 64px; border-radius: 16px; margin-bottom: 16px; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      p { font-size: 14px; color: #475569; margin: 0 0 20px; line-height: 1.5; }
+      button {
+        width: 100%;
+        height: 44px;
+        border-radius: 12px;
+        border: none;
+        background: #0f172a;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .note { margin-top: 16px; font-size: 12px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img src="/nmm-logo.png" alt="No More Mosquitoes" />
+      <h1>You're offline</h1>
+      <p>
+        This page hasn't been loaded before, so it isn't available offline. Your most recently viewed
+        route and assignments are still accessible if you've opened them before.
+      </p>
+      <button onclick="location.reload()">Try Again</button>
+      <p class="note">Any notes or status updates you made will sync automatically once you're back online.</p>
+    </div>
+  </body>
+</html>

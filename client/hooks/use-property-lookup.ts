@@ -29,6 +29,10 @@ export type ParcelQuoteResult = PropertyData & {
   // condo/HOA shared parcel) — the caller should ask for a manual
   // unit/treatment-area size instead of rendering the quote tiles directly.
   oversized?: boolean;
+  // True when the address's ZIP isn't an active service area — the caller
+  // must NOT offer manual acreage entry or any path to checkout; show a
+  // friendly "not in service area yet" message instead.
+  outOfServiceArea?: boolean;
 };
 
 export const usePropertyLookup = () => {
@@ -84,6 +88,7 @@ export const usePropertyLookup = () => {
         cached: body.cached,
         quote: body.quote,
         oversized: body.oversized,
+        outOfServiceArea: body.outOfServiceArea,
         // legacy compat
         address,
         city,

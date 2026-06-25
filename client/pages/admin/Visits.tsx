@@ -53,10 +53,13 @@ const Visits = () => {
           return;
         }
 
-        // Fetch related data in parallel (not nested)
-        const appointmentIds = appointments.map((a: any) => a.id);
-        const userIds = appointments.map((a: any) => a.user_id);
-        const propertyIds = appointments.map((a: any) => a.property_id);
+        // Fetch related data in parallel (not nested). Nulls filtered out —
+        // a literal null in a PostgREST .in() list ("id=in.(uuid,null)") is
+        // invalid UUID syntax and fails the entire query (error 22P02), not
+        // just that one entry.
+        const appointmentIds = appointments.map((a: any) => a.id).filter(Boolean);
+        const userIds = [...new Set(appointments.map((a: any) => a.user_id).filter(Boolean))];
+        const propertyIds = [...new Set(appointments.map((a: any) => a.property_id).filter(Boolean))];
 
         const [
           { data: profiles },

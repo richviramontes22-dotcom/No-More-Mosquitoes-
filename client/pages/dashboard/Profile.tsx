@@ -224,9 +224,12 @@ const Profile = () => {
 
     try {
       // Update profiles table
+      // profiles has no updated_at column — PostgREST rejects the entire
+      // payload (PGRST204) if one is included, silently blocking name/email/
+      // phone too since the update is atomic.
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({ name, email, phone, updated_at: new Date().toISOString() })
+        .update({ name, email, phone })
         .eq("id", user.id);
 
       if (profileError) throw profileError;

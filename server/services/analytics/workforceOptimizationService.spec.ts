@@ -157,6 +157,22 @@ describe("getWorkforceOptimization — capacity forecast recommendation generati
     expect(row.demand_pressure).toBe("low");
     expect(row.recommendation).toBe("no_action_needed");
   });
+
+  it("recommends rebalance_routes when demand is high (85-100% of capacity) but not yet over", async () => {
+    // 20 stops of capacity, 18 scheduled -> 90% — the "high" band between
+    // moderate (watch_demand) and over_capacity (add_technician /
+    // reduce_active_zips_temporarily), previously untested.
+    await fakeDb.from("employees").insert({ id: "emp-1", role: "technician", status: "active", default_max_stops: 20, service_area_ids: [] });
+    await fakeDb.from("properties").insert({ id: "p1", zip: "92602" });
+    for (let i = 0; i < 18; i++) {
+      await fakeDb.from("appointments").insert({ id: `a${i}`, property_id: "p1", status: "scheduled", scheduled_date: "2026-06-17" });
+    }
+
+    const result = await getWorkforceOptimization(WINDOW);
+    const row = result.capacity_forecast.find((r) => r.date === "2026-06-17")!;
+    expect(row.demand_pressure).toBe("high");
+    expect(row.recommendation).toBe("rebalance_routes");
+  });
 });
 
 describe("getWorkforceOptimization — territory staffing recommendation generation", () => {

@@ -11,22 +11,6 @@ import { checkpoint, CP } from "../../lib/checkpoint";
 
 const db = supabaseAdmin ?? supabase;
 
-function logRouteAudit(
-  routeId: string,
-  actorId: string | null,
-  actorRole: string,
-  action: string,
-  metadata?: Record<string, any>
-) {
-  void db.from("route_audit_log").insert({
-    route_id: routeId,
-    actor_id: actorId,
-    actor_role: actorRole,
-    action,
-    metadata: metadata ?? null,
-  });
-}
-
 export interface GenerateDayPlanOptions {
   maxStopsPerTech?: number;
   /** Admin user id for manual calls, or null for system-triggered (automation) calls. */
@@ -214,14 +198,26 @@ export async function generateDayPlan(
     techLoads.get(minTechId)!.push(...group);
   }
 
-  // 7. Create draft routes + stops per technician
+  // 7. Create draft routes + stops per technician.
+  //
+  // Batched, not one-row-per-appointment/technician: the original version made
+  // a separate awaited Supabase call for every appointment's existing-assignment
+  // check, every appointment's assignment insert, every technician's
+  // existing-route check, and every technician's route insert — ~426 sequential
+  // round trips for 150 appointments / 42 technicians, ~82s measured. See
+  // ROUTE_GENERATION_PERFORMANCE_AUDIT.md. This computes the exact same
+  // per-technician/per-appointment decisions in memory first, then does each
+  // kind of read/write exactly once across the whole batch.
   const createdRoutes: any[] = [];
   const unassigned: any[] = [];
 
-  for (const tech of technicians) {
+  // 7a. Capacity split per technician (in-memory, unchanged decision logic) —
+  // done up front so we know the full candidate appointment/technician set
+  // before issuing any of the batched queries below.
+  const techIdsWithLoad = technicians.filter((t: any) => (techLoads.get(t.id) || []).length > 0);
+  const perTechCapacity = new Map<string, { tech: any; withinCap: any[] }>();
+  for (const tech of techIdsWithLoad) {
     const techAppts = techLoads.get(tech.id) || [];
-    if (techAppts.length === 0) continue;
-
     const techMaxStops = techCapacities[tech.id] ?? maxStopsPerTech;
     const withinCap = techAppts.slice(0, techMaxStops);
     const overflow = techAppts.slice(techMaxStops);
@@ -229,54 +225,105 @@ export async function generateDayPlan(
       dayConflictNotes.push(`Technician ${tech.id.slice(0, 8)}: ${overflow.length} appointment(s) over capacity (${techMaxStops} max)`);
     }
     unassigned.push(...overflow);
+    perTechCapacity.set(tech.id, { tech, withinCap });
+  }
 
-    const { data: existingDraft } = await db
+  // 7b. Batch-fetch technicians that already have a draft/approved route for
+  // this date — replaces one query per technician.
+  const candidateTechIds = [...perTechCapacity.keys()];
+  const techsWithExistingRoute = new Set<string>();
+  if (candidateTechIds.length > 0) {
+    const { data: existingRoutes } = await db
       .from("routes")
-      .select("id, status")
-      .eq("employee_id", tech.id)
+      .select("employee_id")
       .eq("date", date)
-      .in("status", ["draft", "approved"])
-      .limit(1)
-      .maybeSingle();
+      .in("employee_id", candidateTechIds)
+      .in("status", ["draft", "approved"]);
+    (existingRoutes || []).forEach((r: any) => techsWithExistingRoute.add(r.employee_id));
+  }
 
-    if (existingDraft) continue; // already has a draft or approved route
+  // Technicians actually eligible to get a new route this run (has load,
+  // doesn't already have one) — same eligibility the original `continue`
+  // after the existingDraft check enforced.
+  const eligiblePlans = [...perTechCapacity.values()].filter(
+    (p) => !techsWithExistingRoute.has(p.tech.id) && p.withinCap.length > 0
+  );
 
+  // 7c. Batch-fetch existing assignments for every candidate appointment
+  // across every eligible technician — replaces one query per appointment.
+  const allCandidateApptIds = [...new Set(eligiblePlans.flatMap((p) => p.withinCap.map((a: any) => a.id)))];
+  const existingAssignMap = new Map<string, { id: string }>(); // key: `${appointment_id}::${employee_id}`
+  if (allCandidateApptIds.length > 0) {
+    const { data: existingAssigns } = await db
+      .from("assignments")
+      .select("id, appointment_id, employee_id")
+      .in("appointment_id", allCandidateApptIds);
+    (existingAssigns || []).forEach((a: any) => {
+      if (a.employee_id) existingAssignMap.set(`${a.appointment_id}::${a.employee_id}`, { id: a.id });
+    });
+  }
+
+  // 7d. Insert every still-missing assignment in one multi-row insert —
+  // replaces one insert per new appointment.
+  const newAssignmentRows: Array<{ appointment_id: string; employee_id: string; status: string }> = [];
+  for (const plan of eligiblePlans) {
+    for (const appt of plan.withinCap) {
+      const key = `${appt.id}::${plan.tech.id}`;
+      if (!existingAssignMap.has(key)) {
+        newAssignmentRows.push({ appointment_id: appt.id, employee_id: plan.tech.id, status: "scheduled" });
+      }
+    }
+  }
+  if (newAssignmentRows.length > 0) {
+    const { data: insertedAssigns, error: bulkAssignErr } = await db
+      .from("assignments")
+      .insert(newAssignmentRows)
+      .select("id, appointment_id, employee_id");
+    if (!bulkAssignErr && insertedAssigns) {
+      insertedAssigns.forEach((a: any) => existingAssignMap.set(`${a.appointment_id}::${a.employee_id}`, { id: a.id }));
+    }
+    // If the bulk insert itself fails (rare — e.g. a malformed row), none of
+    // these pairs land in existingAssignMap, so the per-appointment loop
+    // below correctly falls through to its existing "missing assignment ->
+    // unassigned" handling for every affected appointment, same outcome as
+    // the original's per-row `if (aErr)` branch, just resolved as one batch
+    // instead of individually.
+  }
+
+  // 7e. Compute each eligible technician's optimized route in memory (no DB
+  // calls) — unchanged optimization/confidence/distance logic, just no
+  // longer interleaved with the route insert.
+  interface PendingRoute {
+    tech: any;
+    assignments: AssignmentForRouting[];
+    optimizedStops: ReturnType<typeof optimizeRoute>;
+    confidence: ReturnType<typeof calculateConfidence>;
+    totalDistance: number;
+    totalDuration: number;
+    conflictNotes: string[];
+  }
+  const pendingRoutes: PendingRoute[] = [];
+
+  for (const plan of eligiblePlans) {
     const coordSources: Record<string, CoordSource> = {};
     const conflictNotes: string[] = [];
     const assignments: AssignmentForRouting[] = [];
 
-    for (const appt of withinCap) {
-      let { data: existingAssign } = await db
-        .from("assignments")
-        .select("id, status")
-        .eq("appointment_id", appt.id)
-        .eq("employee_id", tech.id)
-        .maybeSingle();
-
-      let assignId: string;
-      if (existingAssign) {
-        assignId = existingAssign.id;
-      } else {
-        const { data: newAssign, error: aErr } = await db
-          .from("assignments")
-          .insert({ appointment_id: appt.id, employee_id: tech.id, status: "scheduled" })
-          .select("id")
-          .single();
-        if (aErr) { unassigned.push(appt); continue; }
-        assignId = newAssign.id;
-      }
+    for (const appt of plan.withinCap) {
+      const assignRow = existingAssignMap.get(`${appt.id}::${plan.tech.id}`);
+      if (!assignRow) { unassigned.push(appt); continue; }
 
       const prop = (appt as any).properties;
       const resolved = resolveCoordinates(prop);
-      coordSources[assignId] = resolved.source;
+      coordSources[assignRow.id] = resolved.source;
       if (resolved.source === "mock_fallback") {
-        conflictNotes.push(`Stop at ${prop?.address ?? assignId} uses estimated coordinates.`);
+        conflictNotes.push(`Stop at ${prop?.address ?? assignRow.id} uses estimated coordinates.`);
       }
 
       assignments.push({
-        id: assignId,
+        id: assignRow.id,
         appointment_id: appt.id,
-        employee_id: tech.id,
+        employee_id: plan.tech.id,
         status: "scheduled",
         property: prop,
         geo: { latitude: resolved.latitude, longitude: resolved.longitude },
@@ -286,52 +333,79 @@ export async function generateDayPlan(
     if (assignments.length === 0) continue;
 
     const optimizedStops = optimizeRoute(assignments);
-    const mockCount = Object.values(coordSources).filter(s => s === "mock_fallback").length;
+    const mockCount = Object.values(coordSources).filter((s) => s === "mock_fallback").length;
     const confidence = calculateConfidence(assignments.length, mockCount, conflictNotes);
     const totalDistance = optimizedStops.reduce((s, st) => s + st.distanceFromPrevious, 0);
     const totalDuration = optimizedStops.reduce((s, st) => s + st.durationFromPrevious, 0);
 
-    const { data: routeData, error: routeErr } = await db
-      .from("routes")
-      .insert({
-        employee_id: tech.id,
-        date,
-        status: "draft",
-        created_by: actorId,
-        total_distance_miles: totalDistance,
-        total_duration_minutes: totalDuration,
-        algorithm_version: "nearest-neighbor-v1",
-        confidence,
-        conflict_notes: conflictNotes.length > 0 ? conflictNotes : null,
-      })
-      .select("*")
-      .single();
+    pendingRoutes.push({ tech: plan.tech, assignments, optimizedStops, confidence, totalDistance, totalDuration, conflictNotes });
+  }
 
-    if (routeErr) { unassigned.push(...withinCap); continue; }
-
-    const stopsToCreate = optimizedStops.map((stop) => ({
-      route_id: routeData.id,
-      assignment_id: stop.assignment.id,
-      appointment_id: stop.assignment.appointment_id,
-      sequence_number: stop.sequenceNumber,
-      distance_from_prev_miles: stop.distanceFromPrevious,
-      duration_from_prev_minutes: stop.durationFromPrevious,
-      arrival_eta: stop.arrivalEta,
-      departure_eta: stop.departureEta,
-      status: "pending",
+  // 7f. Insert every route in one multi-row insert — replaces one insert per
+  // technician. Correlated back by employee_id (unique per date among these
+  // rows), not array position, so this can't silently mismatch even though
+  // Postgres does preserve VALUES-list order for RETURNING in practice.
+  if (pendingRoutes.length > 0) {
+    const routeInsertRows = pendingRoutes.map((r) => ({
+      employee_id: r.tech.id,
+      date,
+      status: "draft",
+      created_by: actorId,
+      total_distance_miles: r.totalDistance,
+      total_duration_minutes: r.totalDuration,
+      algorithm_version: "nearest-neighbor-v1",
+      confidence: r.confidence,
+      conflict_notes: r.conflictNotes.length > 0 ? r.conflictNotes : null,
     }));
 
-    await db.from("route_stops").insert(stopsToCreate);
+    const { data: insertedRoutes, error: routeInsertErr } = await db
+      .from("routes")
+      .insert(routeInsertRows)
+      .select("*");
 
-    logRouteAudit(routeData.id, actorId, actorRole, actorRole === "system" ? "automation_route_generated" : "route_generated", {
-      employee_id: tech.id,
-      stop_count: optimizedStops.length,
-      confidence,
-      day_plan: true,
-    });
+    if (routeInsertErr || !insertedRoutes) {
+      // Whole batch failed — same fallback the original took per-technician
+      // on a route insert error: every appointment that would have been on
+      // one of these routes goes to unassigned instead.
+      for (const r of pendingRoutes) unassigned.push(...r.assignments.map((a) => ({ id: a.appointment_id })));
+    } else {
+      const routeByEmployeeId = new Map(insertedRoutes.map((r: any) => [r.employee_id, r]));
+      const allStopRows: any[] = [];
+      const auditLogRows: any[] = [];
 
-    checkpoint(reqId, CP.ROUTE_CREATED, { routeId: routeData.id, employeeId: tech.id, stopCount: optimizedStops.length, confidence });
-    createdRoutes.push({ ...routeData, stop_count: optimizedStops.length, coordinate_warnings: conflictNotes });
+      for (const r of pendingRoutes) {
+        const routeData = routeByEmployeeId.get(r.tech.id);
+        if (!routeData) { unassigned.push(...r.assignments.map((a) => ({ id: a.appointment_id }))); continue; }
+
+        allStopRows.push(...r.optimizedStops.map((stop) => ({
+          route_id: routeData.id,
+          assignment_id: stop.assignment.id,
+          appointment_id: stop.assignment.appointment_id,
+          sequence_number: stop.sequenceNumber,
+          distance_from_prev_miles: stop.distanceFromPrevious,
+          duration_from_prev_minutes: stop.durationFromPrevious,
+          arrival_eta: stop.arrivalEta,
+          departure_eta: stop.departureEta,
+          status: "pending",
+        })));
+
+        auditLogRows.push({
+          route_id: routeData.id,
+          actor_id: actorId,
+          actor_role: actorRole,
+          action: actorRole === "system" ? "automation_route_generated" : "route_generated",
+          metadata: { employee_id: r.tech.id, stop_count: r.optimizedStops.length, confidence: r.confidence, day_plan: true },
+        });
+
+        checkpoint(reqId, CP.ROUTE_CREATED, { routeId: routeData.id, employeeId: r.tech.id, stopCount: r.optimizedStops.length, confidence: r.confidence });
+        createdRoutes.push({ ...routeData, stop_count: r.optimizedStops.length, coordinate_warnings: r.conflictNotes });
+      }
+
+      // 7g. One bulk insert for every route's stops, and one for every
+      // route's audit log entry — replaces one of each per technician.
+      if (allStopRows.length > 0) await db.from("route_stops").insert(allStopRows);
+      if (auditLogRows.length > 0) void db.from("route_audit_log").insert(auditLogRows);
+    }
   }
 
   const durationMs = Date.now() - genStart;

@@ -6,6 +6,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatCents as fmtCents } from "@/lib/formatCents";
 import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
 import { useToast } from "@/hooks/use-toast";
 import { usePropertyLookup } from "@/hooks/use-property-lookup";
@@ -15,11 +16,6 @@ import { GoogleAddressAutocomplete, type GoogleAddressAutocompleteResult } from 
 import { lookupAnnualCents, lookupCadenceCents as lookupCadenceCentsShared, lookupOneTimeCents } from "@shared/pricing";
 
 type Program = "subscription" | "one_time" | "annual";
-
-const fmtCents = (cents: number) =>
-  cents >= 100000
-    ? `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-    : `$${(cents / 100).toFixed(0)}`;
 
 const inputCls =
   "w-full rounded-xl border border-border/70 bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition";
@@ -52,6 +48,13 @@ const QuoteWidgetSection = ({ id }: Props) => {
   const [lookupFailed, setLookupFailed] = useState(false);
   const [manualAcreage, setManualAcreage] = useState("");
 
+  // Out-of-service-area — no manual acreage fallback, no path to checkout,
+  // just a friendly message + waitlist capture.
+  const [outOfServiceArea, setOutOfServiceArea] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistSubmitted, setWaitlistSubmitted] = useState(false);
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
+
   // Plan selection
   const [selectedProgram, setSelectedProgram] = useState<Program>("subscription");
   const [selectedCadence, setSelectedCadence] = useState<number>(21);
@@ -76,8 +79,15 @@ const QuoteWidgetSection = ({ id }: Props) => {
       return;
     }
     setLookupFailed(false);
+    setOutOfServiceArea(false);
     const data = await lookup(address, zip, city, stateVal, lat, lng, placeId);
     if (data) {
+      if (data.outOfServiceArea) {
+        // Not covered yet — never show manual acreage entry or any path to
+        // checkout for an address we can't actually service.
+        setOutOfServiceArea(true);
+        return;
+      }
       setAcreage(data.acreage);
       setCounty(data.county ?? null);
       setConfidence(data.confidence ?? null);
@@ -89,6 +99,28 @@ const QuoteWidgetSection = ({ id }: Props) => {
       setLookupFailed(true);
     } else {
       setLookupFailed(true);
+    }
+  };
+
+  const handleWaitlistSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!waitlistEmail || waitlistSubmitted || waitlistSubmitting) return;
+    setWaitlistSubmitting(true);
+    try {
+      const res = await fetch("/api/service-areas/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: waitlistEmail, address, city, state: stateVal, zip }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Could not save your waitlist signup.");
+      }
+      setWaitlistSubmitted(true);
+    } catch (err: any) {
+      toast({ title: "Waitlist signup failed", description: err.message, variant: "destructive" });
+    } finally {
+      setWaitlistSubmitting(false);
     }
   };
 
@@ -260,6 +292,42 @@ const QuoteWidgetSection = ({ id }: Props) => {
                   </>
                 )}
               </Button>
+
+              {outOfServiceArea && (
+                <div className="rounded-2xl border border-border/70 bg-muted/60 px-5 py-4 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div>
+                    <p className="text-sm font-bold text-foreground">We're not in your area yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      We're not currently servicing this area yet, but we'd love to know there's demand near you.
+                      Join the waitlist and we'll notify you the moment we expand here.
+                    </p>
+                  </div>
+                  {waitlistSubmitted ? (
+                    <div className="rounded-xl border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
+                      You're on the list — we'll email you when we launch in your area.
+                    </div>
+                  ) : (
+                    <form className="flex items-end gap-3" onSubmit={handleWaitlistSubmit}>
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Email address
+                        </label>
+                        <input
+                          type="email"
+                          value={waitlistEmail}
+                          onChange={(e) => setWaitlistEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          required
+                          className="w-full rounded-xl border border-border/70 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition"
+                        />
+                      </div>
+                      <Button type="submit" disabled={waitlistSubmitting} className="h-11 rounded-xl font-bold shrink-0">
+                        {waitlistSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Notify Me"}
+                      </Button>
+                    </form>
+                  )}
+                </div>
+              )}
 
               {lookupFailed && (
                 <div className="rounded-2xl border border-amber-300/60 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-700/40 px-5 py-4 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">

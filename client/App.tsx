@@ -59,6 +59,7 @@ import DashboardHelp from "./pages/dashboard/Help";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminOverview from "./pages/admin/Overview";
+import AdminOperations from "./pages/admin/Operations";
 import AdminCustomers from "./pages/admin/Customers";
 import AdminProperties from "./pages/admin/Properties";
 import AdminAppointments from "./pages/admin/Appointments";
@@ -198,6 +199,7 @@ const App = () => (
                       }
                     >
                       <Route index element={<AdminOverview />} />
+                      <Route path="operations" element={<AdminOperations />} />
                       <Route path="customers" element={<AdminCustomers />} />
                       <Route path="properties" element={<AdminProperties />} />
                       <Route path="appointments" element={<AdminAppointments />} />

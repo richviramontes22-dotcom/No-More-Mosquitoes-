@@ -324,7 +324,7 @@ router.get("/routes/day", async (req, res) => {
       id, employee_id, date, status, confidence, conflict_notes,
       total_distance_miles, total_duration_minutes,
       created_at, approved_at, published_at,
-      route_stops ( id, sequence_number, status )
+      route_stops ( id, sequence_number, status, estimated_duration_minutes, duration_from_prev_minutes )
     `)
     .eq("date", date)
     .order("employee_id", { ascending: true });
@@ -347,15 +347,45 @@ router.get("/routes/day", async (req, res) => {
     }
   }
 
+  // Drive vs. service time, summed from the per-stop figures the routing
+  // engine already computes — total_duration_minutes (the route's own
+  // total) isn't split between the two, so this is the only way to show
+  // them separately without changing what the engine itself produces.
   const enriched = (routes || []).map((r: any) => ({
     ...r,
     employee_name: profileMap[r.employee_id]?.name ?? "Employee",
     employee_email: profileMap[r.employee_id]?.email ?? "",
     stop_count: (r.route_stops || []).length,
     completed_count: (r.route_stops || []).filter((s: any) => s.status === "completed").length,
+    estimated_service_minutes: (r.route_stops || []).reduce((sum: number, s: any) => sum + (s.estimated_duration_minutes || 0), 0),
+    estimated_drive_minutes: (r.route_stops || []).reduce((sum: number, s: any) => sum + (s.duration_from_prev_minutes || 0), 0),
   }));
 
   res.json({ date, routes: enriched });
+});
+
+// ─── GET /api/admin/routes/:routeId/safety-check ─────────────────────────────
+// On-demand per-route safety check for the route review page — calls the
+// existing validateRouteForWorkforce() (previously only used internally by
+// validateDayPlanForWorkforce() during the publish flow, never exposed on
+// its own) so an admin can see blockers/warnings while reviewing a route,
+// not only after attempting to publish and getting rejected. Does not
+// change the publish flow or the routing engine itself.
+router.get("/routes/:routeId/safety-check", async (req, res) => {
+  const adminId = await getAdminUserId(req);
+  if (!adminId) return res.status(403).json({ error: "Admin required" });
+
+  if (!flags.workforceValidation()) {
+    return res.json({ valid: true, severity: "ok", warnings: [], blockers: [], disabled: true });
+  }
+
+  try {
+    const { validateRouteForWorkforce } = await import("../lib/workforceValidation");
+    const result = await validateRouteForWorkforce(req.params.routeId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── POST /api/admin/routes/day/approve ──────────────────────────────────────
@@ -736,8 +766,16 @@ router.post("/routes/:routeId/complete", async (req, res) => {
 });
 
 // ─── GET /api/employee/routes/today ──────────────────────────────────────────
+// This router is double-mounted (server/index.ts: at both /api/employee and
+// /api/admin — see CLAUDE.md's note on double-mounted routers). A path of
+// "/employee/routes/today" here would resolve to /api/employee/employee/
+// routes/today under the employee mount — never matching what the client
+// actually calls (/api/employee/routes/today) — and would instead fall
+// through to this same file's "/routes/:routeId" handler (treating "today"
+// as a route id, which 401s for a non-admin technician). Confirmed nothing
+// else relies on either of the old double-prefixed paths.
 
-router.get("/employee/routes/today", async (req, res) => {
+router.get("/routes/today", async (req, res) => {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return res.status(401).json({ error: "Unauthorized" });
   const { data: { user }, error: authErr } = await supabase.auth.getUser(header.slice(7));

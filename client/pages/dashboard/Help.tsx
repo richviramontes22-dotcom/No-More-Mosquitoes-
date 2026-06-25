@@ -144,7 +144,7 @@ const Help = () => {
   // ── Messages state ────────────────────────────────────────────────────────
   const [selectedThread, setSelectedThread] = useState<Thread | null>(null);
   const [threadMessages, setThreadMessages] = useState<
-    Array<{ id: string; body: string; from: string; created_at: string }>
+    Array<{ id: string; body: string; direction: "inbound" | "outbound"; created_at: string }>
   >([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -193,7 +193,7 @@ const Help = () => {
     try {
       const { data } = await supabase
         .from("messages")
-        .select("id, body, from, created_at")
+        .select("id, body, direction, created_at")
         .eq("thread_id", thread.id)
         .order("created_at", { ascending: true });
       setThreadMessages(data || []);
@@ -210,7 +210,7 @@ const Help = () => {
     try {
       const { data, error } = await supabase
         .from("messages")
-        .insert({ thread_id: selectedThread.id, body: replyText.trim(), from: "customer" })
+        .insert({ thread_id: selectedThread.id, sender_id: user.id, body: replyText.trim(), direction: "inbound" })
         .select()
         .single();
       if (error) throw error;
@@ -704,16 +704,16 @@ const Help = () => {
               </div>
             ) : (
               threadMessages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.from === "customer" ? "justify-end" : "justify-start"}`}>
+                <div key={msg.id} className={`flex ${msg.direction === "inbound" ? "justify-end" : "justify-start"}`}>
                   <div
                     className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                      msg.from === "customer"
+                      msg.direction === "inbound"
                         ? "bg-primary text-primary-foreground rounded-br-sm"
                         : "bg-muted text-foreground rounded-bl-sm"
                     }`}
                   >
                     <p>{msg.body}</p>
-                    <p className={`text-[10px] mt-1 ${msg.from === "customer" ? "text-primary-foreground/70 text-right" : "text-muted-foreground"}`}>
+                    <p className={`text-[10px] mt-1 ${msg.direction === "inbound" ? "text-primary-foreground/70 text-right" : "text-muted-foreground"}`}>
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>

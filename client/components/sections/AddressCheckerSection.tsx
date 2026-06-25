@@ -174,10 +174,28 @@ const AddressCheckerSection = () => {
     }
   };
 
-  const handleWaitlistSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
+
+  const handleWaitlistSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!waitlistEmail || waitlistSubmitted) return;
-    setWaitlistSubmitted(true);
+    if (!waitlistEmail || waitlistSubmitted || waitlistSubmitting) return;
+    setWaitlistSubmitting(true);
+    try {
+      const res = await fetch("/api/service-areas/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: waitlistEmail, address, city, state, zip }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Could not save your waitlist signup.");
+      }
+      setWaitlistSubmitted(true);
+    } catch (err: any) {
+      toast({ title: "Waitlist signup failed", description: err.message, variant: "destructive" });
+    } finally {
+      setWaitlistSubmitting(false);
+    }
   };
 
   return (
@@ -414,8 +432,10 @@ const AddressCheckerSection = () => {
                       </label>
                       <Button
                         type="submit"
+                        disabled={waitlistSubmitting}
                         className="inline-flex h-auto items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold shadow-brand"
                       >
+                        {waitlistSubmitting ? <Loader className="h-4 w-4 animate-spin" aria-hidden /> : null}
                         {t("address.joinWaitlistBtn")}
                       </Button>
                     </form>

@@ -49,8 +49,8 @@ const Login = () => {
           return;
         }
 
-        // Employees always go to the employee portal
-        if (role === "employee") {
+        // Employees (any portal role) always go to the employee portal
+        if (role === "employee" || role === "technician" || role === "dispatcher" || role === "customer_service" || role === "sales") {
           navigate("/employee", { replace: true });
           return;
         }

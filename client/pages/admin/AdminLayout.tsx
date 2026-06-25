@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import {
-  LayoutDashboard, Users, Home, Calendar, Truck, MessageSquare,
+  LayoutDashboard, Activity, Users, Home, Calendar, Truck, MessageSquare,
   Ticket, Map, Navigation, CreditCard, BarChart3, FileText,
   Settings, ShieldCheck, Zap, Globe, Tag, Layers, UserCog, ChevronRight, Bell, Scale, CalendarDays,
-  UserPlus, Gift, Smile,
+  UserPlus, Gift, Smile, Menu,
 } from "lucide-react";
 
 type NavItem = { label: string; to: string; icon: React.ElementType };
@@ -123,6 +125,14 @@ const AdminLayout = () => {
     if (active) setOpenGroups((prev) => new Set([...prev, active]));
   }, [location.pathname]);
 
+  // Mobile/tablet nav drawer (below the lg: breakpoint where the sidebar
+  // would otherwise render as a giant vertical block above the page
+  // content). Closes automatically on navigation.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
   const toggleGroup = (key: string) => {
     setOpenGroups((prev) => {
       const next = new Set(prev);
@@ -133,27 +143,12 @@ const AdminLayout = () => {
   };
 
   const isOverview = matchesRoute(location.pathname, "/admin", true);
+  const isOperations = matchesRoute(location.pathname, "/admin/operations");
   const isSettings = matchesRoute(location.pathname, "/admin/settings");
 
-  return (
-    <section className="bg-background min-h-screen">
-      <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[240px_1fr] lg:px-8">
-
-        {/* ── Sidebar ── */}
-        <aside className="sticky top-24 self-start">
-          <div className="rounded-2xl border border-border/60 bg-card/90 shadow-sm overflow-hidden">
-
-            {/* Brand strip */}
-            <div className="border-b border-border/50 bg-muted/20 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Admin Panel
-                </span>
-              </div>
-            </div>
-
-            <nav className="p-2 space-y-0.5" aria-label="Admin navigation">
+  const navContent = (
+    <>
+      <nav className="p-2 space-y-0.5" aria-label="Admin navigation">
 
               {/* Overview — always visible, not in a group */}
               <Link
@@ -166,6 +161,19 @@ const AdminLayout = () => {
               >
                 <LayoutDashboard className="h-4 w-4 shrink-0" />
                 Overview
+              </Link>
+
+              {/* Operations Command Center — always visible, not in a group */}
+              <Link
+                to="/admin/operations"
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
+                  isOperations
+                    ? "bg-primary text-primary-foreground shadow-brand"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                }`}
+              >
+                <Activity className="h-4 w-4 shrink-0" />
+                Operations Center
               </Link>
 
               {/* Collapsible domain groups */}
@@ -236,7 +244,61 @@ const AdminLayout = () => {
                 </Link>
               </div>
 
-            </nav>
+      </nav>
+    </>
+  );
+
+  return (
+    <section className="bg-background min-h-screen">
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="w-80 p-0 overflow-y-auto">
+          <SheetTitle className="sr-only">Admin navigation</SheetTitle>
+          <div className="border-b border-border/50 bg-muted/20 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                Admin Panel
+              </span>
+            </div>
+          </div>
+          {navContent}
+        </SheetContent>
+      </Sheet>
+
+      <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[240px_1fr] lg:px-8">
+
+        {/* Mobile/tablet nav trigger — inside the same padded container as
+            the rest of the page content (not a sibling above it), so it
+            inherits the same effective top offset that already correctly
+            clears MainLayout's fixed header — a hardcoded offset here
+            would have to duplicate that math and could drift out of sync. */}
+        <div className="lg:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl gap-2"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <Menu className="h-4 w-4" />
+            Admin Menu
+          </Button>
+        </div>
+
+        {/* ── Sidebar — desktop only, lg: and up ── */}
+        <aside className="hidden lg:block sticky top-24 self-start">
+          <div className="rounded-2xl border border-border/60 bg-card/90 shadow-sm overflow-hidden">
+
+            {/* Brand strip */}
+            <div className="border-b border-border/50 bg-muted/20 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Admin Panel
+                </span>
+              </div>
+            </div>
+
+            {navContent}
           </div>
         </aside>
 

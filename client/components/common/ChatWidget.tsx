@@ -25,7 +25,13 @@ export const ChatWidget = () => {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999] flex flex-col items-end pointer-events-none">
+    // z-40, not z-[9999] — every Dialog/Sheet in this app uses z-50 for its
+    // overlay and content. At z-[9999] this widget rendered on top of (and
+    // intercepted clicks on) any open modal/drawer, including the schedule
+    // dialog's own sticky bottom CTA bar on mobile. z-40 keeps it above
+    // normal page content (sticky bars etc. are z-10 or lower) but lets any
+    // real modal correctly cover it instead.
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end pointer-events-none">
       {/* Chat Panel */}
       <div
         className={cn(

@@ -14,6 +14,11 @@ interface Employee {
   role: string;
   phone?: string;
   status: string;
+  clocked_in: boolean;
+  has_gps_consent: boolean;
+  last_ping_at: string | null;
+  is_stale: boolean | null;
+  location_label: "current" | "last_known" | "unavailable";
   location: { lat: number; lng: number } | null;
   assignment: {
     id: string;
@@ -21,6 +26,17 @@ interface Employee {
     address: string;
   } | null;
   lastUpdate: string | null;
+}
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return "never";
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 const EmployeeTracking = () => {
@@ -48,7 +64,10 @@ const EmployeeTracking = () => {
   useEffect(() => {
     if (!autoRefresh) return;
 
-    const interval = setInterval(fetchEmployees, 5000);
+    // 45s — matches the ~60s ping interval closely enough to feel current
+    // without polling faster than the data actually changes. Not real-time;
+    // labeled as such below.
+    const interval = setInterval(fetchEmployees, 45_000);
     return () => clearInterval(interval);
   }, [autoRefresh]);
 
@@ -76,15 +95,18 @@ const EmployeeTracking = () => {
         </Button>
       </AdminOwnershipNote>
 
-      {/* Demo data warning — remove when real GPS tracking is implemented */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-400/40 bg-amber-500/5 px-5 py-4">
-        <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+      {/* Real data note — replaces the old "Demo Data" warning now that this
+          page reads real employee_location_pings rows instead of a
+          hardcoded null. Still explicitly not real-time: it's polled, and
+          says so. */}
+      <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/30 px-5 py-4">
+        <Clock className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-semibold text-amber-800">Demo Data — Live GPS Tracking Not Yet Enabled</p>
-          <p className="text-xs text-amber-700 mt-0.5">
-            The locations shown below are simulated demo data, not real employee positions.
-            To enable real-time tracking, the employee mobile app must be built and wired to the <code className="bg-amber-100 px-1 rounded">employee_locations</code> table.
-            See <strong>NEXT_DEVELOPMENT_ROADMAP.md</strong> for implementation steps.
+          <p className="text-sm font-semibold text-foreground">Polled, not real-time</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Locations refresh every ~45 seconds, matching how often a clocked-in, consented technician's
+            device sends a position. A technician must be clocked in and have granted location consent for
+            their position to appear here.
           </p>
         </div>
       </div>
@@ -142,7 +164,7 @@ const EmployeeTracking = () => {
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            {autoRefresh ? "Auto-refresh (demo)" : "Manual refresh (demo)"}
+            {autoRefresh ? "Auto-refresh: On" : "Auto-refresh: Off"}
           </Button>
           <Button
             variant="outline"
@@ -173,6 +195,14 @@ const EmployeeTracking = () => {
                 <p className="text-xs text-muted-foreground mt-1">
                   {emp.phone || "No phone"}
                 </p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <Badge variant={emp.clocked_in ? "default" : "outline"} className="text-[10px]">
+                    {emp.clocked_in ? "Clocked In" : "Clocked Out"}
+                  </Badge>
+                  {!emp.has_gps_consent && (
+                    <span className="text-[10px] text-muted-foreground">No GPS consent</span>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col items-end gap-2">
                 <Badge
@@ -190,9 +220,18 @@ const EmployeeTracking = () => {
                       ? "En Route"
                       : "Idle"}
                 </Badge>
-                {emp.location && (
-                  <p className="text-xs text-muted-foreground">
-                    {emp.location.lat.toFixed(3)}, {emp.location.lng.toFixed(3)}
+                {emp.location_label === "unavailable" && (
+                  <p className="text-xs text-muted-foreground">No recent location</p>
+                )}
+                {emp.location && emp.location_label === "current" && (
+                  <p className="text-xs text-green-700 font-medium">
+                    {emp.location.lat.toFixed(3)}, {emp.location.lng.toFixed(3)} · {timeAgo(emp.last_ping_at)}
+                  </p>
+                )}
+                {emp.location && emp.location_label === "last_known" && (
+                  <p className="text-xs text-amber-700">
+                    Last known: {emp.location.lat.toFixed(3)}, {emp.location.lng.toFixed(3)} · {timeAgo(emp.last_ping_at)}
+                    {emp.clocked_in && emp.is_stale ? " (stale)" : !emp.clocked_in ? " (off duty)" : ""}
                   </p>
                 )}
               </div>

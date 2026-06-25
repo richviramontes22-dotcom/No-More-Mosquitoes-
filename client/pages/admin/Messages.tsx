@@ -22,7 +22,10 @@ interface MessageThread {
 interface Message {
   id: string;
   body: string;
-  from: "customer" | "agent";
+  // messages has no "from" column — direction is the real column
+  // ("inbound" = from the customer, "outbound" = from the business),
+  // same convention used in employeeMessages.ts / AssignmentDetail.tsx.
+  direction: "inbound" | "outbound";
   created_at: string;
 }
 
@@ -239,7 +242,7 @@ const Conversation = ({ thread, onMessageAdded }: { thread: MessageThread; onMes
         setIsLoadingMessages(true);
         const { data: msgData, error } = await supabase
           .from("messages")
-          .select("id, body, from, created_at")
+          .select("id, body, direction, created_at")
           .eq("thread_id", thread.id)
           .order("created_at", { ascending: true });
 
@@ -248,7 +251,7 @@ const Conversation = ({ thread, onMessageAdded }: { thread: MessageThread; onMes
         setMessages((msgData || []).map((m: any) => ({
           id: m.id,
           body: m.body,
-          from: m.from || "customer",
+          direction: m.direction || "inbound",
           created_at: m.created_at
         })));
       } catch (err) {
@@ -267,14 +270,16 @@ const Conversation = ({ thread, onMessageAdded }: { thread: MessageThread; onMes
 
     try {
       setIsSending(true);
+      const { data: { user } } = await supabase.auth.getUser();
       const { data: msgData, error } = await supabase
         .from("messages")
         .insert({
           thread_id: thread.id,
+          sender_id: user?.id ?? null,
           body: body.trim(),
-          from: "agent"
+          direction: "outbound"
         })
-        .select("id, body, from, created_at")
+        .select("id, body, direction, created_at")
         .single();
 
       if (error) throw error;
@@ -284,7 +289,7 @@ const Conversation = ({ thread, onMessageAdded }: { thread: MessageThread; onMes
         setMessages(prev => [...prev, {
           id: msgData.id,
           body: msgData.body,
-          from: msgData.from || "agent",
+          direction: msgData.direction || "outbound",
           created_at: msgData.created_at
         }]);
       }
@@ -323,13 +328,13 @@ const Conversation = ({ thread, onMessageAdded }: { thread: MessageThread; onMes
             <div
               key={m.id}
               className={`text-sm p-3 rounded-lg ${
-                m.from === "agent"
+                m.direction === "outbound"
                   ? "bg-primary/10 border border-primary/20 ml-auto max-w-xs"
                   : "bg-muted/50 border border-border/40 mr-auto max-w-xs"
               }`}
             >
               <div className="text-xs font-bold text-muted-foreground mb-1 capitalize">
-                {m.from}
+                {m.direction === "outbound" ? "Agent" : "Customer"}
               </div>
               <div>{m.body}</div>
               <div className="text-xs text-muted-foreground mt-1">

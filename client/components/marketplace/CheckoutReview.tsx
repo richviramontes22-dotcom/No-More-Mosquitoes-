@@ -70,8 +70,11 @@ const CheckoutReview = ({
     }
   };
 
+  // Floor matches the backend's Stripe minimum (server/routes/marketplaceStripe.ts)
+  // exactly — otherwise a 100%-off code would display "$0.00" here while the
+  // backend still charges Stripe's $0.50 minimum, surprising the customer at payment.
   const discountedTotal = appliedPromo
-    ? Math.max(0, totalCents - appliedPromo.discount_cents)
+    ? Math.max(50, totalCents - appliedPromo.discount_cents)
     : totalCents;
 
   if (!items.length) {

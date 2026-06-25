@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 
-export type UserRole = "admin" | "support" | "employee" | "customer";
+export type UserRole = "admin" | "support" | "employee" | "customer" | "technician" | "dispatcher" | "customer_service" | "sales";
 
 export type PostLoginCheck = {
   role: UserRole;

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { cacheEmployeeRecord, getCachedEmployeeRecord } from "@/lib/employee/offlineCache";
 
 export interface Employee {
   id: string;
@@ -28,8 +29,19 @@ const fetchEmployee = async (userId: string): Promise<Employee | null> => {
     .eq("status", "active")
     .maybeSingle();
 
-  if (error) throw error;
-  return data
+  if (error) {
+    // Offline (or any other failure): fall back to the last successfully
+    // fetched record for this user rather than surfacing "no employee
+    // record found" — the employee record is the key everything else in
+    // the offline cache (route, assignments, detail) is scoped by, so
+    // losing it on every reload would make the rest of the cache
+    // unreachable even though it's sitting right there in localStorage.
+    const cached = getCachedEmployeeRecord<Employee>(userId);
+    if (cached) return cached.data;
+    throw error;
+  }
+
+  const employee = data
     ? {
         ...data,
         worker_type: data.worker_type ?? "employee",
@@ -42,6 +54,9 @@ const fetchEmployee = async (userId: string): Promise<Employee | null> => {
         emergency_contact_relation: data.emergency_contact_relation ?? null,
       }
     : null;
+
+  if (employee) cacheEmployeeRecord(userId, employee);
+  return employee;
 };
 
 export const useEmployee = () => {

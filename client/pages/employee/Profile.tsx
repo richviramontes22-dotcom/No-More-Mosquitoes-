@@ -97,7 +97,7 @@ const Profile = () => {
         title: employee.gps_consent_at ? "GPS tracking disabled" : "GPS tracking enabled",
         description: employee.gps_consent_at
           ? "Location tracking has been turned off. Withdrawal recorded."
-          : "Location will be captured during active assignments only.",
+          : "Your location will be shared with dispatch while you're clocked in, and stop automatically when you clock out.",
       });
     } catch {
       toast({ title: "Failed to update GPS setting", variant: "destructive" });
@@ -272,14 +272,16 @@ const Profile = () => {
               {gpsEnabled ? (
                 <>
                   <p className="text-muted-foreground text-xs">
-                    Your location is captured when you update assignment status (en route, arrived, completed).
+                    Your location is shared with dispatch every minute while you're clocked in, plus whenever
+                    you update an assignment's status (en route, arrived, completed). Tracking stops the
+                    moment you clock out.
                   </p>
                   <p className="text-muted-foreground text-xs">Enabled: {new Date(employee.gps_consent_at!).toLocaleDateString()}</p>
                 </>
               ) : (
                 <p className="text-muted-foreground text-xs">
-                  Enable to allow the system to capture your location during active assignments only.
-                  No off-duty tracking.
+                  Enable to share your location with dispatch while you're clocked in. No off-duty tracking —
+                  it stops automatically the moment you clock out.
                 </p>
               )}
             </div>

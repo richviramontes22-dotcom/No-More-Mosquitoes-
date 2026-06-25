@@ -17,6 +17,9 @@ interface DetractorSurvey {
   issue_category: string | null;
   ticket_id: string | null;
   created_at: string;
+  due_at: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
 }
 
 interface SatisfactionDashboard {
@@ -139,19 +142,34 @@ const Satisfaction = () => {
                 <TableHead>Comment</TableHead>
                 <TableHead>Issue Category</TableHead>
                 <TableHead>Submitted</TableHead>
+                <TableHead>Assigned To</TableHead>
+                <TableHead>Due</TableHead>
                 <TableHead>Ticket</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.detractors_pending.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No pending detractor issues.</TableCell></TableRow>
-              ) : data.detractors_pending.map((d) => (
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No pending detractor issues.</TableCell></TableRow>
+              ) : data.detractors_pending.map((d) => {
+                const overdue = d.due_at ? new Date(d.due_at).getTime() < Date.now() : false;
+                return (
                 <TableRow key={d.id}>
                   <TableCell><Badge className="bg-red-100 text-red-800 border-none">{d.rating}/10</Badge></TableCell>
                   <TableCell className="text-sm max-w-[280px] truncate" title={d.comment || ""}>{d.comment || "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{d.issue_category || "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{new Date(d.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {d.assigned_to_name || <span className="italic">Admin queue</span>}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {d.due_at ? (
+                      <span className={overdue ? "text-red-600 font-semibold" : "text-muted-foreground"}>
+                        {new Date(d.due_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                        {overdue && " (overdue)"}
+                      </span>
+                    ) : "—"}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{d.ticket_id ? d.ticket_id.slice(0, 8) : "—"}</TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" variant="outline" disabled={resolvingId === d.id} onClick={() => resolve(d.id)}>
@@ -159,7 +177,7 @@ const Satisfaction = () => {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+              );})}
             </TableBody>
           </Table>
         </CardContent>
