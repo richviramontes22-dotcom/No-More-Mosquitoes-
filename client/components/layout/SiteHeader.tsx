@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Bell, ChevronDown, Menu, Phone } from "lucide-react";
 
@@ -189,6 +189,7 @@ const AdminAlertBell = ({ isAdmin }: AdminAlertBellProps) => {
 
 export const SiteHeader = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -254,6 +255,22 @@ export const SiteHeader = () => {
     } catch {}
   }, [fontScheme]);
 
+  // Publish the header's rendered height as a CSS custom property so that
+  // content below the fixed header (HeroSection spacer, etc.) can always
+  // match the real layout height regardless of content wrapping at any
+  // viewport width — eliminates a whole class of hardcoded-px drift bugs.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const update = () => {
+      document.documentElement.style.setProperty("--site-header-height", `${el.offsetHeight}px`);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const handleSignOut = useCallback(() => {
     logout();
     toast({ title: "Signed out", description: "You’ve been signed out of your account." });
@@ -291,7 +308,7 @@ export const SiteHeader = () => {
   );
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-hero-radial bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-hero-radial bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:rounded-full focus:bg-primary focus:px-5 focus:py-2 focus:text-primary-foreground"

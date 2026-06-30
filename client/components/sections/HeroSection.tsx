@@ -49,12 +49,6 @@ const HeroSection = () => {
       }))
     : lifestyleImages;
 
-  const highlightCards = [
-    { label: t("highlights.completionVideoLabel"), value: t("highlights.everyVisit") },
-    { label: t("highlights.reServicePromise"), value: t("highlights.sameWeek") },
-    { label: t("highlights.familySafeFormulations"), value: t("highlights.caApproved") },
-  ];
-
   return (
     <>
       {/* Image section with heading, description, and CTAs overlaid */}
@@ -66,25 +60,34 @@ const HeroSection = () => {
           objectFit="cover"
         />
 
-        {/* Header Spacer — matches fixed header height (no band — band is in page flow below).
-            Measured via the actual rendered <header> bounding box per breakpoint (136.5px below
-            640px — header content wraps to an extra line at narrow widths — 109px at sm, 124px
-            at md+). The previous values (92/106/122px) undershot the real mobile height by ~44px,
-            which was invisible while the band itself was invisible, but now causes the band to
-            render under the header instead of below it. */}
-        <div className="pt-[140px] sm:pt-[110px] md:pt-[126px]" />
+        {/* Header Spacer — dynamically matches the fixed header's actual rendered height.
+            SiteHeader.tsx writes --site-header-height via ResizeObserver on every layout
+            change, so this spacer stays perfectly flush regardless of viewport width,
+            text wrapping, or any future header content changes. 126px fallback covers
+            the md+ desktop case before JS fires. */}
+        <div style={{ paddingTop: "var(--site-header-height, 126px)" }} />
 
         {/* Announcement band — in page flow so it scrolls behind the fixed header.
             Near-opaque bg-primary so contrast holds regardless of which carousel
             image is behind it (was bg-secondary/10 + 55%-opacity text — nearly
             invisible against the photo). */}
-        <div className="relative z-10 py-2.5 bg-primary/90 backdrop-blur-sm border-b border-primary-foreground/15">
+        <div className="relative z-10 py-2 sm:py-2.5 bg-primary/90 backdrop-blur-sm border-b border-primary-foreground/15">
+          {/* Desktop (sm+): single line with full text and wide letter-spacing. */}
           <p
-            className="text-center text-xs sm:text-sm font-black uppercase tracking-[0.15em] text-primary-foreground"
+            className="hidden sm:block text-center text-sm font-black uppercase tracking-[0.15em] text-primary-foreground"
             style={{ textShadow: "0 1px 3px rgba(0,0,0,0.45)" }}
           >
             {t("hero.eyebrow")}
           </p>
+          {/* Mobile (<sm): two-line layout with tighter tracking — prevents the full
+              phrase from cramming into a single narrow line with wide spacing. */}
+          <div
+            className="sm:hidden flex flex-col items-center gap-px text-center font-black uppercase text-primary-foreground"
+            style={{ textShadow: "0 1px 3px rgba(0,0,0,0.45)" }}
+          >
+            <span className="text-[11px] tracking-[0.08em]">California Employee/Community</span>
+            <span className="text-[11px] tracking-[0.08em]">Based Company</span>
+          </div>
         </div>
 
         {/* Dark overlay for text visibility */}
@@ -128,27 +131,6 @@ const HeroSection = () => {
                 {t("hero.callOrText")}
               </a>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* White background section with feature panels */}
-      <section className="relative bg-background">
-        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="grid gap-4 sm:grid-cols-3">
-            {highlightCards.map((item) => (
-              <div
-                key={item.label}
-                className="rounded-2xl border border-border/80 bg-card/80 p-5 shadow-soft backdrop-blur"
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                  {item.value}
-                </p>
-                <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                  {item.label}
-                </p>
-              </div>
-            ))}
           </div>
         </div>
       </section>
