@@ -196,6 +196,7 @@ export function createServer() {
 
   // Admin Leads API (CRM Phase 1 + Phase 2 — Lead Inbox, notes, status)
   app.use("/api/admin", adminLeadsRouter);
+  app.use("/api", adminLeadsRouter); // /api/leads/quote-link/:token is public
 
   // Admin Service Area Demand API (CRM Phase 2 — demand intelligence)
   app.use("/api/admin", adminServiceAreaDemandRouter);

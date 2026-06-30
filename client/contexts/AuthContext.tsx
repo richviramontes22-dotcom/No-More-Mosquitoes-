@@ -1,4 +1,4 @@
-﻿import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { clearEmployeeCache } from "@/lib/employee/offlineCache";
@@ -66,6 +66,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
    * SECTION 1: Minimal deterministic auth bootstrap
    * This only initializes session/auth state, NOT profile data.
    * Profile fetching is done separately via useProfile() hook.
+   *
+   * One identity per browser, always synced: Supabase's auth client
+   * broadcasts every sign-in/sign-out to every other open tab of this
+   * origin (via BroadcastChannel, keyed by the same storageKey configured
+   * in client/lib/supabase.ts). This listener deliberately adopts
+   * whatever it's told without comparing against what this tab had
+   * before — that's what makes "log in here, every tab reflects it" and
+   * "log out here, every tab reflects that too" work, matching how this
+   * is supposed to behave everywhere on this device.
    */
   useEffect(() => {
     if (!supabase) {

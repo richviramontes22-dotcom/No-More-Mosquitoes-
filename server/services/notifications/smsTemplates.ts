@@ -81,6 +81,19 @@ export function buildCancellationSms(data: CancellationSmsData): string {
   ].join(" ") + OPT_OUT_FOOTER;
 }
 
+export interface AdminQuoteSmsData {
+  propertyAddress: string;
+  priceLabel: string;     // e.g. "$80 every 3 weeks"
+  quoteLinkUrl: string;
+}
+
+export function buildAdminQuoteSms(data: AdminQuoteSmsData): string {
+  return [
+    `No More Mosquitoes: Your quote for ${data.propertyAddress} is ready — ${data.priceLabel}.`,
+    `Set up your account: ${data.quoteLinkUrl}`,
+  ].join(" ") + OPT_OUT_FOOTER;
+}
+
 // ─── Employee Assignment SMS (internal — no STOP footer for staff) ────────────
 
 export interface EmployeeAssignmentSmsData {

@@ -20,6 +20,7 @@ import { LogoProvider } from "@/contexts/LogoContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ScheduleDialogProvider } from "@/components/schedule/ScheduleDialogProvider";
 import { captureReferralCodeFromUrl } from "@/lib/referralCapture";
+import { captureQuoteLinkFromUrl } from "@/lib/quoteLinkCapture";
 import { ScrollToTop } from "@/components/common/ScrollToTop";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -85,6 +86,7 @@ import AdminNotifications from "./pages/admin/Notifications";
 import AdminAlerts from "./pages/admin/Alerts";
 import AdminLeads from "./pages/admin/Leads";
 import AdminLeadDetail from "./pages/admin/LeadDetail";
+import AdminQuoteLookup from "./pages/admin/QuoteLookup";
 import AdminBusinessHours from "./pages/admin/BusinessHours";
 import AdminEmployeeTracking from "./pages/admin/EmployeeTracking";
 import AdminRoutePlanning from "./pages/admin/RoutePlanning";
@@ -135,6 +137,10 @@ initSentry();
 // Capture a `?ref=CODE` referral link before any routing happens — runs once
 // per fresh page load, which is exactly when a referral link would be hit.
 captureReferralCodeFromUrl();
+
+// Capture a `?qt=TOKEN` admin-sent quote link the same way — fire-and-forget,
+// never blocks initial render.
+void captureQuoteLinkFromUrl();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -239,6 +245,7 @@ const App = () => (
                       <Route path="alerts" element={<AdminAlerts />} />
                       <Route path="leads" element={<AdminLeads />} />
                       <Route path="leads/:id" element={<AdminLeadDetail />} />
+                      <Route path="quote-lookup" element={<AdminQuoteLookup />} />
                       <Route path="settings" element={<AdminSettings />} />
                     </Route>
 

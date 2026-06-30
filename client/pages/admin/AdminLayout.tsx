@@ -20,6 +20,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Customers",
     items: [
       { label: "Leads", to: "/admin/leads", icon: UserPlus },
+      { label: "Quote Lookup", to: "/admin/quote-lookup", icon: FileText },
       { label: "Customers", to: "/admin/customers", icon: Users },
       { label: "Properties", to: "/admin/properties", icon: Home },
     ],

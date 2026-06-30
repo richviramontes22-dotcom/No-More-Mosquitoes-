@@ -29,6 +29,8 @@ export interface AdminLead {
   status: string;
   address_hash: string | null;
   address: string | null;
+  city: string | null;
+  state: string | null;
   zip: string | null;
   name: string | null;
   email: string | null;

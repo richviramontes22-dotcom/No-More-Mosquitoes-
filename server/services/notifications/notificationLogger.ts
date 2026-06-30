@@ -29,6 +29,7 @@ export type NotificationType =
   | "appointment_reminder_24h"
   | "appointment_reminder_same_day"
   | "lead_acknowledgement"
+  | "admin_quote_sent"
   | "sms_opt_out"
   | "sms_opt_in"
   | "email_opted_out"

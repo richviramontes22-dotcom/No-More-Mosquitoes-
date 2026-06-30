@@ -48,10 +48,17 @@ const RequireCustomer = ({ children }: { children: ReactNode }) => {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
-  // Check if user is admin (use profile role with fallback to JWT role)
+  // Staff roles (use profile role with fallback to JWT role) don't have
+  // customer data (properties/subscriptions) — without this check, a staff
+  // session active on this device (e.g. inherited from another tab) would
+  // render the customer dashboard against an account with none of the data
+  // it expects, rather than being sent to the right portal.
   const userRole = profile?.role || user?.role;
   if (userRole === "admin") {
     return <Navigate to="/admin" replace />;
+  }
+  if (userRole && userRole !== "customer") {
+    return <Navigate to="/employee" replace />;
   }
 
   if (needsLegalAcceptance) {

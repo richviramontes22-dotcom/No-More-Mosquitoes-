@@ -60,6 +60,7 @@ const SOURCE_LABEL: Record<string, string> = {
   manual_review: "Manual Review",
   schedule_request: "Schedule Request",
   waitlist: "Waitlist",
+  admin_quote: "Admin Quote Lookup",
 };
 
 const ACTIVITY_LABEL: Record<string, string> = {
@@ -74,6 +75,7 @@ const ACTIVITY_LABEL: Record<string, string> = {
   followup_created: "Follow-up scheduled",
   followup_completed: "Follow-up completed",
   followup_skipped: "Follow-up skipped",
+  quote_sent: "Quote sent",
 };
 
 function formatDateTime(iso: string | null | undefined): string {
@@ -357,7 +359,29 @@ const AdminLeadDetailPage = () => {
           title={lead.name || lead.address || "Lead"}
           description={lead.address ? `${lead.address}${lead.zip ? `, ${lead.zip}` : ""}` : undefined}
         />
-        <AdminOwnershipBadge kind="primary" />
+        <div className="flex items-center gap-3">
+          {lead.address && (
+            <Button
+              size="sm"
+              className="rounded-xl"
+              onClick={() => navigate("/admin/quote-lookup", {
+                state: {
+                  leadId: lead.id,
+                  address: lead.address,
+                  city: lead.city,
+                  state: lead.state,
+                  zip: lead.zip,
+                  name: lead.name,
+                  email: lead.email,
+                  phone: lead.phone,
+                },
+              })}
+            >
+              <Mail className="h-4 w-4 mr-2" /> Send Quote
+            </Button>
+          )}
+          <AdminOwnershipBadge kind="primary" />
+        </div>
       </div>
 
       {/* Lead summary */}

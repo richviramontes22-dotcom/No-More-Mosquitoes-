@@ -5,6 +5,7 @@ import { pricingTiers, serviceAreaZipCodes } from "@/data/site";
 import { useTranslation } from "@/hooks/use-translation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProfile } from "@/hooks/useProfile";
 import { usePropertyLookup } from "@/hooks/use-property-lookup";
 import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider";
 import { Button } from "@/components/ui/button";
@@ -34,8 +35,10 @@ const AddressCheckerSection = () => {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { data: profile } = useProfile();
   const navigate = useNavigate();
   const { open } = useScheduleDialog();
+  const isCustomer = Boolean(user) && (profile?.role || user?.role) === "customer";
   const { lookup, isLoading, data: parcelData, error: searchError } = usePropertyLookup();
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
@@ -160,7 +163,17 @@ const AddressCheckerSection = () => {
       notes: currentAcreage ? `Estimated acreage: ${currentAcreage} acres` : "",
     };
 
-    if (!user) {
+    if (isCustomer) {
+      open({ source: "address-checker", preset });
+    } else if (user) {
+      // Signed in, but as staff (admin/employee), not a real customer — see
+      // the matching comment in QuoteWidgetSection.tsx's handleSchedule.
+      toast({
+        title: "Signed in as staff on this device",
+        description: "This device is signed in to a staff account, so this widget can't open the customer scheduling flow. Use the admin Quote Lookup tool to get a quote for a customer.",
+        variant: "destructive",
+      });
+    } else {
       // Send to signup with preset in state
       navigate("/login", {
         state: {
@@ -169,8 +182,6 @@ const AddressCheckerSection = () => {
           preset
         }
       });
-    } else {
-      open({ source: "address-checker", preset });
     }
   };
 

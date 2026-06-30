@@ -11,6 +11,7 @@ import { useScheduleDialog } from "@/components/schedule/ScheduleDialogProvider"
 import { useToast } from "@/hooks/use-toast";
 import { usePropertyLookup } from "@/hooks/use-property-lookup";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProfile } from "@/hooks/useProfile";
 import { savePendingOnboarding } from "@/lib/pendingOnboarding";
 import { GoogleAddressAutocomplete, type GoogleAddressAutocompleteResult } from "@/components/common/GoogleAddressAutocomplete";
 import { lookupAnnualCents, lookupCadenceCents as lookupCadenceCentsShared, lookupOneTimeCents } from "@shared/pricing";
@@ -25,9 +26,11 @@ type Props = { id?: string };
 const QuoteWidgetSection = ({ id }: Props) => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { data: profile } = useProfile();
   const navigate = useNavigate();
   const { lookup, isLoading: isSearching, error } = usePropertyLookup();
   const { open } = useScheduleDialog();
+  const isCustomer = Boolean(user) && (profile?.role || user?.role) === "customer";
 
   const [phase, setPhase] = useState<"address" | "plans">("address");
 
@@ -194,8 +197,19 @@ const QuoteWidgetSection = ({ id }: Props) => {
       notes: `Selected on pricing page. Property: ${acreage ?? "?"} acres.`,
     };
 
-    if (user) {
+    if (isCustomer) {
       open({ source: "pricing-page", preset });
+    } else if (user) {
+      // Signed in, but as staff (admin/employee), not a real customer — the
+      // schedule flow assumes an existing customer's own properties/billing,
+      // which a staff account doesn't have. Sending them to /login would
+      // just bounce them straight back to their own portal, since they're
+      // already authenticated. Use the admin Quote Lookup tool instead.
+      toast({
+        title: "Signed in as staff on this device",
+        description: "This device is signed in to a staff account, so this widget can't open the customer scheduling flow. Use the admin Quote Lookup tool to get a quote for a customer.",
+        variant: "destructive",
+      });
     } else {
       navigate("/login", { state: { from: "/schedule", mode: "signup", preset } });
     }
@@ -566,7 +580,7 @@ const QuoteWidgetSection = ({ id }: Props) => {
                 <ArrowRight className="h-5 w-5" />
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                {user
+                {isCustomer
                   ? "Opens the scheduling flow with your address and plan pre-selected."
                   : "We'll create your account and pre-fill your address — no re-entering details."}
               </p>

@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { supabase } from "../../lib/supabase";
 import { supabaseAdmin } from "../../lib/supabaseAdmin";
 import { buildLeadAddressHash } from "../parcel/cache";
@@ -6,7 +7,7 @@ import { buildLeadAddressHash } from "../parcel/cache";
 // flows (quote widget, schedule form) — same pattern used across server/routes/admin*.ts.
 const db = supabaseAdmin ?? supabase;
 
-export type LeadSource = "quote" | "manual_review" | "schedule_request" | "waitlist";
+export type LeadSource = "quote" | "manual_review" | "schedule_request" | "waitlist" | "admin_quote";
 export type LeadStatus = "new" | "manual_review" | "scheduled" | "out_of_area" | "contacted" | "quoted" | "lost";
 export type LeadActivityType =
   | "created"
@@ -19,7 +20,8 @@ export type LeadActivityType =
   | "lead_assigned"
   | "followup_created"
   | "followup_completed"
-  | "followup_skipped";
+  | "followup_skipped"
+  | "quote_sent";
 export type LeadActivityActor = "system" | "admin";
 
 export interface Lead {
@@ -28,6 +30,8 @@ export interface Lead {
   status: string;
   address_hash: string | null;
   address: string | null;
+  city: string | null;
+  state: string | null;
   zip: string | null;
   name: string | null;
   email: string | null;
@@ -50,6 +54,8 @@ export interface Lead {
   admin_alert_id: string | null;
   converted_customer_id: string | null;
   assigned_to: string | null;
+  quote_token: string | null;
+  quote_token_expires_at: string | null;
   first_seen_at: string;
   last_seen_at: string;
   converted_at: string | null;
@@ -944,6 +950,176 @@ export async function upsertLeadFromWaitlist(params: UpsertLeadFromWaitlistParam
     activityType: "created",
     payload: { source: "waitlist", email: normalizedEmail },
   });
+
+  return data as Lead;
+}
+
+export interface UpsertLeadFromAdminQuoteParams {
+  address: string;
+  city?: string | null;
+  state?: string | null;
+  zip: string;
+  acreage?: number | null;
+  county?: string | null;
+  program?: string | null;
+  cadence?: string | null;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  /** The admin who looked this quote up — recorded as the lead's owner. */
+  createdByAdminId: string;
+}
+
+/**
+ * Creates or updates a lead for a quote an admin looked up on a prospect's
+ * behalf (the admin Quote Lookup tool — POST /api/admin/leads/quote).
+ * Deduped the same way as a customer-initiated quote (address_hash first,
+ * then email, then phone, via findExistingLead) so an admin quoting an
+ * address a customer already inquired about merges into that lead instead
+ * of duplicating it. Unlike upsertLeadFromQuote, this always sets
+ * assigned_to — an admin who deliberately looked up a prospect is that
+ * lead's owner going forward.
+ */
+export async function upsertLeadFromAdminQuote(params: UpsertLeadFromAdminQuoteParams): Promise<Lead | null> {
+  const addressHash = buildLeadAddressHash(params.address, params.city, params.state, params.zip);
+  const normalizedEmail = params.email ? normalizeEmail(params.email) : null;
+  const normalizedPhone = params.phone ? normalizePhone(params.phone) : null;
+
+  const existing = await findExistingLead({
+    addressHash,
+    email: normalizedEmail || undefined,
+    phone: normalizedPhone || undefined,
+  });
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const updates: Record<string, unknown> = { last_seen_at: now, assigned_to: params.createdByAdminId };
+    if (params.acreage != null && existing.acreage == null) updates.acreage = params.acreage;
+    if (params.program && !existing.program) updates.program = params.program;
+    if (params.cadence && !existing.cadence) updates.cadence = params.cadence;
+    if (!existing.name && params.name) updates.name = params.name.trim();
+    if (!existing.email && normalizedEmail) updates.email = normalizedEmail;
+    if (!existing.phone && normalizedPhone) updates.phone = normalizedPhone;
+    if (!existing.address_hash && addressHash) {
+      updates.address_hash = addressHash;
+      updates.address = params.address;
+      updates.city = params.city ?? null;
+      updates.state = params.state ?? null;
+      updates.zip = params.zip;
+    }
+
+    const { data, error } = await db
+      .from("leads")
+      .update(updates)
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      console.error("[leadService] upsertLeadFromAdminQuote update failed:", error?.message);
+      return existing;
+    }
+
+    await recordLeadActivity({
+      leadId: existing.id,
+      activityType: "quote_requested",
+      actor: "admin",
+      actorId: params.createdByAdminId,
+      payload: {
+        source: "admin_quote",
+        address: params.address,
+        zip: params.zip,
+        acreage: params.acreage ?? null,
+        county: params.county ?? null,
+      },
+    });
+
+    return data as Lead;
+  }
+
+  const { data, error } = await db
+    .from("leads")
+    .insert({
+      source: "admin_quote",
+      status: "quoted",
+      address_hash: addressHash,
+      address: params.address,
+      city: params.city ?? null,
+      state: params.state ?? null,
+      zip: params.zip,
+      name: params.name?.trim() ?? null,
+      email: normalizedEmail,
+      phone: normalizedPhone,
+      acreage: params.acreage ?? null,
+      program: params.program ?? null,
+      cadence: params.cadence ?? null,
+      assigned_to: params.createdByAdminId,
+      first_seen_at: now,
+      last_seen_at: now,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("[leadService] upsertLeadFromAdminQuote insert failed:", error?.message);
+    return null;
+  }
+
+  await recordLeadActivity({
+    leadId: data.id,
+    activityType: "created",
+    actor: "admin",
+    actorId: params.createdByAdminId,
+    payload: {
+      source: "admin_quote",
+      address: params.address,
+      zip: params.zip,
+      acreage: params.acreage ?? null,
+      county: params.county ?? null,
+    },
+  });
+
+  return data as Lead;
+}
+
+/**
+ * Generates a fresh opaque quote-link token for a lead (POST
+ * /api/admin/leads/:id/send-quote) — random, not derived from the lead id,
+ * so a quote/address/price isn't guessable. 14-day expiry. Overwrites any
+ * previous token for this lead (only the most recently sent link works).
+ */
+export async function generateLeadQuoteToken(leadId: string, expiresInDays = 14): Promise<{ token: string; expiresAt: string } | null> {
+  const token = randomBytes(24).toString("base64url");
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const { error } = await db
+    .from("leads")
+    .update({ quote_token: token, quote_token_expires_at: expiresAt })
+    .eq("id", leadId);
+
+  if (error) {
+    console.error("[leadService] generateLeadQuoteToken failed:", error.message);
+    return null;
+  }
+
+  return { token, expiresAt };
+}
+
+/**
+ * Resolves a quote-link token to the lead's quote-relevant fields only
+ * (GET /api/leads/quote-link/:token, public/unauthenticated) — never
+ * returns the full lead record. Null if the token is missing, unknown, or
+ * expired.
+ */
+export async function getLeadByQuoteToken(token: string): Promise<Lead | null> {
+  const { data } = await db
+    .from("leads")
+    .select("*")
+    .eq("quote_token", token)
+    .maybeSingle();
+
+  if (!data) return null;
+  if (!data.quote_token_expires_at || new Date(data.quote_token_expires_at).getTime() < Date.now()) return null;
 
   return data as Lead;
 }

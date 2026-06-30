@@ -621,7 +621,7 @@ export function buildLeadAcknowledgementEmail(data: LeadAcknowledgementEmailData
       </ul>
     </div>
 
-    ${ctaButton("Create an Account", appUrl + "/signup")}
+    ${ctaButton("Create an Account", appUrl + "/login")}
 
     <p style="font-size:13px;color:${TEXT_MUTED};margin-top:8px;">Questions in the meantime? Reply to this email or contact us at <a href="mailto:${data.supportEmail}" style="color:${BRAND_GREEN};">${data.supportEmail}</a></p>`,
     `We received your service request — we'll be in touch within 1 business day`
@@ -815,6 +815,53 @@ export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; ht
     `Get started: ${data.dashboardUrl}`,
     ``,
     `Questions? Contact us at ${supportEmail}`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+// ─── Template: admin_quote_sent ───────────────────────────────────────────────
+// Sent from the admin Quote Lookup tool (POST /api/admin/leads/:id/send-quote)
+// — a staff-initiated quote for a prospect, with a link to finish signing up
+// with the address/plan pre-filled. See client/lib/quoteLinkCapture.ts and
+// GET /api/leads/quote-link/:token for the other side of this link.
+
+export interface AdminQuoteEmailData {
+  recipientName: string;
+  propertyAddress: string;
+  priceLabel: string;     // e.g. "$80 every 3 weeks" or "$999 / year"
+  programLabel: string;   // e.g. "Recurring Service" | "One-Time Treatment" | "Annual Plan"
+  quoteLinkUrl: string;
+  supportEmail: string;
+}
+
+export function buildAdminQuoteEmail(data: AdminQuoteEmailData): { subject: string; html: string; text: string } {
+  const subject = `Your mosquito control quote — ${data.propertyAddress}`;
+  const html = layout(
+    `<h1 style="margin:0 0 8px;font-family:${FONT};font-size:26px;color:${BRAND_GREEN};">Here's your quote</h1>
+    <p style="margin:0 0 28px;color:${TEXT_MUTED};font-size:15px;">Hi ${data.recipientName}, a member of our team put together a mosquito control quote for your property.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
+      ${infoRow("Property", data.propertyAddress)}
+      ${infoRow("Plan", data.programLabel)}
+      ${infoRow("Price", data.priceLabel)}
+    </table>
+
+    <p style="margin:0 0 8px;font-size:14px;color:${TEXT_DARK};">Click below to set up your account — your address and plan are already filled in, so it only takes a minute.</p>
+
+    ${ctaButton("Set Up My Account", data.quoteLinkUrl)}
+
+    <p style="font-size:13px;color:${TEXT_MUTED};margin-top:8px;">Questions? Reply to this email or contact us at <a href="mailto:${data.supportEmail}" style="color:${BRAND_GREEN};">${data.supportEmail}</a></p>`,
+    `Your mosquito control quote for ${data.propertyAddress} is ready`
+  );
+  const text = [
+    `Hi ${data.recipientName},`,
+    ``,
+    `A member of our team put together a mosquito control quote for ${data.propertyAddress}:`,
+    `${data.programLabel} — ${data.priceLabel}`,
+    ``,
+    `Set up your account (address and plan pre-filled): ${data.quoteLinkUrl}`,
+    ``,
+    `Questions? Contact us at ${data.supportEmail}`,
   ].join("\n");
   return { subject, html, text };
 }

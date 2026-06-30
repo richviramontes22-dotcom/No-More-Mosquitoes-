@@ -134,7 +134,7 @@ const Login = () => {
           <Card className="border-border/60 bg-card/90 shadow-2xl backdrop-blur-sm rounded-[20px] sm:rounded-[24px]">
             <CardContent className="px-6 pt-6 pb-6 sm:px-8 sm:pt-7 sm:pb-7">
               <AuthTabs
-                defaultMode={mode ?? "login"}
+                defaultMode={mode ?? (hasPendingOnboarding() ? "signup" : "login")}
                 defaultEmail={preset?.email}
                 defaultName={preset?.fullName}
               />
