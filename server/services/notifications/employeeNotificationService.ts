@@ -14,7 +14,7 @@
 
 import { supabaseAdmin } from "../../lib/supabaseAdmin";
 import { supabase } from "../../lib/supabase";
-import { getEmailProvider, getSmsProvider, getFromEmail } from "./providers/index";
+import { getEmailProvider, getSmsProvider, getSmsFromNumber, getFromEmail } from "./providers/index";
 import { buildEmployeeAssignmentEmail } from "./emailTemplates";
 import { buildEmployeeAssignmentSms } from "./smsTemplates";
 import { logNotification } from "./notificationLogger";
@@ -244,6 +244,7 @@ async function sendEmployeeNotification(
   // ── SMS ────────────────────────────────────────────────────────────────────
 
   if (employee.phone && shouldSendSms(prefs)) {
+    const smsProviderName = process.env.SMS_PROVIDER || "twilio";
     try {
       const smsBody = buildEmployeeAssignmentSms({
         employeeName,
@@ -254,10 +255,10 @@ async function sendEmployeeNotification(
       });
 
       const smsProvider = getSmsProvider();
-      const fromNumber = process.env.TWILIO_FROM_NUMBER || "";
+      const fromNumber = getSmsFromNumber();
 
       if (!fromNumber) {
-        console.log(`[EmployeeNotify] TWILIO_FROM_NUMBER not set — skipping SMS for assignment ${assignmentId}`);
+        console.log(`[EmployeeNotify] SMS from-number not configured — skipping SMS for assignment ${assignmentId}`);
         await logNotification({
           appointmentId:    appointment?.id ?? null,
           profileId:        employee.user_id ?? null,
@@ -265,8 +266,8 @@ async function sendEmployeeNotification(
           channel:          "sms",
           notificationType: notifType,
           status:           "skipped",
-          provider:         "twilio",
-          errorMessage:     "TWILIO_FROM_NUMBER not configured",
+          provider:         smsProviderName,
+          errorMessage:     "SMS_FROM_NUMBER / TWILIO_FROM_NUMBER not configured",
         });
       } else {
         await smsProvider.send({ to: employee.phone, from: fromNumber, body: smsBody });
@@ -278,7 +279,7 @@ async function sendEmployeeNotification(
           channel:          "sms",
           notificationType: notifType,
           status:           "sent",
-          provider:         "twilio",
+          provider:         smsProviderName,
           sentAt:           new Date().toISOString(),
         });
 
@@ -293,7 +294,7 @@ async function sendEmployeeNotification(
         channel:          "sms",
         notificationType: notifType,
         status:           "failed",
-        provider:         "twilio",
+        provider:         smsProviderName,
         errorMessage:     smsErr.message,
       });
     }

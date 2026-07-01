@@ -1,7 +1,14 @@
 /**
  * Provider Abstraction Layer
  * Decouples notification sending from specific vendor SDKs.
- * Use getEmailProvider() / getSmsProvider() everywhere — never import vendor clients directly in routes.
+ * Use getEmailProvider() / getSmsProvider() / getSmsFromNumber() everywhere
+ * — never import vendor clients or read TWILIO_* / SMS_* env vars in routes.
+ *
+ * SMS provider selection (checked in order):
+ *   SMS_PROVIDER=telnyx → TelnyxSmsProvider (recommended, no Twilio dependency)
+ *   SMS_PROVIDER=twilio  → TwilioSmsProvider (legacy, kept for backward compat)
+ *   TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM_NUMBER set → TwilioSmsProvider
+ *   otherwise           → NullSmsProvider (logs intent, never sends)
  */
 
 import { getResendClient, getFromEmail } from "../resendClient";
@@ -40,7 +47,7 @@ class NullEmailProvider implements EmailProvider {
 
 class NullSmsProvider implements SmsProvider {
   async send(opts: SmsSendOptions): Promise<void> {
-    console.log(`[NullSmsProvider] Would send SMS to ${opts.to} — body: "${opts.body.slice(0, 60)}..." (Twilio not configured)`);
+    console.log(`[NullSmsProvider] Would send SMS to ${opts.to}: "${opts.body.slice(0, 60)}…" (SMS provider not configured — set SMS_PROVIDER + credentials)`);
   }
 }
 
@@ -49,9 +56,7 @@ class NullSmsProvider implements SmsProvider {
 class ResendEmailProvider implements EmailProvider {
   async send(opts: EmailSendOptions): Promise<void> {
     const client = getResendClient();
-    if (!client) {
-      throw new Error("ResendEmailProvider: RESEND_API_KEY not set");
-    }
+    if (!client) throw new Error("ResendEmailProvider: RESEND_API_KEY not set");
     const payload: Record<string, unknown> = {
       from: opts.from,
       to: opts.to,
@@ -63,7 +68,49 @@ class ResendEmailProvider implements EmailProvider {
   }
 }
 
-// ─── Twilio SMS Provider (fetch-based — no Twilio npm package) ────────────────
+// ─── Telnyx SMS Provider (recommended non-Twilio option) ─────────────────────
+// REST API, fetch-based — no npm package needed.
+// Required env vars:
+//   SMS_PROVIDER=telnyx
+//   SMS_API_KEY=<Telnyx API key>
+//   SMS_FROM_NUMBER=<E.164 number or messaging profile ID>
+//   SMS_MESSAGING_PROFILE_ID=<optional, for A2P campaigns>
+
+class TelnyxSmsProvider implements SmsProvider {
+  private readonly apiKey: string;
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+
+  async send(opts: SmsSendOptions): Promise<void> {
+    const payload: Record<string, unknown> = {
+      from: opts.from,
+      to: opts.to,
+      text: opts.body,
+    };
+    const profileId = process.env.SMS_MESSAGING_PROFILE_ID;
+    if (profileId) payload.messaging_profile_id = profileId;
+
+    const response = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`TelnyxSmsProvider: HTTP ${response.status} — ${errorText.slice(0, 200)}`);
+    }
+  }
+}
+
+// ─── Twilio SMS Provider (legacy, kept for backward compatibility) ─────────────
+// Fetch-based — does not require the twilio npm package at runtime.
+// Activated when SMS_PROVIDER=twilio OR when TWILIO_* env vars are all set.
 
 class TwilioSmsProvider implements SmsProvider {
   private readonly accountSid: string;
@@ -78,11 +125,7 @@ class TwilioSmsProvider implements SmsProvider {
     const url = `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}/Messages.json`;
     const credentials = Buffer.from(`${this.accountSid}:${this.authToken}`).toString("base64");
 
-    const body = new URLSearchParams({
-      To: opts.to,
-      From: opts.from,
-      Body: opts.body,
-    });
+    const body = new URLSearchParams({ To: opts.to, From: opts.from, Body: opts.body });
 
     const response = await fetch(url, {
       method: "POST",
@@ -102,32 +145,44 @@ class TwilioSmsProvider implements SmsProvider {
 
 // ─── Factory Functions ────────────────────────────────────────────────────────
 
-/**
- * Returns a ResendEmailProvider when RESEND_API_KEY is set,
- * otherwise returns a NullEmailProvider that logs intent.
- */
 export function getEmailProvider(): EmailProvider {
-  if (process.env.RESEND_API_KEY) {
-    return new ResendEmailProvider();
-  }
+  if (process.env.RESEND_API_KEY) return new ResendEmailProvider();
   return new NullEmailProvider();
 }
 
 /**
- * Returns a TwilioSmsProvider when all Twilio credentials are set,
- * otherwise returns a NullSmsProvider that logs intent.
+ * Returns the configured SMS provider, or NullSmsProvider if none is configured.
+ * Check SMS_PROVIDER first, then fall back to detecting TWILIO_* vars for
+ * backward compatibility.
  */
 export function getSmsProvider(): SmsProvider {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_FROM_NUMBER;
-  if (sid && token && from) {
-    return new TwilioSmsProvider(sid, token);
+  const provider = (process.env.SMS_PROVIDER || "").toLowerCase();
+
+  if (provider === "telnyx") {
+    const apiKey = process.env.SMS_API_KEY;
+    if (apiKey) return new TelnyxSmsProvider(apiKey);
+    console.warn("[getSmsProvider] SMS_PROVIDER=telnyx but SMS_API_KEY not set — using NullSmsProvider");
+    return new NullSmsProvider();
   }
+
+  // Explicit twilio selection OR legacy: TWILIO vars all set
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  if (provider === "twilio" || (twilioSid && twilioToken && process.env.TWILIO_FROM_NUMBER)) {
+    if (twilioSid && twilioToken) return new TwilioSmsProvider(twilioSid, twilioToken);
+  }
+
   return new NullSmsProvider();
 }
 
 /**
- * Convenience: the configured from-address for emails.
+ * Returns the configured from-number for SMS sends.
+ * Prefers SMS_FROM_NUMBER (provider-neutral), falls back to TWILIO_FROM_NUMBER
+ * for backward compatibility.
  */
+export function getSmsFromNumber(): string {
+  return process.env.SMS_FROM_NUMBER || process.env.TWILIO_FROM_NUMBER || "";
+}
+
+/** Convenience: the configured from-address for emails. */
 export { getFromEmail };

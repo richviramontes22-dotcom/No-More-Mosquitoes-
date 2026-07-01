@@ -12,7 +12,7 @@
  *  - NullProvider-compatible: works even if email / SMS creds are absent
  */
 
-import { getEmailProvider, getSmsProvider, getFromEmail } from "./providers/index";
+import { getEmailProvider, getSmsProvider, getSmsFromNumber, getFromEmail } from "./providers/index";
 import { supabaseAdmin } from "../../lib/supabaseAdmin";
 import { supabase } from "../../lib/supabase";
 
@@ -221,7 +221,7 @@ function buildAdminAlertSms(event: AdminAlertEvent): string {
 async function sendAdminSms(event: AdminAlertEvent, phones: string[]): Promise<boolean> {
   if (!phones.length) return false;
   const provider = getSmsProvider();
-  const fromNumber = process.env.TWILIO_FROM_NUMBER || "";
+  const fromNumber = getSmsFromNumber();
   if (!fromNumber) return false;
 
   const body = buildAdminAlertSms(event);

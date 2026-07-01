@@ -40,6 +40,7 @@ import BlogPost from "./pages/BlogPost";
 import Contact from "./pages/Contact";
 import Safety from "./pages/Safety";
 import Login from "./pages/Login";
+import QuoteInvitePage from "./pages/QuoteInvite";
 import Onboarding from "./pages/Onboarding";
 import LegalAcceptance from "./pages/LegalAcceptance";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -172,6 +173,7 @@ const App = () => (
                     <Route path="/licenses" element={<Licenses />} />
                     <Route path="/schedule" element={<Schedule />} />
                     <Route path="/login" element={<Login />} />
+                    {/* /quote-invite/:token moved to CheckoutLayout below — focused funnel, no footer */}
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
@@ -288,6 +290,8 @@ const App = () => (
 
                   {/* Checkout / onboarding — stripped layout, no nav or footer */}
                   <Route element={<CheckoutLayout />}>
+                    {/* Quote invite: focused funnel, no site footer or nav */}
+                    <Route path="/quote-invite/:token" element={<QuoteInvitePage />} />
                     <Route path="/onboarding" element={
                       <RequireAuth>
                         <Onboarding />

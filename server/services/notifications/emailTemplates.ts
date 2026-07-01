@@ -19,6 +19,7 @@ function layout(content: string, preheader = "", profileId?: string | null): str
   const companyAddress = getCompanyAddress();
   const supportEmail   = getSupportEmail();
   const appUrl         = process.env.APP_BASE_URL || "https://nomoremosquitoes.us";
+  const logoUrl        = `${appUrl}/nmm-logo.png`;
   const year           = new Date().getFullYear();
   const unsubUrl       = profileId
     ? `${appUrl}/api/unsubscribe?unsub=${encodeURIComponent(profileId)}`
@@ -38,11 +39,21 @@ function layout(content: string, preheader = "", profileId?: string | null): str
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid ${BORDER};">
 
-        <!-- Header -->
+        <!-- Header with logo -->
         <tr>
-          <td style="background-color:${BRAND_GREEN};padding:32px 40px;text-align:center;">
-            <p style="margin:0;font-family:${FONT};font-size:22px;font-weight:bold;color:#ffffff;letter-spacing:0.5px;">No More Mosquitoes</p>
-            <p style="margin:6px 0 0;font-size:13px;color:rgba(255,255,255,0.75);">Professional Mosquito Control</p>
+          <td style="background-color:${BRAND_GREEN};padding:28px 40px 24px;text-align:center;">
+            <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td style="vertical-align:middle;padding-right:14px;">
+                  <img src="${logoUrl}" alt="No More Mosquitoes logo" width="64" height="64"
+                    style="display:block;width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);" />
+                </td>
+                <td style="vertical-align:middle;text-align:left;">
+                  <p style="margin:0;font-family:${FONT};font-size:20px;font-weight:bold;color:#ffffff;letter-spacing:0.3px;line-height:1.2;">No More Mosquitoes</p>
+                  <p style="margin:3px 0 0;font-size:12px;color:rgba(255,255,255,0.8);letter-spacing:0.05em;">PREMIUM INSECT CONTROL · CALIFORNIA</p>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
 
@@ -828,40 +839,104 @@ export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; ht
 export interface AdminQuoteEmailData {
   recipientName: string;
   propertyAddress: string;
-  priceLabel: string;     // e.g. "$80 every 3 weeks" or "$999 / year"
-  programLabel: string;   // e.g. "Recurring Service" | "One-Time Treatment" | "Annual Plan"
+  priceLabel: string;        // e.g. "$80 every 3 weeks" or "$999 / year"
+  programLabel: string;      // e.g. "Recurring Service" | "One-Time Treatment" | "Annual Plan"
+  cadenceDescription?: string; // e.g. "Treatments every 3 weeks" (optional extra detail)
   quoteLinkUrl: string;
   supportEmail: string;
+  supportPhone?: string;
 }
 
 export function buildAdminQuoteEmail(data: AdminQuoteEmailData): { subject: string; html: string; text: string } {
-  const subject = `Your mosquito control quote — ${data.propertyAddress}`;
+  const appUrl       = process.env.APP_BASE_URL || "https://nomoremosquitoes.us";
+  const supportPhone = data.supportPhone || process.env.SUPPORT_PHONE || "";
+  const firstName    = data.recipientName.split(" ")[0] || data.recipientName;
+  const subject      = `Your No More Mosquitoes quote — ${data.propertyAddress}`;
+
   const html = layout(
-    `<h1 style="margin:0 0 8px;font-family:${FONT};font-size:26px;color:${BRAND_GREEN};">Here's your quote</h1>
-    <p style="margin:0 0 28px;color:${TEXT_MUTED};font-size:15px;">Hi ${data.recipientName}, a member of our team put together a mosquito control quote for your property.</p>
+    `<!-- Greeting -->
+    <h1 style="margin:0 0 6px;font-family:${FONT};font-size:28px;font-weight:bold;color:${BRAND_GREEN};">Hi ${firstName} — your quote is ready!</h1>
+    <p style="margin:0 0 28px;color:${TEXT_MUTED};font-size:15px;line-height:1.6;">
+      We put together a personalized mosquito control quote for your property. Everything is pre-filled — setup only takes a minute.
+    </p>
 
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
-      ${infoRow("Property", data.propertyAddress)}
-      ${infoRow("Plan", data.programLabel)}
-      ${infoRow("Price", data.priceLabel)}
-    </table>
+    <!-- Quote summary card -->
+    <div style="background:${BRAND_LIGHT};border:1px solid #bbf7d0;border-radius:10px;padding:24px 28px;margin-bottom:28px;">
+      <p style="margin:0 0 14px;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:0.1em;color:${BRAND_GREEN};">YOUR QUOTE SUMMARY</p>
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        ${infoRow("Property", data.propertyAddress)}
+        ${infoRow("Plan", data.programLabel)}
+        ${infoRow("Price", data.priceLabel)}
+        ${data.cadenceDescription ? infoRow("Schedule", data.cadenceDescription) : ""}
+      </table>
+    </div>
 
-    <p style="margin:0 0 8px;font-size:14px;color:${TEXT_DARK};">Click below to set up your account — your address and plan are already filled in, so it only takes a minute.</p>
+    <!-- What happens next -->
+    <div style="margin-bottom:28px;">
+      <p style="margin:0 0 10px;font-size:14px;font-weight:600;color:${TEXT_DARK};">Here's what happens next:</p>
+      <table cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr>
+          <td style="padding:8px 0;vertical-align:top;">
+            <span style="display:inline-block;width:24px;height:24px;background:${BRAND_GREEN};border-radius:50%;text-align:center;font-size:12px;font-weight:bold;color:#fff;line-height:24px;margin-right:10px;">1</span>
+            <span style="font-size:14px;color:${TEXT_DARK};">Click "Set Up My Account" below</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;vertical-align:top;">
+            <span style="display:inline-block;width:24px;height:24px;background:${BRAND_GREEN};border-radius:50%;text-align:center;font-size:12px;font-weight:bold;color:#fff;line-height:24px;margin-right:10px;">2</span>
+            <span style="font-size:14px;color:${TEXT_DARK};">Confirm your info — your address and plan are already saved</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;vertical-align:top;">
+            <span style="display:inline-block;width:24px;height:24px;background:${BRAND_GREEN};border-radius:50%;text-align:center;font-size:12px;font-weight:bold;color:#fff;line-height:24px;margin-right:10px;">3</span>
+            <span style="font-size:14px;color:${TEXT_DARK};">Schedule your first treatment — we'll take it from there</span>
+          </td>
+        </tr>
+      </table>
+    </div>
 
-    ${ctaButton("Set Up My Account", data.quoteLinkUrl)}
+    <!-- CTA -->
+    ${ctaButton("Set Up My Account →", data.quoteLinkUrl)}
 
-    <p style="font-size:13px;color:${TEXT_MUTED};margin-top:8px;">Questions? Reply to this email or contact us at <a href="mailto:${data.supportEmail}" style="color:${BRAND_GREEN};">${data.supportEmail}</a></p>`,
-    `Your mosquito control quote for ${data.propertyAddress} is ready`
+    <!-- Trust line -->
+    <div style="background:#f9fafb;border-radius:8px;padding:14px 18px;margin-top:24px;margin-bottom:20px;">
+      <p style="margin:0;font-size:13px;color:${TEXT_MUTED};text-align:center;line-height:1.5;">
+        🔒 <strong>This link is personalized for you</strong> — your address and plan are pre-filled so setup is quick and accurate.
+      </p>
+    </div>
+
+    <!-- Support -->
+    <p style="font-size:13px;color:${TEXT_MUTED};margin:0;">
+      Questions? Reply to this email${supportPhone ? `, call or text us at <strong>${supportPhone}</strong>,` : ""} or reach us at
+      <a href="mailto:${data.supportEmail}" style="color:${BRAND_GREEN};text-decoration:none;">${data.supportEmail}</a>.
+      We're happy to walk you through anything.
+    </p>`,
+    `Your No More Mosquitoes quote for ${data.propertyAddress} — ready to set up in 60 seconds`
   );
+
   const text = [
-    `Hi ${data.recipientName},`,
+    `Hi ${firstName},`,
     ``,
-    `A member of our team put together a mosquito control quote for ${data.propertyAddress}:`,
-    `${data.programLabel} — ${data.priceLabel}`,
+    `Your No More Mosquitoes quote is ready! Here are your details:`,
     ``,
-    `Set up your account (address and plan pre-filled): ${data.quoteLinkUrl}`,
+    `  Property : ${data.propertyAddress}`,
+    `  Plan     : ${data.programLabel}`,
+    `  Price    : ${data.priceLabel}`,
+    data.cadenceDescription ? `  Schedule : ${data.cadenceDescription}` : ``,
     ``,
-    `Questions? Contact us at ${data.supportEmail}`,
-  ].join("\n");
+    `To finish setting up your account — your address and plan are pre-filled:`,
+    `${data.quoteLinkUrl}`,
+    ``,
+    `What happens next:`,
+    `  1. Click the link above`,
+    `  2. Confirm your info (address and plan already saved)`,
+    `  3. Schedule your first treatment`,
+    ``,
+    `Questions? Reply to this email${supportPhone ? ` or call/text ${supportPhone}` : ""} or reach us at ${data.supportEmail}.`,
+    ``,
+    `— The No More Mosquitoes team`,
+  ].filter(l => l !== null && l !== undefined).join("\n");
+
   return { subject, html, text };
 }

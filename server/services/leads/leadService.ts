@@ -56,6 +56,7 @@ export interface Lead {
   assigned_to: string | null;
   quote_token: string | null;
   quote_token_expires_at: string | null;
+  invite_accepted_at: string | null;
   first_seen_at: string;
   last_seen_at: string;
   converted_at: string | null;
@@ -1122,6 +1123,149 @@ export async function getLeadByQuoteToken(token: string): Promise<Lead | null> {
   if (!data.quote_token_expires_at || new Date(data.quote_token_expires_at).getTime() < Date.now()) return null;
 
   return data as Lead;
+}
+
+// ─── Quote Invite functions (quote_invites table) ────────────────────────────
+
+export interface QuoteInvite {
+  id: string;
+  lead_id: string | null;
+  token: string;
+  status: "pending" | "accepted" | "expired" | "revoked";
+  quote_address: string;
+  quote_city: string | null;
+  quote_state: string | null;
+  quote_zip: string | null;
+  quote_plan_type: string | null;
+  quote_cadence_days: number | null;
+  quote_price_cents: number | null;
+  quoted_acreage: number | null;
+  price_label: string | null;
+  program_label: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  sent_by: string | null;
+  expires_at: string | null;
+  accepted_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateQuoteInviteParams {
+  leadId: string;
+  address: string;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  planType?: string | null;
+  cadenceDays?: number | null;
+  priceCents?: number | null;
+  acreage?: number | null;
+  priceLabel?: string | null;
+  programLabel?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  sentBy?: string | null;
+  expiresInDays?: number;
+}
+
+/**
+ * Creates a new quote_invite row and revokes any previous pending invites for
+ * the same lead. Returns the token (raw, included in the invite link).
+ */
+export async function createQuoteInvite(params: CreateQuoteInviteParams): Promise<{ invite: QuoteInvite; token: string } | null> {
+  const token = randomBytes(24).toString("base64url");
+  const expiresInDays = params.expiresInDays ?? 14;
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
+
+  // Revoke existing pending invites for this lead
+  await db
+    .from("quote_invites")
+    .update({ status: "revoked", revoked_at: new Date().toISOString() })
+    .eq("lead_id", params.leadId)
+    .eq("status", "pending");
+
+  const { data, error } = await db
+    .from("quote_invites")
+    .insert({
+      lead_id:            params.leadId,
+      token,
+      status:             "pending",
+      quote_address:      params.address,
+      quote_city:         params.city ?? null,
+      quote_state:        params.state ?? null,
+      quote_zip:          params.zip ?? null,
+      quote_plan_type:    params.planType ?? null,
+      quote_cadence_days: params.cadenceDays ?? null,
+      quote_price_cents:  params.priceCents ?? null,
+      quoted_acreage:     params.acreage ?? null,
+      price_label:        params.priceLabel ?? null,
+      program_label:      params.programLabel ?? null,
+      customer_name:      params.customerName ?? null,
+      customer_email:     params.customerEmail ?? null,
+      customer_phone:     params.customerPhone ?? null,
+      sent_by:            params.sentBy ?? null,
+      expires_at:         expiresAt,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("[leadService] createQuoteInvite failed:", error?.message);
+    return null;
+  }
+
+  // Also keep the legacy leads.quote_token for backward compat (the old
+  // GET /api/leads/quote-link/:token endpoint still reads from there).
+  await db.from("leads").update({
+    quote_token: token,
+    quote_token_expires_at: expiresAt,
+  }).eq("id", params.leadId);
+
+  return { invite: data as QuoteInvite, token };
+}
+
+/**
+ * Resolves a raw token to its quote_invite row.
+ * Returns null if the token is missing, not found, expired, or not pending.
+ */
+export async function getQuoteInviteByToken(token: string): Promise<QuoteInvite | null> {
+  const { data } = await db
+    .from("quote_invites")
+    .select("*")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (!data) return null;
+  if (data.status === "revoked") return null;
+  if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) {
+    // Mark as expired if it hasn't been yet
+    await db.from("quote_invites").update({ status: "expired" }).eq("id", data.id);
+    return null;
+  }
+  return data as QuoteInvite;
+}
+
+/**
+ * Marks a quote invite as accepted. Called when the customer completes
+ * account setup from the /quote-invite/:token page.
+ */
+export async function acceptQuoteInvite(inviteId: string, customerId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db.from("quote_invites").update({ status: "accepted", accepted_at: now }).eq("id", inviteId);
+  // Also update the lead so the Lead Inbox can show converted status
+  const { data: invite } = await db.from("quote_invites").select("lead_id").eq("id", inviteId).maybeSingle();
+  if (invite?.lead_id) {
+    await db.from("leads").update({
+      converted_customer_id: customerId,
+      converted_at: now,
+      invite_accepted_at: now,
+      status: "scheduled",
+    }).eq("id", invite.lead_id);
+  }
 }
 
 /**

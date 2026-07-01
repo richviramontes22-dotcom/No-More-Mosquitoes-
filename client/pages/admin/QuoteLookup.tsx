@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { adminApi, AdminApiError } from "@/lib/adminApi";
 import { GoogleAddressAutocomplete, type GoogleAddressAutocompleteResult } from "@/components/common/GoogleAddressAutocomplete";
 import { CADENCE_DAYS_OPTIONS, CADENCE_LABELS, lookupAnnualCents, lookupCadenceCents, lookupOneTimeCents } from "@shared/pricing";
-import { Loader2, MapPin, Mail, CheckCircle2, Link as LinkIcon } from "lucide-react";
+import { Loader2, MapPin, Mail, CheckCircle2, Link as LinkIcon, Copy, RotateCcw, ExternalLink } from "lucide-react";
 
 type Program = "subscription" | "one_time" | "annual";
 
@@ -341,17 +341,48 @@ const AdminQuoteLookup = () => {
                 </div>
 
                 {sentResult && (
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-4 space-y-2">
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-4 space-y-3">
                     <p className="text-sm font-semibold text-green-800 flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" /> Quote sent
+                      <CheckCircle2 className="h-4 w-4" /> Quote sent successfully
                     </p>
                     <p className="text-xs text-green-700">
-                      {sentResult.email && "Sent by email. "}
-                      {sentResult.sms && "Sent by text. "}
+                      {sentResult.email && "Email delivered. "}
+                      {sentResult.sms && "Text message sent. "}
+                      The customer will see a branded setup page — not the generic login.
                     </p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <LinkIcon className="h-3 w-3" /> {sentResult.quoteLinkUrl}
-                    </p>
+                    <div className="bg-white rounded-lg border border-green-100 p-3 space-y-2">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Invite link</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-muted-foreground flex-1 truncate font-mono">{sentResult.quoteLinkUrl}</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(sentResult.quoteLinkUrl);
+                            toast({ title: "Link copied to clipboard" });
+                          }}
+                          className="shrink-0 rounded-md border border-border/60 bg-background px-2 py-1 text-xs font-medium hover:bg-muted/60 flex items-center gap-1"
+                        >
+                          <Copy className="h-3 w-3" /> Copy
+                        </button>
+                        <a
+                          href={sentResult.quoteLinkUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="shrink-0 rounded-md border border-border/60 bg-background px-2 py-1 text-xs font-medium hover:bg-muted/60 flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Preview
+                        </a>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setSentResult(null); }}
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 underline underline-offset-2"
+                      >
+                        <RotateCcw className="h-3 w-3" /> Resend or change channel
+                      </button>
+                    </div>
                   </div>
                 )}
               </>

@@ -12,14 +12,16 @@ import {
   updateFollowUpStatus,
   listFollowUps,
   upsertLeadFromAdminQuote,
-  generateLeadQuoteToken,
+  createQuoteInvite,
+  getQuoteInviteByToken,
+  acceptQuoteInvite,
   getLeadByQuoteToken,
   recordLeadActivity,
   type ListLeadsParams,
 } from "../services/leads/leadService";
 import { lookupParcel, isError } from "../services/parcel/parcelLookupService";
 import { buildPricingQuote } from "../services/parcel/pricingQuote";
-import { getEmailProvider, getSmsProvider, getFromEmail } from "../services/notifications/providers/index";
+import { getEmailProvider, getSmsProvider, getSmsFromNumber, getFromEmail } from "../services/notifications/providers/index";
 import { buildAdminQuoteEmail } from "../services/notifications/emailTemplates";
 import { buildAdminQuoteSms } from "../services/notifications/smsTemplates";
 import { logNotification } from "../services/notifications/notificationLogger";
@@ -374,16 +376,31 @@ router.post("/leads/:id/send-quote", requireAdmin, async (req, res) => {
     ? `${formatCentsServer(priceCents)} / year`
     : `${formatCentsServer(priceCents)} one-time`;
 
-  const tokenResult = await generateLeadQuoteToken(id);
-  if (!tokenResult) return res.status(500).json({ error: "Failed to generate quote link." });
+  // Create a new quote_invite row (revokes previous pending invites for this lead).
+  const inviteResult = await createQuoteInvite({
+    leadId: id,
+    address: lead.address || "",
+    city: lead.city,
+    state: lead.state,
+    zip: lead.zip,
+    planType: program,
+    cadenceDays: program === "subscription" ? (typeof cadenceDays === "number" ? cadenceDays : null) : null,
+    priceCents,
+    acreage: effectiveAcreage,
+    priceLabel,
+    programLabel,
+    customerName: name?.trim() || lead.name,
+    customerEmail: recipientEmail,
+    customerPhone: recipientPhone,
+    sentBy: req.adminUserId ?? undefined,
+  });
+  if (!inviteResult) return res.status(500).json({ error: "Failed to generate quote invite." });
 
   const appUrl = process.env.APP_BASE_URL || "https://nomoremosquitoes.us";
-  const quoteLinkUrl = `${appUrl}/login?qt=${encodeURIComponent(tokenResult.token)}`;
+  const quoteLinkUrl = `${appUrl}/quote-invite/${inviteResult.token}`;
   const recipientName = name?.trim() || lead.name || "there";
 
-  // Persist the program/cadence on the lead too, so the public quote-link
-  // endpoint and the eventual onboarding pre-fill don't need them passed
-  // separately.
+  // Persist the program/cadence on the lead for the legacy quote-link endpoint.
   await db.from("leads").update({
     program,
     cadence: cadenceLabelForToken,
@@ -393,13 +410,18 @@ router.post("/leads/:id/send-quote", requireAdmin, async (req, res) => {
 
   if (channel === "email" || channel === "both") {
     try {
+      const cadenceDescription = program === "subscription" && cadenceLabelForToken
+        ? `Treatment every ${cadenceLabelForToken} days`
+        : undefined;
       const { subject, html, text } = buildAdminQuoteEmail({
         recipientName,
         propertyAddress: lead.address || "your property",
         priceLabel,
         programLabel,
+        cadenceDescription,
         quoteLinkUrl,
         supportEmail: process.env.SUPPORT_EMAIL || "support@nomoremosquitoes.us",
+        supportPhone: process.env.SUPPORT_PHONE,
       });
       await getEmailProvider().send({ to: recipientEmail, from: getFromEmail(), subject, html, text });
       await logNotification({
@@ -419,19 +441,20 @@ router.post("/leads/:id/send-quote", requireAdmin, async (req, res) => {
   }
 
   if (channel === "sms" || channel === "both") {
-    const fromNumber = process.env.TWILIO_FROM_NUMBER || "";
+    const fromNumber = getSmsFromNumber();
     if (!fromNumber) {
-      console.log("[adminLeads] TWILIO_FROM_NUMBER not set -- skipping SMS for lead", id);
+      console.log("[adminLeads] SMS from-number not configured (SMS_FROM_NUMBER / TWILIO_FROM_NUMBER) — skipping SMS for lead", id);
     } else {
       try {
         const body = buildAdminQuoteSms({ propertyAddress: lead.address || "your property", priceLabel, quoteLinkUrl });
         await getSmsProvider().send({ to: recipientPhone, from: fromNumber, body });
+        const smsProviderName = process.env.SMS_PROVIDER || "twilio";
         await logNotification({
           recipientPhone,
           channel: "sms",
           notificationType: "admin_quote_sent",
           status: "sent",
-          provider: "twilio",
+          provider: smsProviderName,
           sentAt: new Date().toISOString(),
           payload: { lead_id: id },
         });
@@ -490,6 +513,59 @@ router.get("/leads/quote-link/:token", async (req, res) => {
     name: lead.name,
     email: lead.email,
   });
+});
+
+/**
+ * GET /api/quote-invite/:token
+ * Public, unauthenticated. Returns the quote_invite record's safe public
+ * subset — enough to render the /quote-invite/:token page without exposing
+ * any lead PII beyond what was in the original invite.
+ */
+router.get("/quote-invite/:token", async (req, res) => {
+  const { token } = req.params;
+  const invite = await getQuoteInviteByToken(token);
+  if (!invite) {
+    return res.status(404).json({ ok: false, message: "This quote link is invalid, expired, or has already been used." });
+  }
+  return res.json({
+    ok:               true,
+    inviteId:         invite.id,
+    address:          invite.quote_address,
+    city:             invite.quote_city,
+    state:            invite.quote_state,
+    zip:              invite.quote_zip,
+    planType:         invite.quote_plan_type,
+    cadenceDays:      invite.quote_cadence_days,
+    priceCents:       invite.quote_price_cents,
+    acreage:          invite.quoted_acreage,
+    priceLabel:       invite.price_label,
+    programLabel:     invite.program_label,
+    customerName:     invite.customer_name,
+    customerEmail:    invite.customer_email,
+    // phone intentionally omitted — customer enters/confirms it themselves
+    expiresAt:        invite.expires_at,
+  });
+});
+
+/**
+ * POST /api/quote-invite/:token/accept
+ * Public. Called when a customer completes account creation from the
+ * /quote-invite/:token page. Marks the invite as accepted and links the
+ * new (or existing) customer account to the lead.
+ * Body: { customerId: string } — provided by the client after supabase auth.
+ */
+router.post("/quote-invite/:token/accept", async (req, res) => {
+  const { token } = req.params;
+  const { customerId } = req.body ?? {};
+  if (!customerId || typeof customerId !== "string") {
+    return res.status(400).json({ error: "customerId is required." });
+  }
+  const invite = await getQuoteInviteByToken(token);
+  if (!invite) {
+    return res.status(404).json({ ok: false, message: "Quote link is invalid, expired, or already accepted." });
+  }
+  await acceptQuoteInvite(invite.id, customerId);
+  return res.json({ ok: true });
 });
 
 export default router;
