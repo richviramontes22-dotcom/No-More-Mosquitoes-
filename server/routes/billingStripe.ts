@@ -232,7 +232,8 @@ async function getAuthenticatedUser(req: any) {
  * renders incorrectly, these endpoints will refuse to serve unpaid users.
  */
 async function requireActiveSubscription(user: any): Promise<void> {
-  const { data: sub } = await supabaseAdmin
+  const db = supabaseAdmin ?? supabase;
+  const { data: sub } = await db
     .from("subscriptions")
     .select("id, status")
     .eq("user_id", user.id)
@@ -1376,25 +1377,6 @@ router.post("/cancel-subscription", async (req, res) => {
         invoice_now: "false" // Don't create an invoice for remaining time
       }).toString()
     });
-
-    // Mark the property as cancelled in the database by updating metadata
-    const { data: profileRows2 } = await supabase
-      .from("profiles")
-      .select("subscription_metadata")
-      .eq("id", user.id)
-      .limit(1);
-    const supabaseUser = Array.isArray(profileRows2) ? profileRows2[0] : null;
-
-    if (supabaseUser) {
-      // Update subscription metadata to mark as cancelled
-      const metadata = supabaseUser.subscription_metadata || {};
-      metadata[`property_${propertyId}_cancelled_at`] = new Date().toISOString();
-
-      await supabase
-        .from("profiles")
-        .update({ subscription_metadata: metadata })
-        .eq("id", user.id);
-    }
 
     res.json({
       success: true,

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { PageHero, CtaBand } from "@/components/page";
 import Seo from "@/components/seo/Seo";
 import { Button } from "@/components/ui/button";
@@ -204,12 +205,12 @@ const Contact = () => {
                   <p className="text-muted-foreground">
                     Orange County, California
                   </p>
-                  <a
-                    href="/service-area"
+                  <Link
+                    to="/service-area"
                     className="text-primary hover:underline text-sm mt-1 inline-block"
                   >
                     View service areas →
-                  </a>
+                  </Link>
                 </div>
               </div>
 
@@ -235,24 +236,24 @@ const Contact = () => {
                 <h3 className="font-semibold text-lg mb-3">Quick Links</h3>
                 <ul className="space-y-2 text-sm">
                   <li>
-                    <a href="/pricing" className="text-primary hover:underline">
+                    <Link to="/pricing" className="text-primary hover:underline">
                       View pricing
-                    </a>
+                    </Link>
                   </li>
                   <li>
-                    <a href="/schedule" className="text-primary hover:underline">
+                    <Link to="/schedule" className="text-primary hover:underline">
                       Schedule service
-                    </a>
+                    </Link>
                   </li>
                   <li>
-                    <a href="/faq" className="text-primary hover:underline">
+                    <Link to="/faq" className="text-primary hover:underline">
                       FAQ
-                    </a>
+                    </Link>
                   </li>
                   <li>
-                    <a href="/login" className="text-primary hover:underline">
+                    <Link to="/login" className="text-primary hover:underline">
                       Customer login
-                    </a>
+                    </Link>
                   </li>
                 </ul>
               </div>

@@ -227,6 +227,7 @@ router.post("/assignments/:id/status", async (req, res) => {
 
     // Set lifecycle timestamps only on first transition — never overwrite
     if (status === "en_route"    && !current.en_route_at)  update.en_route_at  = now;
+    if (status === "in_progress" && !current.arrived_at)   update.arrived_at   = now;
     if (status === "in_progress" && !current.started_at)   update.started_at   = now;
     if (status === "completed"   && !current.completed_at) update.completed_at = now;
 

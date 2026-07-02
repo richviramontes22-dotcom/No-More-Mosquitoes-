@@ -176,6 +176,20 @@ export function getSmsProvider(): SmsProvider {
 }
 
 /**
+ * Returns the name of the active SMS provider (for health/debug endpoints).
+ * Never exposes credentials — only the provider identifier string.
+ */
+export function getSmsProviderName(): "telnyx" | "twilio" | "null" {
+  const provider = (process.env.SMS_PROVIDER || "").toLowerCase();
+  if (provider === "telnyx" && process.env.SMS_API_KEY) return "telnyx";
+  if (provider === "twilio" && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) return "twilio";
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  if (twilioSid && twilioToken && process.env.TWILIO_FROM_NUMBER) return "twilio";
+  return "null";
+}
+
+/**
  * Returns the configured from-number for SMS sends.
  * Prefers SMS_FROM_NUMBER (provider-neutral), falls back to TWILIO_FROM_NUMBER
  * for backward compatibility.

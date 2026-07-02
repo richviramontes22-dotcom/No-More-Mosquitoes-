@@ -257,6 +257,34 @@ router.post("/onboarding/:assignmentId/upload", async (req, res) => {
 });
 
 /**
+ * POST /api/employee/onboarding/consent/grant
+ * Grants GPS consent — sets gps_consent_at on employee record and logs audit event.
+ * Mirrors the withdrawal endpoint so both paths have server-side audit trails.
+ */
+router.post("/onboarding/consent/grant", async (req, res) => {
+  const actor = await getAuthEmployee(req);
+  if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+  const now = new Date().toISOString();
+  const { error } = await db.from("employees")
+    .update({ gps_consent_at: now })
+    .eq("id", actor.employeeId);
+
+  if (error) {
+    console.error("[employeeOnboarding] GPS consent grant error:", error.message);
+    return res.status(500).json({ error: "Failed to grant GPS consent" });
+  }
+
+  logAudit(actor.userId, "consent_granted", "employee", actor.employeeId, {
+    type: "gps_consent",
+    is_test: actor.isTest,
+  });
+
+  console.log(`[employeeOnboarding] GPS consent granted for employee ${actor.employeeId}`);
+  return res.json({ ok: true, gps_consent_at: now });
+});
+
+/**
  * POST /api/employee/onboarding/consent/withdraw
  * Withdraws GPS consent — clears gps_consent_at on employee record.
  */

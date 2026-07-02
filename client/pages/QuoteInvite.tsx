@@ -85,6 +85,7 @@ const QuoteInvitePage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     if (!invite || !supabase) return;
     if (!firstName.trim()) { toast({ title: "First name is required.", variant: "destructive" }); return; }
     if (!email.trim()) { toast({ title: "Email is required.", variant: "destructive" }); return; }
@@ -137,12 +138,24 @@ const QuoteInvitePage = () => {
 
       if (!userId) throw new Error("Could not determine user account.");
 
-      // Mark the invite accepted on the server
-      await fetch(`/api/quote-invite/${encodeURIComponent(token!)}/accept`, {
+      // Get the current session token so the server can verify identity
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) throw new Error("Session not available. Please try again.");
+
+      // Mark the invite accepted — server verifies the JWT and derives userId server-side
+      const acceptRes = await fetch(`/api/quote-invite/${encodeURIComponent(token!)}/accept`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ customerId: userId }),
       });
+      if (!acceptRes.ok) {
+        const errBody = await acceptRes.json().catch(() => ({}));
+        throw new Error(errBody.message || errBody.error || "Failed to claim your quote. It may have already been used.");
+      }
 
       // Pre-fill onboarding with the locked quote details (same shape as the
       // normal pendingOnboarding path, so Onboarding.tsx works without changes)

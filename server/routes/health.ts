@@ -18,6 +18,7 @@ import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { getStripeMode } from "../lib/stripeMode";
 import { flags } from "../lib/featureFlags";
 import { detectCountyFromZip } from "../services/parcel/countyDetector";
+import { getSmsProviderName } from "../services/notifications/providers/index";
 
 const router = Router();
 const db = supabaseAdmin ?? supabase;
@@ -84,12 +85,16 @@ router.get("/health/stripe", (req: any, res) => {
 
 // ─── GET /api/health/email ────────────────────────────────────────────────────
 router.get("/health/email", (req: any, res) => {
+  const smsProvider = getSmsProviderName();
   res.json({
     ok: !!process.env.RESEND_API_KEY,
     configured: !!process.env.RESEND_API_KEY,
     fromEmailConfigured: !!process.env.RESEND_FROM_EMAIL,
     reminderEmailsEnabled: flags.reminderEmails(),
     reminderDryRun: flags.reminderDryRun(),
+    smsProvider,
+    smsDryRun: smsProvider === "null",
+    supportPhoneConfigured: !!process.env.SUPPORT_PHONE,
     requestId: req.requestId,
   });
 });

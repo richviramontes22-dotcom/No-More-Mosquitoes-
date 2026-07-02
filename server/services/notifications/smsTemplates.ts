@@ -1,3 +1,6 @@
+if (!process.env.SUPPORT_PHONE) {
+  console.warn("[smsTemplates] SUPPORT_PHONE env var not set — SMS messages will contain a placeholder phone number. Set SUPPORT_PHONE in your environment.");
+}
 const SUPPORT_PHONE = process.env.SUPPORT_PHONE || "(949) 555-0100";
 const APP_URL = process.env.APP_BASE_URL || "https://nomoremosquitoes.us";
 

@@ -259,9 +259,10 @@ const AssignmentDetail = () => {
 
       if (storageErr) throw storageErr;
 
-      const { data: urlData } = supabase.storage.from(JOB_MEDIA_BUCKET).getPublicUrl(path);
+      // Store the storage path (not a public URL) — bucket is private.
+      // Signed URLs are generated at display time by the viewer.
       const mediaType: "photo" | "video" = file.type.startsWith("video/") ? "video" : "photo";
-      const metadata = { url: urlData.publicUrl, media_type: mediaType };
+      const metadata = { url: path, media_type: mediaType };
 
       try {
         const res = await fetch(`/api/employee/assignments/${assignment.id}/media`, {

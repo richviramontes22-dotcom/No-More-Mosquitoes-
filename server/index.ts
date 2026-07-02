@@ -60,7 +60,19 @@ export function createServer() {
   const app = express();
 
   // Middleware
-  app.use(cors());
+  const allowedOrigins = [
+    process.env.APP_BASE_URL || "https://nomoremosquitoes.us",
+    "http://localhost:8080",
+    "http://localhost:3000",
+  ];
+  app.use(cors({
+    origin: (origin, cb) => {
+      // Allow server-to-server calls (no origin) and known domains
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("CORS: origin not allowed"), false);
+    },
+    credentials: true,
+  }));
   app.use(requestIdMiddleware); // attaches req.requestId + x-request-id response header
 
   // Webhook needs raw body before express.json()
@@ -78,39 +90,7 @@ export function createServer() {
   app.get("/api/demo", handleDemo);
   app.post("/api/schedule", handleScheduleRequest);
 
-  app.get("/api/db-check", async (_req, res) => {
-    try {
-      const { supabase } = await import("./lib/supabase");
-
-      const results: Record<string, any> = {};
-
-      // Check Profiles and stripe_customer_id column
-      const { data: profData, error: profError } = await supabase.from("profiles").select("id, stripe_customer_id").limit(1);
-      results.profiles = { success: !profError, error: profError?.message };
-
-      // Check Plans
-      const { data: plansData, error: plansError } = await supabase.from("plans").select("id").limit(1);
-      results.plans = { success: !plansError, error: plansError?.message };
-
-      // Check Subscriptions
-      const { data: subData, error: subError } = await supabase.from("subscriptions").select("id").limit(1);
-      results.subscriptions = { success: !subError, error: subError?.message };
-
-      // Check Payments
-      const { data: payData, error: payError } = await supabase.from("payments").select("id").limit(1);
-      results.payments = { success: !payError, error: payError?.message };
-
-      const allSuccess = Object.values(results).every((r: any) => r.success);
-
-      res.json({
-        connected: allSuccess,
-        results,
-        url: process.env.VITE_SUPABASE_URL ? "Set" : "Missing"
-      });
-    } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
-    }
-  });
+  // /api/db-check removed — replaced by authenticated /api/health/database
 
   // Employee API
   app.use("/api/employee", employeeAuth);

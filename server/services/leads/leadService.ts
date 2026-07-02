@@ -1240,7 +1240,7 @@ export async function getQuoteInviteByToken(token: string): Promise<QuoteInvite 
     .maybeSingle();
 
   if (!data) return null;
-  if (data.status === "revoked") return null;
+  if (data.status === "revoked" || data.status === "accepted") return null;
   if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) {
     // Mark as expired if it hasn't been yet
     await db.from("quote_invites").update({ status: "expired" }).eq("id", data.id);

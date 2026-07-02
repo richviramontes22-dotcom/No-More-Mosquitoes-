@@ -80,16 +80,20 @@ const Profile = () => {
         });
         if (!res.ok) throw new Error("Failed to withdraw consent");
       } else {
-        // Enabling consent via simple profile update
+        // Granting consent — use the server grant endpoint (audit logged)
         if (!navigator.geolocation) {
           toast({ title: "GPS not supported", description: "Your browser does not support geolocation.", variant: "destructive" });
           return;
         }
-        const { error } = await supabase
-          .from("employees")
-          .update({ gps_consent_at: new Date().toISOString() })
-          .eq("id", employee.id);
-        if (error) throw error;
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) throw new Error("Session expired");
+        const res = await fetch("/api/employee/onboarding/consent/grant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) throw new Error("Failed to grant GPS consent");
       }
 
       await queryClient.invalidateQueries({ queryKey: ["employee", user?.id] });

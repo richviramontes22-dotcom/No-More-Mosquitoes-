@@ -549,22 +549,35 @@ router.get("/quote-invite/:token", async (req, res) => {
 
 /**
  * POST /api/quote-invite/:token/accept
- * Public. Called when a customer completes account creation from the
- * /quote-invite/:token page. Marks the invite as accepted and links the
- * new (or existing) customer account to the lead.
- * Body: { customerId: string } — provided by the client after supabase auth.
+ * Requires Bearer token. Called after the customer completes account creation
+ * on /quote-invite/:token. The userId is derived server-side from the JWT —
+ * the client-supplied customerId is accepted only as a fallback hint and must
+ * match the authenticated user, preventing a rogue caller from associating an
+ * invite with an arbitrary account.
  */
 router.post("/quote-invite/:token/accept", async (req, res) => {
   const { token } = req.params;
-  const { customerId } = req.body ?? {};
-  if (!customerId || typeof customerId !== "string") {
-    return res.status(400).json({ error: "customerId is required." });
+
+  // Verify the caller's identity from the Bearer token
+  const authHeader = req.headers.authorization ?? "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!bearerToken) {
+    return res.status(401).json({ error: "Authentication required." });
   }
+
+  const { supabase } = await import("../lib/supabase");
+  const { data: { user }, error: authError } = await supabase.auth.getUser(bearerToken);
+  if (authError || !user) {
+    return res.status(401).json({ error: "Invalid or expired session." });
+  }
+
+  const verifiedCustomerId = user.id;
+
   const invite = await getQuoteInviteByToken(token);
   if (!invite) {
     return res.status(404).json({ ok: false, message: "Quote link is invalid, expired, or already accepted." });
   }
-  await acceptQuoteInvite(invite.id, customerId);
+  await acceptQuoteInvite(invite.id, verifiedCustomerId);
   return res.json({ ok: true });
 });
 

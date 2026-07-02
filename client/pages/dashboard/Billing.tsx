@@ -112,14 +112,12 @@ const Billing = () => {
   // Calculate whether page is truly loading (not just waiting for auth)
   useEffect(() => {
     if (!user?.id) {
-      console.log("[Billing] No userId, clearing");
       setProperties([]);
       setIsLoading(false);
       return;
     }
 
     if (!isHydrated) {
-      console.log("[Billing] Auth not hydrated yet, waiting");
       setIsLoading(true);
       return;
     }
@@ -128,21 +126,6 @@ const Billing = () => {
     // the properties table, which would show unpaid properties as "Active Subscription"
     const nextProperties = subscriptionProperties as Property[];
 
-    // SECTION 8: Debug logging for validation
-    console.log("[Billing] DETAILED STATE:", {
-      authReady: isHydrated,
-      userId: user?.id ? "***" : "none",
-      propertiesStatus,
-      subscriptionsStatus,
-      propertyRowsCount: propertyRows.length,
-      subscriptionPropertiesCount: subscriptionProperties.length,
-      propertiesError: propertiesError?.message,
-      subscriptionsError: subscriptionError?.message,
-      isPropertiesLoading,
-      isSubscriptionLoading,
-      nextPropertiesCount: nextProperties.length
-    });
-
     // Page is loading only if both queries are still loading AND we have no data
     const bothLoadingWithNoData =
       (isPropertiesLoading && propertyRows.length === 0) &&
@@ -150,7 +133,6 @@ const Billing = () => {
 
     setProperties(nextProperties);
     setIsLoading(bothLoadingWithNoData);
-    console.log("[Billing] Setting isLoading to", bothLoadingWithNoData, "Properties count:", nextProperties.length);
   }, [propertyRows, subscriptionProperties, isPropertiesLoading, isSubscriptionLoading, user?.id, propertiesError, subscriptionError, isHydrated, propertiesStatus, subscriptionsStatus, user]);
 
   const handleOpenPortal = async () => {
@@ -165,17 +147,12 @@ const Billing = () => {
 
     setIsOpeningPortal(true);
     try {
-      console.log("[Billing Portal] Starting portal session creation");
-
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
-        console.error("[Billing Portal] No access token available");
         throw new Error("No active session");
       }
-
-      console.log("[Billing Portal] Token obtained, calling /api/billing/create-portal-session");
 
       const response = await withTimeout(fetch("/api/billing/create-portal-session", {
         method: "POST",
@@ -188,31 +165,19 @@ const Billing = () => {
         }),
       }), 10000, "Billing portal session");
 
-      console.log("[Billing Portal] Response status:", response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error("[Billing Portal] API error:", errorData);
         throw new Error(errorData.error || `Server error: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log("[Billing Portal] Portal URL received:", data.url ? "✓ Valid URL" : "✗ No URL");
 
       if (!data.url) {
-        console.error("[Billing Portal] No URL in response:", data);
         throw new Error("No portal URL returned from server");
       }
 
-      console.log("[Billing Portal] Redirecting to Stripe portal");
       window.location.href = data.url;
     } catch (error: any) {
-      console.error("[Billing Portal] Error details:", {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
-      });
-
       let userMessage = error.message;
 
       if (error.message.includes("timed out")) {

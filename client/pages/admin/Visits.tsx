@@ -124,11 +124,18 @@ const Visits = () => {
 
         const techProfileMap = new Map<string, any>(techProfiles?.map((p: any) => [p.id, p] as [string, any]) || []);
         const mediaByAssignment = new Map<string, string>();
-        media?.forEach((m: any) => {
-          if (!mediaByAssignment.has(m.assignment_id)) {
-            mediaByAssignment.set(m.assignment_id, m.url);
-          }
-        });
+        await Promise.all(
+          (media || []).map(async (m: any) => {
+            if (mediaByAssignment.has(m.assignment_id)) return;
+            let url = m.url as string;
+            // Paths stored since bucket went private — generate a 1-hour signed URL
+            if (url && !url.startsWith("http")) {
+              const { data } = await supabase.storage.from("job-media").createSignedUrl(url, 3600);
+              url = data?.signedUrl ?? "";
+            }
+            if (url) mediaByAssignment.set(m.assignment_id, url);
+          })
+        );
 
         // Map and extract unique technicians
         const uniqueTechs = new Set<string>();
