@@ -123,8 +123,34 @@ const Marketplace = () => {
     }
   };
 
-  const handleRequestConsultation = (item: CatalogItem) => {
-    toast({ title: "Consultation request", description: `We'll reach out about ${item.name} within 24 hours.` });
+  const [consultingItemId, setConsultingItemId] = useState<string | null>(null);
+
+  const handleRequestConsultation = async (item: CatalogItem) => {
+    if (consultingItemId === item.id) return;
+    setConsultingItemId(item.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("No active session.");
+
+      const res = await fetch("/api/marketplace/consultation-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ itemId: item.id, itemSlug: item.slug, itemName: item.name }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Request failed.");
+      }
+      toast({
+        title: "Consultation request sent",
+        description: `Our team will follow up about ${item.name} within 24 hours.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Could not submit request", description: err.message, variant: "destructive" });
+    } finally {
+      setConsultingItemId(null);
+    }
   };
 
   return (
@@ -132,9 +158,9 @@ const Marketplace = () => {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <SectionHeading
-          eyebrow="Shop"
-          title="Browse & Manage Orders"
-          description="Add products and services to your cart and view your order history."
+          eyebrow="Add-On Store"
+          title="Enhance Your Protection"
+          description="Professional add-ons and products to complement your mosquito treatment plan."
         />
         {itemCount > 0 && (
           <Button onClick={() => setIsCartOpen(true)} className="rounded-full shadow-brand h-11 self-start md:self-auto">

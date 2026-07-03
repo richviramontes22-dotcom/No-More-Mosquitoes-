@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
+import { createTicket } from "../services/support/ticketService";
+import { notifyAdmin } from "../services/notifications/adminNotificationService";
 
 // Use service role for all server-side DB writes so RLS doesn't block them.
 // The user's identity is already validated via getAuthenticatedUser() before any write.
@@ -382,6 +384,74 @@ router.post("/create-payment-intent", async (req, res) => {
   } catch (e: any) {
     console.error("[Marketplace] PaymentIntent error:", e.message);
     return res.status(e.status || 500).json({ error: e.message || "Failed to create payment." });
+  }
+});
+
+/**
+ * POST /api/marketplace/consultation-request
+ * Records a customer consultation request for a catalog item.
+ * Creates a support ticket and fires an admin notification.
+ */
+router.post("/consultation-request", async (req, res) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    const { itemId, itemSlug, itemName } = req.body as {
+      itemId?: string;
+      itemSlug?: string;
+      itemName?: string;
+    };
+
+    if (!itemName?.trim()) {
+      return res.status(400).json({ error: "itemName is required" });
+    }
+
+    // Fetch customer profile for the ticket
+    const { data: profile } = await db
+      .from("profiles")
+      .select("name, email, phone")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const customerName = profile?.name ?? user.email ?? "Unknown customer";
+    const subject = `Marketplace Consultation Request: ${itemName.trim()}`;
+    const description = [
+      `Item: ${itemName.trim()}`,
+      itemSlug ? `Slug: ${itemSlug}` : null,
+      itemId ? `Item ID: ${itemId}` : null,
+      `Requested by: ${customerName}`,
+      profile?.email ? `Email: ${profile.email}` : null,
+      profile?.phone ? `Phone: ${profile.phone}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const ticket = await createTicket({
+      userId: user.id,
+      subject,
+      description,
+      category: "general",
+      priority: "medium",
+    });
+
+    notifyAdmin({
+      event_type: "marketplace.consultation_requested",
+      severity: "info",
+      title: `Consultation request: ${itemName.trim()}`,
+      body: `${customerName} requested a consultation for "${itemName.trim()}".`,
+      entity_type: "ticket",
+      entity_id: ticket?.id ?? undefined,
+      metadata: {
+        customer_name: customerName,
+        item_name: itemName.trim(),
+        item_slug: itemSlug ?? "",
+        ticket_id: ticket?.id ?? "",
+      },
+    });
+
+    return res.json({ ok: true, ticketId: ticket?.id ?? null });
+  } catch (e: any) {
+    console.error("[Marketplace] Consultation request error:", e.message);
+    return res.status(e.status || 500).json({ error: e.message || "Failed to submit consultation request." });
   }
 });
 

@@ -37,7 +37,7 @@ const RequireCustomerService = ({ children }: { children: ReactNode }) => {
 
   const userRole = profile?.role || user?.role;
   if (!user || !ALLOWED_ROLES.has(userRole as string)) {
-    return <Navigate to="/admin/login" state={{ from: location.pathname }} replace />;
+    return <Navigate to="/employee/login" state={{ from: location.pathname }} replace />;
   }
 
   return <>{children}</>;

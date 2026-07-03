@@ -271,8 +271,9 @@ router.post("/cms/catalog", requireAdmin, async (req, res) => {
 
 /** PATCH /api/admin/cms/catalog/:id */
 router.patch("/cms/catalog/:id", requireAdmin, async (req, res) => {
-  const allowed = ["name", "description", "price_cents", "min_price_cents", "max_price_cents",
-    "price_type", "category", "fulfillment_type", "image_url", "active", "is_featured", "display_order"];
+  const allowed = ["name", "slug", "description", "price_cents", "min_price_cents", "max_price_cents",
+    "price_type", "category", "fulfillment_type", "image_url", "active", "is_featured", "display_order",
+    "requires_property", "requires_schedule", "requires_consultation"];
   const updates: Record<string, any> = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
