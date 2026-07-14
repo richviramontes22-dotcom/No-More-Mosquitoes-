@@ -16,6 +16,7 @@ import marketplaceStripe from "./routes/marketplaceStripe";
 import adminTracking from "./routes/adminTracking";
 import regridRoutes from "./routes/regrid";
 import parcelQuoteRouter from "./routes/parcelQuote";
+import publicQuoteSendRouter from "./routes/publicQuoteSend";
 import stripeWebhooks from "./routes/webhooksStripe";
 import waitlistRouter from "./routes/waitlist";
 import adminSettingsRouter from "./routes/adminSettings";
@@ -216,6 +217,9 @@ export function createServer() {
 
   // Parcel acreage quote API (county GIS adapters + permanent cache)
   app.use("/api/parcel", parcelQuoteRouter);
+
+  // Public quote send (contact info + email/SMS delivery — no auth required)
+  app.use("/api", publicQuoteSendRouter);
 
   // Waitlist API
   app.use("/api/waitlist", waitlistRouter);

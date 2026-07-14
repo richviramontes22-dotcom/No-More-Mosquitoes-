@@ -1,17 +1,14 @@
 import HeroSection from "@/components/sections/HeroSection";
 import QualityAssuranceSection from "@/components/sections/QualityAssuranceSection";
 import PlanCardsSection from "@/components/sections/PlanCardsSection";
-import QuoteWidgetSection from "@/components/sections/QuoteWidgetSection";
 import VideoProofSection from "@/components/sections/VideoProofSection";
 import ScheduleSection from "@/components/sections/ScheduleSection";
 import ContactSection from "@/components/sections/ContactSection";
 import CtaBand from "@/components/page/CtaBand";
 import Seo from "@/components/seo/Seo";
 import { localBusinessSchema, productSchema, serviceSchema } from "@/seo/structuredData";
-import { useTranslation } from "@/hooks/use-translation";
 
 const Index = () => {
-  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-0">
       <Seo
@@ -24,9 +21,8 @@ const Index = () => {
       <ScheduleSection />
       <QualityAssuranceSection />
       <PlanCardsSection />
-      <QuoteWidgetSection id="quote" />
       <VideoProofSection />
-      <CtaBand title={t("hero.checkPricing")} href="/pricing" />
+      <CtaBand title="Get My Free Quote" href="/schedule" />
       <ContactSection />
     </div>
   );

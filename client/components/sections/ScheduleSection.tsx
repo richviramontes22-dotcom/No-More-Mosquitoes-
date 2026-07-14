@@ -11,7 +11,7 @@ const ScheduleSection = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
 
-  const schedulePath = user ? "/dashboard/appointments" : "/login";
+  const schedulePath = user ? "/dashboard/appointments" : "/schedule";
 
   return (
     <section id="schedule-service" className="relative overflow-hidden bg-primary/8 py-16 sm:py-24">

@@ -15,13 +15,7 @@ const PlanCardsSection = () => {
     };
 
     if (!user) {
-      navigate("/login", {
-        state: {
-          from: "/schedule",
-          mode: "signup",
-          preset
-        }
-      });
+      navigate("/schedule");
     } else {
       // If user is logged in, we go to dashboard appointments.
       // The appointments page already handles presets to open the schedule dialog.

@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { lifestyleImages, type CarouselImage } from "@/data/media";
-import { ArrowRight, Phone } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useTranslation } from "@/hooks/use-translation";
-import { siteConfig } from "@/data/site";
 import { supabase } from "@/lib/supabase";
 import ImageCarousel from "./ImageCarousel";
 import { useSiteContent } from "@/hooks/useSiteContent";
@@ -110,7 +109,7 @@ const HeroSection = () => {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
               <Link
-                to="/#quote"
+                to="/schedule"
                 className="group inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto"
               >
                 {heroCta}
@@ -124,13 +123,6 @@ const HeroSection = () => {
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>
-            <a
-              href={siteConfig.phone.link}
-              className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded"
-            >
-              <Phone className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
-              {t("hero.callOrText")} {siteConfig.phone.display}
-            </a>
           </div>
         </div>
       </section>

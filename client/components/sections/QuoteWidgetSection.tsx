@@ -32,7 +32,7 @@ const QuoteWidgetSection = ({ id }: Props) => {
   const { open } = useScheduleDialog();
   const isCustomer = Boolean(user) && (profile?.role || user?.role) === "customer";
 
-  const [phase, setPhase] = useState<"address" | "plans">("address");
+  const [phase, setPhase] = useState<"address" | "contact" | "plans">("address");
 
   // Address fields
   const [address, setAddress] = useState("");
@@ -46,6 +46,13 @@ const QuoteWidgetSection = ({ id }: Props) => {
   const [lat, setLat] = useState<number | undefined>(undefined);
   const [lng, setLng] = useState<number | undefined>(undefined);
   const [placeId, setPlaceId] = useState<string | undefined>(undefined);
+
+  // Contact info phase
+  const [firstName, setFirstName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
 
   // Lookup failure fallback
   const [lookupFailed, setLookupFailed] = useState(false);
@@ -96,7 +103,7 @@ const QuoteWidgetSection = ({ id }: Props) => {
       setConfidence(data.confidence ?? null);
       setAcreageSource(data.acreageSource ?? null);
       setOversized(!!data.oversized);
-      setPhase("plans");
+      setPhase("contact");
     } else if (error === "manual_required") {
       // Manual review required — show contact path rather than manual entry
       setLookupFailed(true);
@@ -146,7 +153,51 @@ const QuoteWidgetSection = ({ id }: Props) => {
     setAcreageSource("manual");
     setConfidence("low");
     setManualAcreage(resolved.toString());
-    setPhase("plans");
+    setPhase("contact");
+  };
+
+  const handleContactSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!firstName.trim() || !email.trim() || !phone.trim()) return;
+    setIsSubmittingContact(true);
+    setContactError(null);
+    try {
+      // Compute estimated price for the currently selected program/cadence
+      const estimatedPriceCents =
+        selectedProgram === "annual" ? annualPriceCents :
+        selectedProgram === "one_time" ? onetimePriceCents :
+        subPriceCents;
+
+      const res = await fetch("/api/public/quote-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          address,
+          city,
+          state: stateVal,
+          zip,
+          acreage: acreage ?? 0.25,
+          oversized,
+          program: selectedProgram,
+          cadenceDays: selectedCadence,
+          estimatedPrice: estimatedPriceCents != null ? estimatedPriceCents / 100 : undefined,
+          lat,
+          lng,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Something went wrong. Please try again.");
+      }
+      setPhase("plans");
+    } catch (err: any) {
+      setContactError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setIsSubmittingContact(false);
+    }
   };
 
   // Oversized/shared-parcel panel — customer picks (or enters) their unit's
@@ -211,7 +262,7 @@ const QuoteWidgetSection = ({ id }: Props) => {
         variant: "destructive",
       });
     } else {
-      navigate("/login", { state: { from: "/schedule", mode: "signup", preset } });
+      navigate("/login", { state: { from: "/onboarding", mode: "signup", preset } });
     }
   };
 
@@ -392,7 +443,112 @@ const QuoteWidgetSection = ({ id }: Props) => {
           </div>
         )}
 
-        {/* ── Phase 2: Plan Selection ── */}
+        {/* ── Phase 2: Contact Info ── */}
+        {phase === "contact" && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="text-center space-y-3">
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+                Almost There
+              </span>
+              <h2 className="font-display text-3xl font-semibold sm:text-4xl">Where Should We Send Your Quote?</h2>
+              <p className="text-base text-muted-foreground max-w-md mx-auto">
+                We'll email and text you a link to your quote so you can come back anytime. No account required yet.
+              </p>
+            </div>
+
+            <form
+              onSubmit={handleContactSubmit}
+              className="rounded-[32px] border border-border/60 bg-card shadow-soft p-6 sm:p-8 space-y-5"
+            >
+              {/* Address confirmation pill */}
+              <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/40 px-4 py-2.5">
+                <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                <span className="text-sm font-medium text-foreground truncate">
+                  {address}{city ? `, ${city}` : ""}
+                </span>
+                {acreage !== null && (
+                  <span className="ml-auto flex-shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+                    {acreage} ac
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPhase("address")}
+                  className="flex-shrink-0 text-xs font-semibold text-muted-foreground hover:text-primary transition"
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">First Name</label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={e => setFirstName(e.target.value)}
+                  placeholder="e.g. Maria"
+                  required
+                  autoComplete="given-name"
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  autoComplete="email"
+                  className={inputCls}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Phone Number</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="(555) 555-5555"
+                  required
+                  autoComplete="tel"
+                  inputMode="tel"
+                  className={inputCls}
+                />
+              </div>
+
+              {contactError && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {contactError}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={isSubmittingContact}
+                className="w-full h-12 rounded-xl shadow-brand text-base font-bold gap-2"
+              >
+                {isSubmittingContact ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    Get My Quote
+                    <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <p className="text-center text-xs text-muted-foreground">
+              No account required&nbsp;·&nbsp;We'll text and email your quote link
+            </p>
+          </div>
+        )}
+
+        {/* ── Phase 3: Plan Selection ── */}
         {phase === "plans" && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
@@ -402,6 +558,7 @@ const QuoteWidgetSection = ({ id }: Props) => {
                 <div className="flex items-center gap-2 min-w-0">
                   <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
                   <span className="text-sm font-medium text-foreground truncate">
+                    {firstName && <span className="font-semibold">{firstName} — </span>}
                     {address}{city ? `, ${city}` : ""}{stateVal ? `, ${stateVal}` : ""}
                   </span>
                   {acreage !== null && (

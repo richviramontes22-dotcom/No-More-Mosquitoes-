@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { ArrowRight, ShieldCheck, RefreshCw, DollarSign } from "lucide-react";
 import PlanCardsSection from "@/components/sections/PlanCardsSection";
 import FAQSection from "@/components/sections/FAQSection";
-import QuoteWidgetSection from "@/components/sections/QuoteWidgetSection";
 import { CtaBand } from "@/components/page";
 import Seo from "@/components/seo/Seo";
 import { productSchema } from "@/seo/structuredData";
@@ -74,18 +73,28 @@ const Pricing = () => {
             ))}
           </ul>
 
-          <a
-            href="#quote"
+          <Link
+            to="/schedule"
             className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-brand transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Get My Quote
             <ArrowRight className="h-4 w-4" aria-hidden />
-          </a>
+          </Link>
         </div>
       </section>
 
-      {/* ── Quote flow: address → plan selector ── */}
-      <QuoteWidgetSection id="quote" />
+      {/* ── Acreage pricing disclaimer ── */}
+      <div className="bg-background">
+        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pt-10 pb-2">
+          <p className="text-sm text-muted-foreground text-center">
+            Prices shown are starting rates for properties up to 0.25 acres.{" "}
+            <Link to="/schedule" className="font-semibold text-primary underline-offset-4 hover:underline">
+              Get your exact quote
+            </Link>{" "}
+            — it takes 30 seconds.
+          </p>
+        </div>
+      </div>
 
       {/* ── Plan features / marketing detail ── */}
       <PlanCardsSection />

@@ -481,6 +481,12 @@ export interface UpsertLeadFromQuoteParams {
   program?: string | null;
   cadence?: string | null;
   adminAlertId?: string | null;
+  // Optional contact fields — when provided by the public quote-send endpoint,
+  // these extend the dedup chain and enrich the lead record.
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  source?: string | null;
 }
 
 /**
@@ -491,7 +497,16 @@ export interface UpsertLeadFromQuoteParams {
  */
 export async function upsertLeadFromQuote(params: UpsertLeadFromQuoteParams): Promise<Lead | null> {
   const addressHash = buildLeadAddressHash(params.address, params.city, params.state, params.zip);
-  const existing = await findExistingLead({ addressHash });
+  const normalizedEmail = params.email ? normalizeEmail(params.email) : null;
+  const normalizedPhone = params.phone ? normalizePhone(params.phone) : null;
+  const source = params.source ?? "quote";
+
+  // Dedup: address_hash → email → phone (contact fields only participate when provided)
+  const existing = await findExistingLead({
+    addressHash,
+    email: normalizedEmail,
+    phone: normalizedPhone,
+  });
   const now = new Date().toISOString();
 
   if (existing) {
@@ -499,6 +514,10 @@ export async function upsertLeadFromQuote(params: UpsertLeadFromQuoteParams): Pr
     if (params.acreage != null && existing.acreage == null) updates.acreage = params.acreage;
     if (params.program && !existing.program) updates.program = params.program;
     if (params.cadence && !existing.cadence) updates.cadence = params.cadence;
+    // Enrich contact fields only if not already set — never overwrite richer data
+    if (params.name && !existing.name) updates.name = params.name.trim();
+    if (normalizedEmail && !existing.email) updates.email = normalizedEmail;
+    if (normalizedPhone && !existing.phone) updates.phone = normalizedPhone;
 
     const { data, error } = await db
       .from("leads")
@@ -520,6 +539,7 @@ export async function upsertLeadFromQuote(params: UpsertLeadFromQuoteParams): Pr
         zip: params.zip,
         acreage: params.acreage ?? null,
         county: params.county ?? null,
+        source,
       },
     });
 
@@ -529,11 +549,16 @@ export async function upsertLeadFromQuote(params: UpsertLeadFromQuoteParams): Pr
   const { data, error } = await db
     .from("leads")
     .insert({
-      source: "quote",
+      source,
       status: "new",
       address_hash: addressHash,
       address: params.address,
+      city: params.city ?? null,
+      state: params.state ?? null,
       zip: params.zip,
+      name: params.name?.trim() ?? null,
+      email: normalizedEmail,
+      phone: normalizedPhone,
       acreage: params.acreage ?? null,
       program: params.program ?? null,
       cadence: params.cadence ?? null,
@@ -553,7 +578,7 @@ export async function upsertLeadFromQuote(params: UpsertLeadFromQuoteParams): Pr
     leadId: data.id,
     activityType: "created",
     payload: {
-      source: "quote",
+      source,
       address: params.address,
       zip: params.zip,
       acreage: params.acreage ?? null,
