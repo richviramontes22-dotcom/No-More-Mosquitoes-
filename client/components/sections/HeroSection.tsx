@@ -123,14 +123,14 @@ const HeroSection = () => {
                 {heroCtaSecondary}
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
-              <a
-                href={siteConfig.phone.link}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-primary/40 bg-primary/80 px-6 py-3.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto"
-              >
-                <Phone className="h-4 w-4" aria-hidden />
-                {t("hero.callOrText")} {siteConfig.phone.display}
-              </a>
             </div>
+            <a
+              href={siteConfig.phone.link}
+              className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-white/80 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded"
+            >
+              <Phone className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+              {t("hero.callOrText")} {siteConfig.phone.display}
+            </a>
           </div>
         </div>
       </section>
