@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, Menu, Phone } from "lucide-react";
+import { Bell, Menu, Phone } from "lucide-react";
 
 import LogoBranding from "@/components/branding/LogoBranding";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { useLogo } from "@/contexts/LogoContext";
 import { useTranslation } from "@/hooks/use-translation";
-import { FlagUS, FlagMX, FlagJP, FlagCN } from "@/components/common/FlagIcon";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/hooks/useProfile";
@@ -202,7 +200,6 @@ export const SiteHeader = () => {
       return "6";
     }
   })();
-  const { language, setLanguage } = useLanguage();
   const { logoStyle } = useLogo();
   const { t } = useTranslation();
 
@@ -392,37 +389,6 @@ export const SiteHeader = () => {
               </div>
             )}
 
-            {/* Language selector (desktop only — replaced by weather on mobile) */}
-            <div className="hidden md:block">
-            <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-full border border-border/60 p-2 text-foreground hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                {language === "en" && <FlagUS />}
-                {language === "es" && <FlagMX />}
-                {language === "jp" && <FlagJP />}
-                {language === "cn" && <FlagCN />}
-                <span className="sr-only">{t("header.selectLanguage") || "Select language"}</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[160px]">
-                <DropdownMenuItem onClick={() => setLanguage("en")} className={language === "en" ? "bg-primary/10" : ""}>
-                  <span className="mr-2"><FlagUS /></span>
-                  <span>English (ENG)</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLanguage("es")} className={language === "es" ? "bg-primary/10" : ""}>
-                  <span className="mr-2"><FlagMX /></span>
-                  <span>Spanish (MEX)</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLanguage("jp")} className={language === "jp" ? "bg-primary/10" : ""}>
-                  <span className="mr-2"><FlagJP /></span>
-                  <span>Japanese (JPN)</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLanguage("cn")} className={language === "cn" ? "bg-primary/10" : ""}>
-                  <span className="mr-2"><FlagCN /></span>
-                  <span>Chinese (CHN)</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            </div>
-
             {/* Phone icon: mobile only */}
             <a
               href={siteConfig.phone.link}
@@ -468,39 +434,6 @@ export const SiteHeader = () => {
                       <span>{t("footer.callOrText") || "Call or Text"} {siteConfig.phone.display}</span>
                     </a>
                   )}
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="flex w-full items-center justify-between rounded-xl border-border/60 px-4 py-6 text-base font-semibold">
-                        <div className="flex items-center gap-3">
-                          {language === "en" && <FlagUS />}
-                          {language === "es" && <FlagMX />}
-                          {language === "jp" && <FlagJP />}
-                          {language === "cn" && <FlagCN />}
-                          <span className="text-muted-foreground">{t("header.selectLanguage") || "Select language"}</span>
-                        </div>
-                        <ChevronDown className="h-4 w-4 opacity-50" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="center" className="w-[calc(100vw-32px)] sm:w-[340px] rounded-xl">
-                      <DropdownMenuItem onClick={() => setLanguage("en")} className={language === "en" ? "bg-primary/10" : ""}>
-                        <span className="mr-3"><FlagUS /></span>
-                        <span className="font-semibold">English (ENG)</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLanguage("es")} className={language === "es" ? "bg-primary/10" : ""}>
-                        <span className="mr-3"><FlagMX /></span>
-                        <span className="font-semibold">Spanish (MEX)</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLanguage("jp")} className={language === "jp" ? "bg-primary/10" : ""}>
-                        <span className="mr-3"><FlagJP /></span>
-                        <span className="font-semibold">Japanese (JPN)</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLanguage("cn")} className={language === "cn" ? "bg-primary/10" : ""}>
-                        <span className="mr-3"><FlagCN /></span>
-                        <span className="font-semibold">Chinese (CHN)</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
 
                   <nav aria-label="Mobile primary" className="mt-2 grid gap-1">
                     {!activeUser ? (

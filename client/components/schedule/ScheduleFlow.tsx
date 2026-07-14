@@ -66,9 +66,6 @@ interface WindowAvailability {
   start: string;
   end: string;
   available: boolean;
-  capacity: number;
-  booked: number;
-  remaining: number;
 }
 
 interface DayAvailability {
@@ -230,9 +227,6 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
         start:     savedProgress.selectedWindowStart ?? "",
         end:       savedProgress.selectedWindowEnd   ?? "",
         available: true,
-        capacity:  0,
-        booked:    0,
-        remaining: 0,
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -372,7 +366,7 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
 
   const windowsForDate = useMemo((): WindowAvailability[] => {
     if (!selectedDate) return [];
-    return getDayAvailability(selectedDate)?.windows ?? [];
+    return (getDayAvailability(selectedDate)?.windows ?? []).filter(w => w.available);
   }, [selectedDate, availabilityMap]);
 
   // ── Navigation ───────────────────────────────────────────────────────────────
@@ -1248,10 +1242,8 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
                             "group relative flex items-center justify-between p-5 rounded-2xl border-2 transition-all text-left",
                             selectedWindow?.id === win.id
                               ? "border-primary bg-primary/5 ring-4 ring-primary/5"
-                              : "border-border/60 hover:border-primary/30",
-                            !win.available && "opacity-40 cursor-not-allowed bg-muted/50 border-transparent grayscale"
+                              : "border-border/60 hover:border-primary/30"
                           )}
-                          disabled={!win.available}
                           onClick={() => setSelectedWindow(win)}
                         >
                           <div className="flex items-center gap-4">
@@ -1265,12 +1257,7 @@ export const ScheduleFlow = ({ onSuccess, onCancel, initialAddress, initialCaden
                             </div>
                             <div>
                               <p className="font-bold">{win.label}</p>
-                              {win.available
-                                ? <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
-                                    {win.remaining} spot{win.remaining !== 1 ? "s" : ""} left
-                                  </p>
-                                : <p className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Fully Booked</p>
-                              }
+                              <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Available</p>
                             </div>
                           </div>
                           {selectedWindow?.id === win.id && <CheckCircle2 className="h-5 w-5 text-primary" />}

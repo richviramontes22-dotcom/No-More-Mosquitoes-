@@ -36,6 +36,7 @@ import devAuthRouter from "./routes/devAuth";
 import adminBusinessHoursRouter from "./routes/adminBusinessHours";
 import adminAlertsRouter from "./routes/adminAlerts";
 import adminLeadsRouter from "./routes/adminLeads";
+import adminPromotionalPopupsRouter from "./routes/adminPromotionalPopups";
 import adminServiceAreaDemandRouter from "./routes/adminServiceAreaDemand";
 import adminReferralsRouter from "./routes/adminReferrals";
 import adminLegalRouter from "./routes/adminLegal";
@@ -177,6 +178,10 @@ export function createServer() {
   // Admin Leads API (CRM Phase 1 + Phase 2 — Lead Inbox, notes, status)
   app.use("/api/admin", adminLeadsRouter);
   app.use("/api", adminLeadsRouter); // /api/leads/quote-link/:token is public
+
+  // Promotional Popups — admin CRUD + public active endpoint
+  app.use("/api/admin", adminPromotionalPopupsRouter);
+  app.use("/api", adminPromotionalPopupsRouter); // /api/promotional-popups/active is public
 
   // Admin Service Area Demand API (CRM Phase 2 — demand intelligence)
   app.use("/api/admin", adminServiceAreaDemandRouter);

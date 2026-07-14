@@ -98,6 +98,7 @@ import AdminWorkforce from "./pages/admin/Workforce";
 import AdminDebug from "./pages/admin/Debug";
 import AdminQaCenter from "./pages/admin/QaCenter";
 import AdminCatalogManagement from "./pages/admin/CatalogManagement";
+import AdminPromotionsManagement from "./pages/admin/PromotionsManagement";
 import AdminEmailManagement from "./pages/admin/EmailManagement";
 import AdminWorkforceSchedules from "./pages/admin/WorkforceSchedules";
 import AdminWorkforceCapacity from "./pages/admin/WorkforceCapacity";
@@ -238,6 +239,7 @@ const App = () => (
                       <Route path="debug" element={<AdminDebug />} />
                       <Route path="qa-center" element={<AdminQaCenter />} />
                       <Route path="catalog" element={<AdminCatalogManagement />} />
+                      <Route path="promotions" element={<AdminPromotionsManagement />} />
                       <Route path="email-management" element={<AdminEmailManagement />} />
                       <Route path="workforce/schedules" element={<AdminWorkforceSchedules />} />
                       <Route path="workforce/capacity" element={<AdminWorkforceCapacity />} />

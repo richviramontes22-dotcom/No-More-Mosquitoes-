@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
 import ChatWidget from "../common/ChatWidget";
+import PromotionalPopup from "../promotions/PromotionalPopup";
 
 const MainLayout = () => {
   const location = useLocation();
@@ -15,6 +16,7 @@ const MainLayout = () => {
       </main>
       <SiteFooter />
       <ChatWidget />
+      <PromotionalPopup />
     </div>
   );
 };

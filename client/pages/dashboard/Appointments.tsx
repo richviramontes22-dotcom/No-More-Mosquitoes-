@@ -50,7 +50,6 @@ interface WindowOption {
   start: string;
   end: string;
   available: boolean;
-  remaining: number;
 }
 
 interface DayAvailability {
@@ -101,7 +100,7 @@ function RescheduleDialog({
   };
 
   const windowsForDate = selectedDate
-    ? (availabilityMap.get(selectedDate.toISOString().slice(0, 10))?.windows ?? [])
+    ? (availabilityMap.get(selectedDate.toISOString().slice(0, 10))?.windows ?? []).filter((w: WindowOption) => w.available)
     : [];
 
   const handleSubmit = async () => {
@@ -211,14 +210,12 @@ function RescheduleDialog({
                   {windowsForDate.map(win => (
                     <button
                       key={win.id}
-                      disabled={!win.available}
                       onClick={() => setSelectedWindow(win)}
                       className={cn(
                         "flex items-center justify-between p-4 rounded-xl border-2 text-left transition-all",
                         selectedWindow?.id === win.id
                           ? "border-primary bg-primary/5"
                           : "border-border/60 hover:border-primary/30",
-                        !win.available && "opacity-40 cursor-not-allowed bg-muted/50 border-transparent",
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -226,7 +223,7 @@ function RescheduleDialog({
                         <div>
                           <p className="font-bold text-sm">{win.label}</p>
                           <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
-                            {win.available ? `${win.remaining} spot${win.remaining !== 1 ? "s" : ""} left` : "Fully booked"}
+                            Available
                           </p>
                         </div>
                       </div>

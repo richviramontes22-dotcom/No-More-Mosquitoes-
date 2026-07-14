@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Activity, Users, Home, Calendar, Truck, MessageSquare,
   Ticket, Map, Navigation, CreditCard, BarChart3, FileText,
   Settings, ShieldCheck, Zap, Globe, Tag, Layers, UserCog, ChevronRight, Bell, Scale, CalendarDays,
-  UserPlus, Gift, Smile, Menu, FlaskConical, Store,
+  UserPlus, Gift, Smile, Menu, FlaskConical, Store, Megaphone,
 } from "lucide-react";
 
 type NavItem = { label: string; to: string; icon: React.ElementType };
@@ -73,6 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Content",
     items: [
       { label: "Catalog", to: "/admin/catalog", icon: Store },
+      { label: "Promotions", to: "/admin/promotions", icon: Megaphone },
       { label: "Website Manager", to: "/admin/website-manager", icon: Layers },
       { label: "Blog & FAQs", to: "/admin/content", icon: FileText },
     ],

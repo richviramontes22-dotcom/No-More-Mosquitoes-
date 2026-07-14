@@ -43,9 +43,6 @@ interface WindowAvailability {
   start: string;
   end: string;
   available: boolean;
-  capacity: number;
-  booked: number;
-  remaining: number;
 }
 
 /**
@@ -195,9 +192,6 @@ router.get("/availability", async (req, res) => {
             start:     win.start,
             end:       win.end,
             available: remaining > 0,
-            capacity,
-            booked:    bookedCount,
-            remaining,
           };
         });
       }

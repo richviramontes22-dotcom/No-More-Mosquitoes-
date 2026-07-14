@@ -45,7 +45,7 @@ export const translations = {
         "Premium mosquito and insect control for those who expect more from their outdoor space. Precision treatments, proven results, and a 100% satisfaction guarantee—so you can enjoy your yard in total comfort.",
       scheduleService: "Get My Free Quote",
       checkPricing: "See Pricing",
-      callOrText: "Call or Text (949) 297-6225",
+      callOrText: "Call or Text",
       everyVisit: "Every visit includes",
       completionVideo: "HD completion video + technician notes",
       smartWeather: "Smart weather adjustments",

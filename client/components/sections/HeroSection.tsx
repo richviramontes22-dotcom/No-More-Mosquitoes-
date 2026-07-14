@@ -128,7 +128,7 @@ const HeroSection = () => {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-primary/40 bg-primary/80 px-6 py-3.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto"
               >
                 <Phone className="h-4 w-4" aria-hidden />
-                {t("hero.callOrText")}
+                {t("hero.callOrText")} {siteConfig.phone.display}
               </a>
             </div>
           </div>
