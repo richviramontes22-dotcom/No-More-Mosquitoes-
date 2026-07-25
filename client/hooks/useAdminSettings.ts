@@ -21,6 +21,9 @@ export interface AdminSettingsState {
     builder: { enabled: boolean; apiKey: string };
     neon: { enabled: boolean; connectionString: string };
     notion: { enabled: boolean; token: string };
+    anthropic: { enabled: boolean; apiKey: string };
+    openai: { enabled: boolean; apiKey: string };
+    grok: { enabled: boolean; apiKey: string };
   };
 }
 
@@ -79,7 +82,7 @@ export const useAdminSettings = () => {
           enableReserviceRequests: true,
           smsReminders: true,
         },
-        integrations: data["integrations"] || {
+        integrations: {
           supabase: { enabled: true, url: "", anonKey: "" },
           stripe: { enabled: true, secretKey: "", publicKey: "" },
           sendgrid: { enabled: false, apiKey: "" },
@@ -90,6 +93,10 @@ export const useAdminSettings = () => {
           builder: { enabled: false, apiKey: "" },
           neon: { enabled: false, connectionString: "" },
           notion: { enabled: false, token: "" },
+          anthropic: { enabled: false, apiKey: "" },
+          openai: { enabled: false, apiKey: "" },
+          grok: { enabled: false, apiKey: "" },
+          ...(data["integrations"] || {}),
         },
       };
 

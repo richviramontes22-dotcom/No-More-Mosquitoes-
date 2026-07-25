@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, PowerOff, Power, Eye, Megaphone, Loader2, X } from "lucide-react";
+import { Plus, Pencil, PowerOff, Power, Eye, Megaphone, Loader2, X, Sparkles } from "lucide-react";
 import { format, parseISO, isAfter, isBefore } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,15 @@ interface FormState {
   cta_label: string; cta_url: string; secondary_label: string; secondary_url: string;
   audience: string; page_target: string; custom_path: string;
   start_at: string; end_at: string; active: boolean; frequency: string; priority: string;
+}
+
+interface PopupDraft {
+  title: string;
+  subtitle: string | null;
+  body: string;
+  cta_label: string;
+  image_prompt: string;
+  image_alt: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -110,6 +119,11 @@ const AdminPromotionsManagement = () => {
   const [errors, setErrors] = useState<string[]>([]);
   const [previewPopup, setPreviewPopup] = useState<Popup | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [aiDraftOpen, setAiDraftOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiDrafting, setAiDrafting] = useState(false);
+  const [aiDraft, setAiDraft] = useState<PopupDraft | null>(null);
+  const [aiDraftError, setAiDraftError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<{ popups: Popup[] }>({
     queryKey: ["admin-promotional-popups"],
@@ -177,6 +191,45 @@ const AdminPromotionsManagement = () => {
     }
   };
 
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return;
+    setAiDrafting(true);
+    setAiDraft(null);
+    setAiDraftError(null);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/admin/promotional-popups/ai-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ prompt: aiPrompt.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "Generation failed.");
+      setAiDraft(json.draft as PopupDraft);
+    } catch (e: any) {
+      setAiDraftError(e.message || "AI draft generation failed.");
+    } finally {
+      setAiDrafting(false);
+    }
+  };
+
+  const handleApplyDraft = () => {
+    if (!aiDraft) return;
+    // Safety: active is always false when applying an AI draft — admin must publish explicitly.
+    setForm({
+      ...EMPTY_FORM,
+      title: aiDraft.title,
+      subtitle: aiDraft.subtitle ?? "",
+      body: aiDraft.body,
+      cta_label: aiDraft.cta_label,
+      active: false,
+    });
+    setEditingId(null);
+    setErrors([]);
+    setAiDraftOpen(false);
+    setDialogOpen(true);
+  };
+
   const setField = (key: keyof FormState, value: any) => setForm(f => ({ ...f, [key]: value }));
 
   return (
@@ -189,9 +242,14 @@ const AdminPromotionsManagement = () => {
           </div>
           <p className="text-sm text-muted-foreground">Create and manage customer-facing promotional popups.</p>
         </div>
-        <Button onClick={() => handleOpen()} className="rounded-xl gap-2">
-          <Plus className="h-4 w-4" /> New Popup
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="rounded-xl gap-2" onClick={() => { setAiPrompt(""); setAiDraft(null); setAiDraftError(null); setAiDraftOpen(true); }}>
+            <Sparkles className="h-4 w-4" /> Draft with AI
+          </Button>
+          <Button onClick={() => handleOpen()} className="rounded-xl gap-2">
+            <Plus className="h-4 w-4" /> New Popup
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -402,6 +460,91 @@ const AdminPromotionsManagement = () => {
             <Button className="rounded-xl" onClick={handleSave} disabled={saveMutation.isPending}>
               {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : (editingId ? "Save Changes" : "Create Popup")}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Draft Dialog */}
+      <Dialog open={aiDraftOpen} onOpenChange={open => { if (!open) setAiDraftOpen(false); }}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto rounded-[24px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" /> Draft Popup with AI
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Describe your campaign and Claude will draft title, body, and CTA copy. Review and edit before publishing — the draft is never activated automatically.
+            </p>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="ai-prompt">Campaign description</Label>
+                <span className={`text-xs ${aiPrompt.length > 1000 ? "text-destructive" : "text-muted-foreground"}`}>{aiPrompt.length}/1000</span>
+              </div>
+              <Textarea
+                id="ai-prompt"
+                value={aiPrompt}
+                onChange={e => setAiPrompt(e.target.value)}
+                placeholder="e.g. End-of-summer special for existing customers — remind them to get one more treatment before mosquito season ends. Keep tone warm and friendly."
+                className="resize-none"
+                rows={4}
+                maxLength={1000}
+              />
+            </div>
+
+            {aiDraftError && (
+              <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">
+                {aiDraftError}
+              </div>
+            )}
+
+            {aiDraft && (
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3 text-sm">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Draft Preview</p>
+                <div>
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Title</span>
+                  <p className="font-semibold mt-0.5">{aiDraft.title}</p>
+                </div>
+                {aiDraft.subtitle && (
+                  <div>
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Subtitle</span>
+                    <p className="mt-0.5">{aiDraft.subtitle}</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Body</span>
+                  <p className="mt-0.5 leading-relaxed">{aiDraft.body}</p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CTA Label</span>
+                  <p className="mt-0.5">{aiDraft.cta_label}</p>
+                </div>
+                <div className="border-t border-border/40 pt-3">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Image suggestion (for you to source)</span>
+                  <p className="mt-0.5 text-muted-foreground italic">{aiDraft.image_prompt}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Alt text: {aiDraft.image_alt}</p>
+                </div>
+                <p className="text-xs text-muted-foreground/60 pt-1">
+                  CTA URL, schedule, audience, and activation are not set by AI — you control those in the form.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button variant="ghost" className="rounded-xl" onClick={() => setAiDraftOpen(false)}>Cancel</Button>
+            <Button
+              variant="outline"
+              className="rounded-xl gap-2"
+              onClick={handleAiGenerate}
+              disabled={aiDrafting || !aiPrompt.trim() || aiPrompt.length > 1000}
+            >
+              {aiDrafting ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Sparkles className="h-4 w-4" /> {aiDraft ? "Regenerate" : "Generate Draft"}</>}
+            </Button>
+            {aiDraft && (
+              <Button className="rounded-xl" onClick={handleApplyDraft}>
+                Apply to Form
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

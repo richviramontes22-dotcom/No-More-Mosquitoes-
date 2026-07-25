@@ -38,6 +38,7 @@ import adminBusinessHoursRouter from "./routes/adminBusinessHours";
 import adminAlertsRouter from "./routes/adminAlerts";
 import adminLeadsRouter from "./routes/adminLeads";
 import adminPromotionalPopupsRouter from "./routes/adminPromotionalPopups";
+import { adminAiPopupDraftRouter } from "./routes/adminAiPopupDraft.js";
 import adminServiceAreaDemandRouter from "./routes/adminServiceAreaDemand";
 import adminReferralsRouter from "./routes/adminReferrals";
 import adminLegalRouter from "./routes/adminLegal";
@@ -183,6 +184,9 @@ export function createServer() {
   // Promotional Popups — admin CRUD + public active endpoint
   app.use("/api/admin", adminPromotionalPopupsRouter);
   app.use("/api", adminPromotionalPopupsRouter); // /api/promotional-popups/active is public
+
+  // AI Popup Draft — POST /api/admin/promotional-popups/ai-draft
+  app.use("/api/admin", adminAiPopupDraftRouter);
 
   // Admin Service Area Demand API (CRM Phase 2 — demand intelligence)
   app.use("/api/admin", adminServiceAreaDemandRouter);

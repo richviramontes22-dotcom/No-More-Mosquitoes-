@@ -104,6 +104,76 @@ router.delete("/settings/:settingKey", requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/admin/settings/test-ai-provider
+ * Validates an AI provider API key by hitting its models-list endpoint.
+ * No tokens are consumed — the call is a read-only GET to verify authentication.
+ * Body: { provider: "anthropic" | "openai" | "grok", apiKey: string }
+ */
+router.post("/settings/test-ai-provider", requireAdmin, async (req, res) => {
+  const { provider, apiKey } = req.body as { provider?: string; apiKey?: string };
+
+  if (!provider || !apiKey?.trim()) {
+    return res.status(400).json({ ok: false, error: "provider and apiKey are required." });
+  }
+
+  const key = apiKey.trim();
+  const start = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+
+  const PROVIDERS: Record<string, { url: string; headers: Record<string, string> }> = {
+    anthropic: {
+      url: "https://api.anthropic.com/v1/models",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+    },
+    openai: {
+      url: "https://api.openai.com/v1/models",
+      headers: { Authorization: `Bearer ${key}` },
+    },
+    grok: {
+      url: "https://api.x.ai/v1/models",
+      headers: { Authorization: `Bearer ${key}` },
+    },
+  };
+
+  const config = PROVIDERS[provider];
+  if (!config) {
+    clearTimeout(timer);
+    return res.status(400).json({ ok: false, error: `Unknown provider: ${provider}` });
+  }
+
+  try {
+    const response = await fetch(config.url, {
+      headers: config.headers,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const latency_ms = Date.now() - start;
+
+    if (response.ok) {
+      return res.json({ ok: true, message: "Connection successful", latency_ms });
+    }
+
+    let errorMsg = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as any;
+      errorMsg = body?.error?.message ?? body?.message ?? errorMsg;
+    } catch { /* non-JSON error body */ }
+
+    return res.json({ ok: false, error: errorMsg, latency_ms });
+  } catch (err: any) {
+    clearTimeout(timer);
+    const latency_ms = Date.now() - start;
+    const isTimeout = err.name === "AbortError";
+    return res.json({
+      ok: false,
+      error: isTimeout ? "Request timed out (10s)" : (err.message || "Network error"),
+      latency_ms,
+    });
+  }
+});
+
 // ─── Customer notification settings (Platform Growth Phase 2) ────────────────
 
 router.get("/notification-settings", requireAdmin, async (_req, res) => {

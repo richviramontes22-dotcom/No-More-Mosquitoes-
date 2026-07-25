@@ -9,10 +9,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Key, Shield, CreditCard, Mail, MessageSquare, Map, Activity, Globe, Zap, Database, Code, FileText } from "lucide-react";
+import { Key, Shield, CreditCard, Mail, MessageSquare, Map, Activity, Globe, Zap, Database, Code, FileText, Sparkles, Loader2, CheckCircle2, XCircle } from "lucide-react";
 
 export type TeamRole = "admin" | "support";
 export type TeamMember = { id: string; name: string; email: string; role: TeamRole };
+
+type AiTestStatus = "idle" | "testing" | "ok" | "error";
+type AiTestState = { status: AiTestStatus; message: string; latency_ms?: number };
+
+async function getToken() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? "";
+}
 
 const Settings = () => {
   const { toast } = useToast();
@@ -46,6 +54,16 @@ const Settings = () => {
     builder: { enabled: false, apiKey: "" },
     neon: { enabled: false, connectionString: "" },
     notion: { enabled: false, token: "" },
+    anthropic: { enabled: false, apiKey: "" },
+    openai: { enabled: false, apiKey: "" },
+    grok: { enabled: false, apiKey: "" },
+  });
+
+  const IDLE_TEST: AiTestState = { status: "idle", message: "" };
+  const [aiTests, setAiTests] = useState<Record<string, AiTestState>>({
+    anthropic: IDLE_TEST,
+    openai: IDLE_TEST,
+    grok: IDLE_TEST,
   });
 
   // Load persisted settings when they become available
@@ -58,7 +76,7 @@ const Settings = () => {
         enableReserviceRequests: true,
         smsReminders: true,
       });
-      setIntegrations(persistedSettings.integrations || {
+      setIntegrations({
         supabase: { enabled: true, url: "", anonKey: "" },
         stripe: {
           enabled: true,
@@ -73,6 +91,10 @@ const Settings = () => {
         builder: { enabled: false, apiKey: "" },
         neon: { enabled: false, connectionString: "" },
         notion: { enabled: false, token: "" },
+        anthropic: { enabled: false, apiKey: "" },
+        openai: { enabled: false, apiKey: "" },
+        grok: { enabled: false, apiKey: "" },
+        ...(persistedSettings.integrations || {}),
       });
     }
   }, [persistedSettings, loading]);
@@ -109,6 +131,28 @@ const Settings = () => {
 
   const removeMember = (id: string) => setTeam((prev) => prev.filter((m) => m.id !== id));
   const updateRole = (id: string, r: TeamRole) => setTeam((prev) => prev.map((m) => (m.id === id ? { ...m, role: r } : m)));
+
+  const testAiProvider = async (provider: "anthropic" | "openai" | "grok") => {
+    const apiKey = integrations[provider].apiKey.trim();
+    if (!apiKey) return;
+    setAiTests(prev => ({ ...prev, [provider]: { status: "testing", message: "" } }));
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/admin/settings/test-ai-provider", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ provider, apiKey }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setAiTests(prev => ({ ...prev, [provider]: { status: "ok", message: "Connected", latency_ms: json.latency_ms } }));
+      } else {
+        setAiTests(prev => ({ ...prev, [provider]: { status: "error", message: json.error || "Connection failed" } }));
+      }
+    } catch (e: any) {
+      setAiTests(prev => ({ ...prev, [provider]: { status: "error", message: e.message || "Network error" } }));
+    }
+  };
 
   const updateIntegration = (key: keyof typeof integrations, field: string, value: any) => {
     setIntegrations((prev) => ({
@@ -316,6 +360,45 @@ const Settings = () => {
                   )}
                 </div>
               </div>
+
+              {/* AI Providers */}
+              <div className="space-y-6 pt-6 border-t border-border/40">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-xl bg-background border border-border/40 flex items-center justify-center shrink-0">
+                    <Sparkles className="h-5 w-5 text-violet-500" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">AI Providers</h4>
+                    <p className="text-xs text-muted-foreground">Large language model APIs for AI-assisted features. Keys are saved with settings and can be tested for connectivity below.</p>
+                  </div>
+                </div>
+                <div className="pl-8 space-y-5">
+                  <AiProviderRow
+                    name="Anthropic (Claude)"
+                    placeholder="sk-ant-..."
+                    value={integrations.anthropic.apiKey}
+                    onChange={(v) => updateIntegration("anthropic", "apiKey", v)}
+                    testState={aiTests.anthropic}
+                    onTest={() => testAiProvider("anthropic")}
+                  />
+                  <AiProviderRow
+                    name="OpenAI (ChatGPT)"
+                    placeholder="sk-..."
+                    value={integrations.openai.apiKey}
+                    onChange={(v) => updateIntegration("openai", "apiKey", v)}
+                    testState={aiTests.openai}
+                    onTest={() => testAiProvider("openai")}
+                  />
+                  <AiProviderRow
+                    name="Grok (xAI)"
+                    placeholder="xai-..."
+                    value={integrations.grok.apiKey}
+                    onChange={(v) => updateIntegration("grok", "apiKey", v)}
+                    testState={aiTests.grok}
+                    onTest={() => testAiProvider("grok")}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -452,6 +535,54 @@ const Settings = () => {
     </div>
   );
 };
+
+const AiProviderRow = ({
+  name, placeholder, value, onChange, testState, onTest,
+}: {
+  name: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  testState: AiTestState;
+  onTest: () => void;
+}) => (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between min-h-[20px]">
+      <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{name}</Label>
+      {testState.status !== "idle" && (
+        <span className={`text-xs flex items-center gap-1 font-medium ${
+          testState.status === "ok" ? "text-green-600" :
+          testState.status === "error" ? "text-red-500" :
+          "text-muted-foreground"
+        }`}>
+          {testState.status === "testing" && <Loader2 className="h-3 w-3 animate-spin" />}
+          {testState.status === "ok" && <CheckCircle2 className="h-3 w-3" />}
+          {testState.status === "error" && <XCircle className="h-3 w-3" />}
+          {testState.status === "testing" ? "Testing…" :
+           testState.status === "ok" ? `Connected${testState.latency_ms != null ? ` · ${testState.latency_ms}ms` : ""}` :
+           testState.message}
+        </span>
+      )}
+    </div>
+    <div className="flex gap-2">
+      <Input
+        type="password"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-xl h-11 flex-1"
+      />
+      <Button
+        variant="outline"
+        className="rounded-xl h-11 px-4 text-xs font-bold whitespace-nowrap shrink-0"
+        onClick={onTest}
+        disabled={!value.trim() || testState.status === "testing"}
+      >
+        {testState.status === "testing" ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
+      </Button>
+    </div>
+  </div>
+);
 
 const IntegrationHeader = ({ icon, title, description, enabled, onToggle }: { icon: React.ReactNode; title: string; description: string; enabled: boolean; onToggle: (b: boolean) => void }) => (
   <div className="flex items-center justify-between gap-4">
